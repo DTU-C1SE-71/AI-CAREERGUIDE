@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: ai-careerguide-backend
+    env: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    region: singapore
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENVIRONMENT
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: OPENAI_BASE_URL
+        value: https://api.xah.io/v1
+      - key: LLM_MODEL
+        value: dungcsnd113/deepseek-v4.1-flash-1017-free
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: DATABASE_URL
+        sync: false
