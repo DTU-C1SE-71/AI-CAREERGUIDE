@@ -375,6 +375,6 @@ CREATE TABLE IF NOT EXISTS knowledge_embeddings (
 CREATE INDEX IF NOT EXISTS idx_ke_major_code ON knowledge_embeddings(major_code);
 CREATE INDEX IF NOT EXISTS idx_ke_skill_id ON knowledge_embeddings(skill_id);
 -- HNSW Vector Index for ultra-fast Cosine Distance Semantic Search (< 50ms)
-CREATE INDEX IF NOT EXISTS idx_ke_embedding_hnsw ON knowledge_embeddings
-USING hnsw (embedding vector_cosine_ops)
+CREATE INDEX IF NOT EXISTS idx_ke_embedding_hnsw ON knowledge_embeddings 
+USING hnsw (embedding vector_cosine_ops) 
 WITH (m = 16, ef_construction = 64);

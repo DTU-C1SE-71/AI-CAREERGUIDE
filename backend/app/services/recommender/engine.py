@@ -32,7 +32,7 @@ def calculate_riasec_cosine_similarity(
     """
     Pillar 1: Holland RIASEC vocational interest fit via Cosine Similarity.
     Score = (V_student . V_major) / (||V_student|| * ||V_major||)
-
+    
     EDGE CASES HANDLED:
     - Zero vector: returns 0.0 (prevents ZeroDivisionError)
     - Missing keys: defaults to 0.0
@@ -73,7 +73,7 @@ def calculate_z_score_and_cdf(
     Calculates standardized Z-score and cumulative normal probability CDF(Z).
     Z = (X - mu) / sigma
     Score = Clamp(CDF(Z), 0.0, 1.0)
-
+    
     EDGE CASES HANDLED:
     - sigma <= 0: safely falls back to standard dev = 1.0
     - Extremely large / small Z values clamped within bounds
@@ -92,7 +92,7 @@ def evaluate_academic_readiness_for_major(
     """
     Pillar 2: Academic Readiness via Z-Score Normalization across admitted subject blocks.
     Identifies the best matching block among those accepted by the major.
-
+    
     Returns:
     - best_score: float in [0.0, 1.0]
     - best_block: block code string, e.g. "A00"
