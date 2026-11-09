@@ -24,7 +24,7 @@ async def get_major_recommendations(
     1. Cosine similarity on 6-dimensional RIASEC vectors
     2. National Z-score CDF normalization for admission subject blocks
     3. Rule-based cognitive preference mapping
-
+    
     GUARDRAIL: 100% deterministic mathematical ranking. LLMs are strictly forbidden from altering scores.
     """
     return await service.calculate_3pillar_recommendations(db, current_user.id, payload)
@@ -42,7 +42,7 @@ async def get_dashboard_overview(
     target_user_id = current_user.id if current_user else uuid.UUID("00000000-0000-0000-0000-000000000001")
     req = RecommendationRequest(top_k=15)
     rec_resp = await service.calculate_3pillar_recommendations(db, target_user_id, req)
-
+    
     # Dual Radar Data: Holland Vocational Interest + Normalized Academic Readiness
     riasecData = [
         { "key": "R", "label": "Thực tế", "value": 68, "academicValue": 78, "subjectMapping": "Vật lý & Công nghệ", "fullMark": 100 },
@@ -52,7 +52,7 @@ async def get_dashboard_overview(
         { "key": "E", "label": "Quản lý", "value": 72, "academicValue": 80, "subjectMapping": "Tiếng Anh & Kinh tế", "fullMark": 100 },
         { "key": "C", "label": "Nghiệp vụ", "value": 60, "academicValue": 82, "subjectMapping": "Toán & Tin học", "fullMark": 100 },
     ]
-
+    
     scoreBarData = [
         { "name": "Sở thích", "value": 92 },
         { "name": "Học lực", "value": 84 },

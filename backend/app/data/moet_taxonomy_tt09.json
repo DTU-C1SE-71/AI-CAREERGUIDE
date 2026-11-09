@@ -1,0 +1,3419 @@
+[
+  {
+    "major_code": "7140201",
+    "name": "Giáo dục Mầm non",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "M00",
+      "C00",
+      "D01"
+    ],
+    "careers": [
+      "Giáo viên Mầm non trường công lập/quốc tế",
+      "Chuyên viên tư vấn tâm lý phát triển trẻ thơ",
+      "Quản lý cơ sở giáo dục mầm non"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.3,
+      "A": 0.6,
+      "S": 0.9,
+      "E": 0.3,
+      "C": 0.4
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "low",
+      "spatial_perception": "medium",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Nhu cầu giáo viên mầm non đạt chuẩn cử nhân tăng cao theo Luật Giáo dục mới."
+  },
+  {
+    "major_code": "7140202",
+    "name": "Giáo dục Tiểu học",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "D01",
+      "C00",
+      "A00"
+    ],
+    "careers": [
+      "Giáo viên Tiểu học",
+      "Chuyên viên biên soạn học liệu tiểu học",
+      "Nghiên cứu viên sư phạm"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.4,
+      "A": 0.5,
+      "S": 0.9,
+      "E": 0.4,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "medium",
+      "linguistic_ability": "high",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Thiếu hụt giáo viên tiểu học tại các đô thị lớn và khu công nghiệp."
+  },
+  {
+    "major_code": "7140205",
+    "name": "Giáo dục Chính trị",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "C00",
+      "D01",
+      "C19"
+    ],
+    "careers": [
+      "Giáo viên Giáo dục kinh tế & pháp luật",
+      "Chuyên viên công tác chính trị - tư tưởng",
+      "Giảng viên lý luận chính trị"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.7,
+      "A": 0.3,
+      "S": 0.8,
+      "E": 0.6,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Giảng dạy môn Kinh tế & Pháp luật trong chương trình GDPT 2018."
+  },
+  {
+    "major_code": "7140206",
+    "name": "Giáo dục Thể chất",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "T00",
+      "T01"
+    ],
+    "careers": [
+      "Giáo viên Thể dục trường học",
+      "Huấn luyện viên thể thao học đường",
+      "Chuyên viên tổ chức sự kiện thể thao"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.2,
+      "A": 0.3,
+      "S": 0.7,
+      "E": 0.5,
+      "C": 0.3
+    },
+    "cognitive": {
+      "abstract_thinking": "low",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Phát triển mạnh mẽ phong trào rèn luyện sức khỏe học đường và thể thao cộng đồng."
+  },
+  {
+    "major_code": "7140209",
+    "name": "Sư phạm Toán học",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Giáo viên Toán THPT",
+      "Chuyên viên phát triển chương trình Toán STEM",
+      "Nghiên cứu viên phương pháp dạy học Toán"
+    ],
+    "riasec": {
+      "R": 0.2,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.7,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nhu cầu cao đối với giáo viên dạy chương trình Toán chuyên và song ngữ quốc tế."
+  },
+  {
+    "major_code": "7140210",
+    "name": "Sư phạm Tin học",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Giáo viên Tin học trường phổ thông",
+      "Chuyên viên quản trị giải pháp EdTech",
+      "Kỹ sư đào tạo lập trình cho trẻ em"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.7,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Trọng tâm chuyển đổi số giáo dục và phổ cập môn Tin học từ lớp 3."
+  },
+  {
+    "major_code": "7140211",
+    "name": "Sư phạm Vật lí",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Giáo viên Vật lí THPT",
+      "Cán bộ nghiên cứu thí nghiệm khoa học",
+      "Chuyên gia giáo dục STEM"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.7,
+      "E": 0.3,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Tích hợp giảng dạy bộ môn Khoa học tự nhiên và các chuyên đề Vật lý ứng dụng."
+  },
+  {
+    "major_code": "7140212",
+    "name": "Sư phạm Hóa học",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "A00",
+      "B00",
+      "D07"
+    ],
+    "careers": [
+      "Giáo viên Hóa học THPT",
+      "Chuyên viên phòng thí nghiệm phân tích",
+      "Chuyên viên biên soạn sách giáo khoa"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.7,
+      "E": 0.3,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Giảng dạy Hóa học thực nghiệm và Khoa học tự nhiên đổi mới sáng tạo."
+  },
+  {
+    "major_code": "7140213",
+    "name": "Sư phạm Sinh học",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "B00",
+      "A02",
+      "D08"
+    ],
+    "careers": [
+      "Giáo viên Sinh học THPT",
+      "Nghiên cứu viên công nghệ sinh học giáo dục",
+      "Chuyên viên bảo tồn sinh thái học đường"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.7,
+      "E": 0.3,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nhu cầu nghiên cứu sinh thái học và giảng dạy công nghệ sinh học ứng dụng."
+  },
+  {
+    "major_code": "7140217",
+    "name": "Sư phạm Ngữ văn",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "C00",
+      "D01",
+      "D14"
+    ],
+    "careers": [
+      "Giáo viên Ngữ văn THPT",
+      "Biên tập viên nhà xuất bản giáo dục",
+      "Chuyên viên truyền thông văn hóa"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.7,
+      "A": 0.8,
+      "S": 0.8,
+      "E": 0.4,
+      "C": 0.4
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Môn học bắt buộc cốt lõi trong toàn bộ hệ thống giáo dục quốc dân."
+  },
+  {
+    "major_code": "7140218",
+    "name": "Sư phạm Lịch sử",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "C00",
+      "D01",
+      "D14"
+    ],
+    "careers": [
+      "Giáo viên Lịch sử THPT",
+      "Chuyên viên bảo tàng - di tích",
+      "Nghiên cứu viên lịch sử văn hóa"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.8,
+      "A": 0.4,
+      "S": 0.8,
+      "E": 0.4,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Môn học bắt buộc ở bậc THPT; nhu cầu đổi mới phương pháp giảng dạy sử học."
+  },
+  {
+    "major_code": "7140219",
+    "name": "Sư phạm Địa lí",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "C00",
+      "A00",
+      "D01"
+    ],
+    "careers": [
+      "Giáo viên Địa lí THPT",
+      "Chuyên viên bản đồ và dữ liệu GIS",
+      "Nghiên cứu viên quy hoạch không gian"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.8,
+      "A": 0.3,
+      "S": 0.7,
+      "E": 0.4,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Tích hợp dữ liệu GIS, biến đổi khí hậu và địa lý kinh tế xã hội."
+  },
+  {
+    "major_code": "7140231",
+    "name": "Sư phạm Tiếng Anh",
+    "category": "Khoa học giáo dục & Đào tạo giáo viên",
+    "blocks": [
+      "D01",
+      "D14"
+    ],
+    "careers": [
+      "Giáo viên Tiếng Anh phổ thông/quốc tế",
+      "Giảng viên luyện thi chứng chỉ IELTS/TOEFL",
+      "Chuyên gia phát triển chương trình ngoại ngữ"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.5,
+      "A": 0.5,
+      "S": 0.9,
+      "E": 0.5,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Nhu cầu tuyển dụng rất lớn ở mọi cấp học, trung tâm ngoại ngữ và trường quốc tế."
+  },
+  {
+    "major_code": "7210403",
+    "name": "Thiết kế đồ họa",
+    "category": "Nghệ thuật & Thiết kế",
+    "blocks": [
+      "H00",
+      "V00",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên Thiết kế đồ họa (Graphic Designer)",
+      "Thiết kế giao diện người dùng (UI/UX Designer)",
+      "Giám đốc nghệ thuật (Art Director)"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.3,
+      "A": 0.9,
+      "S": 0.3,
+      "E": 0.5,
+      "C": 0.4
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Bùng nổ ngành công nghiệp sáng tạo nội dung, UI/UX và truyền thông thị giác."
+  },
+  {
+    "major_code": "7210404",
+    "name": "Thiết kế thời trang",
+    "category": "Nghệ thuật & Thiết kế",
+    "blocks": [
+      "H00",
+      "V00",
+      "D01"
+    ],
+    "careers": [
+      "Nhà thiết kế thời trang (Fashion Designer)",
+      "Stylist tạo mẫu phong cách",
+      "Quản lý sản xuất thời trang"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.2,
+      "A": 0.9,
+      "S": 0.3,
+      "E": 0.6,
+      "C": 0.3
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Ngành dệt may chuyển dịch mạnh sang thiết kế thương hiệu nội địa và xuất khẩu."
+  },
+  {
+    "major_code": "7210405",
+    "name": "Thiết kế công nghiệp",
+    "category": "Nghệ thuật & Thiết kế",
+    "blocks": [
+      "H00",
+      "V00",
+      "A01"
+    ],
+    "careers": [
+      "Nhà thiết kế kiểu dáng sản phẩm (Product Designer)",
+      "Chuyên viên tạo mẫu 3D công nghiệp",
+      "Kỹ sư nghiên cứu phát triển mẫu mã R&D"
+    ],
+    "riasec": {
+      "R": 0.6,
+      "I": 0.5,
+      "A": 0.8,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.4
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Sản xuất phần cứng tiêu dùng, xe điện và thiết bị thông minh tăng cao."
+  },
+  {
+    "major_code": "7220101",
+    "name": "Tiếng Việt và văn hóa Việt Nam",
+    "category": "Nhân văn & Ngôn ngữ",
+    "blocks": [
+      "C00",
+      "D01"
+    ],
+    "careers": [
+      "Giảng viên dạy tiếng Việt cho người nước ngoài",
+      "Chuyên viên quản lý di sản văn hóa",
+      "Biên tập viên nội dung văn hóa"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.7,
+      "A": 0.6,
+      "S": 0.8,
+      "E": 0.3,
+      "C": 0.4
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Giảng dạy tiếng Việt cho người nước ngoài và bảo tồn di sản văn hóa số."
+  },
+  {
+    "major_code": "7220201",
+    "name": "Ngôn ngữ Anh",
+    "category": "Nhân văn & Ngôn ngữ",
+    "blocks": [
+      "D01",
+      "A01",
+      "D14"
+    ],
+    "careers": [
+      "Biên - Phiên dịch viên tiếng Anh",
+      "Chuyên viên đối ngoại & quan hệ quốc tế",
+      "Chuyên viên truyền thông đa văn hóa"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.4,
+      "A": 0.5,
+      "S": 0.8,
+      "E": 0.6,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Ngôn ngữ giao thương toàn cầu; biên dịch công nghệ, ngoại giao và đối ngoại."
+  },
+  {
+    "major_code": "7220204",
+    "name": "Ngôn ngữ Trung Quốc",
+    "category": "Nhân văn & Ngôn ngữ",
+    "blocks": [
+      "D01",
+      "D04",
+      "C00"
+    ],
+    "careers": [
+      "Biên phiên dịch tiếng Trung",
+      "Chuyên viên mua hàng chuỗi cung ứng quốc tế",
+      "Quản lý kinh doanh thị trường Hoa ngữ"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.4,
+      "A": 0.4,
+      "S": 0.7,
+      "E": 0.7,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "medium",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Làn sóng FDI từ các tập đoàn công nghệ và chuỗi cung ứng Trung Quốc."
+  },
+  {
+    "major_code": "7220209",
+    "name": "Ngôn ngữ Nhật",
+    "category": "Nhân văn & Ngôn ngữ",
+    "blocks": [
+      "D01",
+      "D06",
+      "C00"
+    ],
+    "careers": [
+      "Kỹ sư cầu nối tiếng Nhật (BrSE)",
+      "Biên dịch viên kỹ thuật Nhật ngữ",
+      "Chuyên viên nhân sự doanh nghiệp Nhật"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.5,
+      "A": 0.4,
+      "S": 0.6,
+      "E": 0.6,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Cầu nối kỹ thuật CNTT (Bridge SE) và hợp tác công nghiệp Việt - Nhật."
+  },
+  {
+    "major_code": "7220210",
+    "name": "Ngôn ngữ Hàn Quốc",
+    "category": "Nhân văn & Ngôn ngữ",
+    "blocks": [
+      "D01",
+      "D05",
+      "C00"
+    ],
+    "careers": [
+      "Chuyên viên đối ngoại tiếng Hàn",
+      "Biên phiên dịch hội nghị Hàn - Việt",
+      "Điều phối viên dự án FDI Hàn Quốc"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.4,
+      "A": 0.5,
+      "S": 0.7,
+      "E": 0.6,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Các tập đoàn hàng đầu Hàn Quốc đầu tư mở rộng R&D và sản xuất tại Việt Nam."
+  },
+  {
+    "major_code": "7310101",
+    "name": "Kinh tế",
+    "category": "Khoa học xã hội & Hành vi",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên phân tích kinh tế",
+      "Cố vấn chính sách công",
+      "Chuyên viên phân tích dữ liệu thị trường"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.4,
+      "E": 0.7,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nhu cầu phân tích kinh tế vĩ mô, chính sách công và dữ liệu kinh tế lượng."
+  },
+  {
+    "major_code": "7310102",
+    "name": "Kinh tế phát triển",
+    "category": "Khoa học xã hội & Hành vi",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Quản lý dự án phát triển cộng đồng",
+      "Chuyên viên thẩm định dự án đầu tư công",
+      "Nghiên cứu viên kinh tế xã hội"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.6,
+      "E": 0.6,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Phát triển bền vững, kinh tế tuần hoàn và các dự án viện trợ quốc tế (NGO)."
+  },
+  {
+    "major_code": "7310104",
+    "name": "Kinh tế quốc tế",
+    "category": "Khoa học xã hội & Hành vi",
+    "blocks": [
+      "A01",
+      "D01",
+      "A00"
+    ],
+    "careers": [
+      "Chuyên viên đàm phán thương mại quốc tế",
+      "Phân tích rủi ro đầu tư xuyên biên giới",
+      "Chuyên viên xuất nhập khẩu"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.7,
+      "A": 0.2,
+      "S": 0.5,
+      "E": 0.8,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Hội nhập thương mại tự do qua các hiệp định thế hệ mới (CPTPP, EVFTA)."
+  },
+  {
+    "major_code": "7310201",
+    "name": "Xã hội học",
+    "category": "Khoa học xã hội & Hành vi",
+    "blocks": [
+      "C00",
+      "D01",
+      "A01"
+    ],
+    "careers": [
+      "Nghiên cứu viên xã hội học",
+      "Chuyên viên điều tra dư luận xã hội",
+      "Chuyên viên công tác xã hội doanh nghiệp (CSR)"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.8,
+      "A": 0.3,
+      "S": 0.8,
+      "E": 0.4,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Đánh giá tác động xã hội cho các dự án đô thị và chuyển đổi số."
+  },
+  {
+    "major_code": "7310301",
+    "name": "Tâm lý học",
+    "category": "Khoa học xã hội & Hành vi",
+    "blocks": [
+      "B00",
+      "C00",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên tham vấn tâm lý học đường",
+      "Chuyên viên tâm lý trị liệu",
+      "Chuyên gia tâm lý nhân sự và hành vi người dùng"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.8,
+      "A": 0.4,
+      "S": 0.9,
+      "E": 0.4,
+      "C": 0.4
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nhu cầu chăm sóc sức khỏe tinh thần và tham vấn tâm lý học đường bùng nổ."
+  },
+  {
+    "major_code": "7310401",
+    "name": "Quốc tế học",
+    "category": "Khoa học xã hội & Hành vi",
+    "blocks": [
+      "D01",
+      "C00",
+      "A01"
+    ],
+    "careers": [
+      "Chuyên viên ngoại giao",
+      "Cán bộ dự án tổ chức quốc tế",
+      "Phóng viên/Bình luận viên quốc tế"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.7,
+      "A": 0.3,
+      "S": 0.7,
+      "E": 0.7,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Mở rộng ngoại giao song phương, đa phương và tổ chức quốc tế phi chính phủ."
+  },
+  {
+    "major_code": "7320101",
+    "name": "Báo chí",
+    "category": "Báo chí & Thông tin",
+    "blocks": [
+      "C00",
+      "D01",
+      "D14"
+    ],
+    "careers": [
+      "Phóng viên/Nhà báo số",
+      "Biên tập viên tòa soạn đa phương tiện",
+      "Chuyên viên phân tích tin tức"
+    ],
+    "riasec": {
+      "R": 0.2,
+      "I": 0.7,
+      "A": 0.7,
+      "S": 0.7,
+      "E": 0.6,
+      "C": 0.4
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Chuyển đổi số báo chí dữ liệu, tòa soạn hội tụ và kiểm chứng thông tin."
+  },
+  {
+    "major_code": "7320104",
+    "name": "Truyền thông đa phương tiện",
+    "category": "Báo chí & Thông tin",
+    "blocks": [
+      "A01",
+      "D01",
+      "C00"
+    ],
+    "careers": [
+      "Nhà sản xuất nội dung số (Content Producer)",
+      "Chuyên viên kỹ xảo và dựng phim",
+      "Quản lý chiến dịch truyền thông số"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.4,
+      "A": 0.8,
+      "S": 0.6,
+      "E": 0.6,
+      "C": 0.4
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "high",
+      "linguistic_ability": "high",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Sản xuất video ngắn, nội dung số đa nền tảng và tương tác thực tế ảo."
+  },
+  {
+    "major_code": "7320106",
+    "name": "Quan hệ công chúng",
+    "category": "Báo chí & Thông tin",
+    "blocks": [
+      "D01",
+      "C00",
+      "A01"
+    ],
+    "careers": [
+      "Chuyên viên Quan hệ công chúng (PR Specialist)",
+      "Quản lý xử trị khủng hoảng truyền thông",
+      "Chuyên viên tổ chức sự kiện doanh nghiệp"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.4,
+      "A": 0.6,
+      "S": 0.8,
+      "E": 0.8,
+      "C": 0.4
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Xây dựng thương hiệu tổ chức và quản trị khủng hoảng truyền thông hiện đại."
+  },
+  {
+    "major_code": "7320201",
+    "name": "Thông tin - Thư viện",
+    "category": "Báo chí & Thông tin",
+    "blocks": [
+      "C00",
+      "D01",
+      "A00"
+    ],
+    "careers": [
+      "Chuyên viên thư viện số",
+      "Chuyên viên phân loại siêu dữ liệu",
+      "Quản trị viên kho lưu trữ tri thức"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.6,
+      "A": 0.2,
+      "S": 0.6,
+      "E": 0.3,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Quản trị thư viện số, lưu trữ tri thức và siêu dữ liệu cho hệ thống số hóa."
+  },
+  {
+    "major_code": "7340101",
+    "name": "Quản trị kinh doanh",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Nhà sáng lập / Giám đốc điều hành (CEO)",
+      "Chuyên viên phát triển kinh doanh",
+      "Cố vấn chiến lược quản trị"
+    ],
+    "riasec": {
+      "R": 0.2,
+      "I": 0.5,
+      "A": 0.3,
+      "S": 0.6,
+      "E": 0.9,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Khởi nghiệp sáng tạo và quản trị vận hành doanh nghiệp thời đại số."
+  },
+  {
+    "major_code": "7340115",
+    "name": "Marketing",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên Tiếp thị kỹ thuật số (Digital Marketer)",
+      "Quản lý nhãn hàng (Brand Manager)",
+      "Chuyên viên nghiên cứu thị trường"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.5,
+      "A": 0.7,
+      "S": 0.6,
+      "E": 0.9,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "high",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Marketing dựa trên dữ liệu (Growth Hacking, MarTech) và phân tích hành vi tiêu dùng."
+  },
+  {
+    "major_code": "7340116",
+    "name": "Bất động sản",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên thẩm định giá bất động sản",
+      "Quản lý sàn giao dịch và dự án địa ốc",
+      "Cố vấn đầu tư bất động sản"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.5,
+      "A": 0.2,
+      "S": 0.6,
+      "E": 0.9,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Phát triển hạ tầng đô thị, bất động sản công nghiệp và dịch vụ tài chính địa ốc."
+  },
+  {
+    "major_code": "7340120",
+    "name": "Kinh doanh quốc tế",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A01",
+      "D01",
+      "A00"
+    ],
+    "careers": [
+      "Chuyên viên phát triển thị trường quốc tế",
+      "Quản lý xuất nhập khẩu",
+      "Chuyên viên thu mua hàng hóa toàn cầu"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.6,
+      "A": 0.3,
+      "S": 0.6,
+      "E": 0.9,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Thương mại xuyên biên giới và quản trị chuỗi cung ứng quốc tế."
+  },
+  {
+    "major_code": "7340121",
+    "name": "Kinh doanh thương mại",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Quản lý chuỗi bán lẻ",
+      "Chuyên viên phân phối và trưng bày hàng hóa",
+      "Chuyên viên quản lý ngành hàng (Category Manager)"
+    ],
+    "riasec": {
+      "R": 0.2,
+      "I": 0.5,
+      "A": 0.2,
+      "S": 0.6,
+      "E": 0.9,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Tối ưu hóa kênh bán lẻ hiện đại (Omnichannel) và chuỗi cửa hàng tiện lợi."
+  },
+  {
+    "major_code": "7340122",
+    "name": "Thương mại điện tử",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Quản lý vận hành sàn thương mại điện tử",
+      "Chuyên viên tối ưu hóa trải nghiệm mua sắm",
+      "Chuyên viên phân tích dữ liệu bán hàng online"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.6,
+      "A": 0.4,
+      "S": 0.5,
+      "E": 0.8,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Thị trường bán lẻ trực tuyến tại Việt Nam duy trì tốc độ tăng trưởng trên 20%/năm."
+  },
+  {
+    "major_code": "7340201",
+    "name": "Tài chính - Ngân hàng",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên phân tích tín dụng ngân hàng",
+      "Chuyên viên tư vấn quản lý tài sản",
+      "Chuyên viên thẩm định đầu tư"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.7,
+      "A": 0.1,
+      "S": 0.4,
+      "E": 0.8,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Hiện đại hóa hệ thống ngân hàng số, ngân hàng bán lẻ và quản lý tài sản."
+  },
+  {
+    "major_code": "7340204",
+    "name": "Bảo hiểm",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên gia định phí bảo hiểm (Actuary)",
+      "Chuyên viên thẩm định và bồi thường bảo hiểm",
+      "Cố vấn quản lý rủi ro tài chính"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.7,
+      "A": 0.1,
+      "S": 0.5,
+      "E": 0.7,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Định phí bảo hiểm (Actuary) và số hóa quy trình bồi thường bảo hiểm nhân thọ/phi nhân thọ."
+  },
+  {
+    "major_code": "7340205",
+    "name": "Công nghệ tài chính (Fintech)",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Kỹ sư giải pháp Fintech",
+      "Chuyên viên phát triển sản phẩm thanh toán số",
+      "Chuyên gia phân tích dữ liệu tài chính thuật toán"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.3,
+      "E": 0.8,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Sự giao thoa giữa AI, Blockchain, thanh toán điện tử và ngân hàng mở."
+  },
+  {
+    "major_code": "7340301",
+    "name": "Kế toán",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Kế toán tổng hợp",
+      "Kế toán quản trị",
+      "Chuyên viên tư vấn thuế doanh nghiệp"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.6,
+      "A": 0.1,
+      "S": 0.3,
+      "E": 0.5,
+      "C": 0.9
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Chuẩn mực kế toán quốc tế IFRS và tự động hóa ghi nhận giao dịch bằng phần mềm."
+  },
+  {
+    "major_code": "7340302",
+    "name": "Kiểm toán",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Kiểm toán viên nội bộ",
+      "Kiểm toán viên độc lập tại Big 4",
+      "Chuyên viên kiểm soát tuân thủ"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.7,
+      "A": 0.1,
+      "S": 0.3,
+      "E": 0.6,
+      "C": 0.9
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Yêu cầu minh bạch tài chính doanh nghiệp niêm yết theo chuẩn mực quốc tế."
+  },
+  {
+    "major_code": "7340404",
+    "name": "Quản trị nhân lực",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên tuyển dụng nhân tài (Talent Acquisition)",
+      "Chuyên viên đào tạo & phát triển (L&D)",
+      "Giám đốc nhân sự (HR Manager)"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.5,
+      "A": 0.3,
+      "S": 0.8,
+      "E": 0.8,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Thu hút nhân tài công nghệ và chuyển đổi quản trị nhân sự theo mô hình People Analytics."
+  },
+  {
+    "major_code": "7340405",
+    "name": "Hệ thống thông tin quản lý",
+    "category": "Kinh doanh & Quản lý",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên phân tích nghiệp vụ (Business Analyst)",
+      "Chuyên viên triển khai ERP",
+      "Quản trị cơ sở dữ liệu doanh nghiệp"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.4,
+      "E": 0.7,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Cầu nối giữa khối công nghệ và nghiệp vụ quản trị trong hệ thống ERP doanh nghiệp."
+  },
+  {
+    "major_code": "7380101",
+    "name": "Luật",
+    "category": "Pháp luật",
+    "blocks": [
+      "C00",
+      "D01",
+      "A00"
+    ],
+    "careers": [
+      "Luật sư tranh tụng",
+      "Thẩm phán / Kiểm sát viên",
+      "Chuyên viên pháp chế cơ quan nhà nước"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.7,
+      "E": 0.7,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Hoàn thiện nhà nước pháp quyền và cải cách tư pháp toàn diện."
+  },
+  {
+    "major_code": "7380107",
+    "name": "Luật kinh tế",
+    "category": "Pháp luật",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên pháp chế doanh nghiệp (In-house Counsel)",
+      "Luật sư tư vấn hợp đồng thương mại",
+      "Trọng tài viên thương mại"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.5,
+      "E": 0.8,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Tư vấn sáp nhập doanh nghiệp (M&A), sở hữu trí tuệ và tranh chấp thương mại."
+  },
+  {
+    "major_code": "7380108",
+    "name": "Luật quốc tế",
+    "category": "Pháp luật",
+    "blocks": [
+      "D01",
+      "A01",
+      "C00"
+    ],
+    "careers": [
+      "Cố vấn pháp lý quốc tế",
+      "Chuyên viên tranh chấp thương mại xuyên biên giới",
+      "Cán bộ ngoại giao pháp lý"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.6,
+      "E": 0.8,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "high",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Giải quyết tranh chấp đầu tư quốc tế và thực thi các cam kết công ước toàn cầu."
+  },
+  {
+    "major_code": "7420101",
+    "name": "Sinh học",
+    "category": "Khoa học sự sống",
+    "blocks": [
+      "B00",
+      "A02",
+      "D08"
+    ],
+    "careers": [
+      "Nhà nghiên cứu sinh học cơ bản",
+      "Chuyên viên kiểm nghiệm vi sinh",
+      "Chuyên gia bảo tồn tài nguyên sinh vật"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.3,
+      "E": 0.2,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nghiên cứu cơ bản về hệ gen, di truyền phân tử và đa dạng sinh học."
+  },
+  {
+    "major_code": "7420201",
+    "name": "Công nghệ sinh học",
+    "category": "Khoa học sự sống",
+    "blocks": [
+      "B00",
+      "A00",
+      "D07"
+    ],
+    "careers": [
+      "Kỹ sư công nghệ sinh học",
+      "Chuyên viên nghiên cứu R&D dược phẩm sinh học",
+      "Kỹ sư nuôi cấy mô tế bào"
+    ],
+    "riasec": {
+      "R": 0.5,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.3,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Ứng dụng trong y dược học, vaccine thế hệ mới, nông nghiệp chính xác và xử lý môi trường."
+  },
+  {
+    "major_code": "7440102",
+    "name": "Vật lý học",
+    "category": "Khoa học tự nhiên",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Nghiên cứu viên vật lý",
+      "Kỹ sư quang học và đo lường",
+      "Chuyên gia vật lý bán dẫn"
+    ],
+    "riasec": {
+      "R": 0.5,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.2,
+      "E": 0.2,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nghiên cứu vật liệu bán dẫn, quang tử và năng lượng mới."
+  },
+  {
+    "major_code": "7440112",
+    "name": "Hóa học",
+    "category": "Khoa học tự nhiên",
+    "blocks": [
+      "A00",
+      "B00",
+      "D07"
+    ],
+    "careers": [
+      "Chuyên viên phân tích hóa học phòng thí nghiệm",
+      "Kỹ sư phát triển sản phẩm hóa mỹ phẩm",
+      "Nghiên cứu viên hóa dược"
+    ],
+    "riasec": {
+      "R": 0.5,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.2,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nghiên cứu hóa dược, vật liệu polymer sinh học và hóa học xanh."
+  },
+  {
+    "major_code": "7440301",
+    "name": "Khoa học môi trường",
+    "category": "Khoa học tự nhiên",
+    "blocks": [
+      "A00",
+      "B00",
+      "D07"
+    ],
+    "careers": [
+      "Chuyên gia đánh giá tác động môi trường (EIA)",
+      "Chuyên viên kiểm kê khí nhà kính",
+      "Cố vấn phát triển bền vững"
+    ],
+    "riasec": {
+      "R": 0.5,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.6,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Cam kết phát thải ròng bằng 0 (Net Zero 2050) và thị trường tín chỉ carbon."
+  },
+  {
+    "major_code": "7460101",
+    "name": "Toán học",
+    "category": "Toán & Thống kê",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Nhà toán học nghiên cứu",
+      "Chuyên viên mật mã bảo mật",
+      "Chuyên gia mô hình hóa toán học"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.9,
+      "A": 0.3,
+      "S": 0.2,
+      "E": 0.2,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nền tảng của mật mã học, tối ưu hóa thuật toán và bảo mật lượng tử."
+  },
+  {
+    "major_code": "7460108",
+    "name": "Khoa học dữ liệu",
+    "category": "Toán & Thống kê",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Kỹ sư khoa học dữ liệu (Data Scientist)",
+      "Chuyên viên phân tích dữ liệu kinh doanh",
+      "Kỹ sư xử lý dữ liệu lớn (Big Data Engineer)"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.3,
+      "E": 0.5,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nhu cầu hàng đầu trong kỷ nguyên Big Data và trí tuệ nhân tạo toàn cầu."
+  },
+  {
+    "major_code": "7460112",
+    "name": "Toán ứng dụng",
+    "category": "Toán & Thống kê",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Chuyên gia tài chính định lượng (Quant)",
+      "Kỹ sư mô phỏng kỹ thuật",
+      "Chuyên viên giải thuật số học"
+    ],
+    "riasec": {
+      "R": 0.2,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Ứng dụng trong định lượng tài chính, mô phỏng cơ học và kỹ thuật mô phỏng."
+  },
+  {
+    "major_code": "7460201",
+    "name": "Thống kê",
+    "category": "Toán & Thống kê",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên thống kê xã hội",
+      "Chuyên viên thống kê sinh học y tế",
+      "Chuyên viên kiểm định chất lượng số liệu"
+    ],
+    "riasec": {
+      "R": 0.1,
+      "I": 0.9,
+      "A": 0.1,
+      "S": 0.3,
+      "E": 0.4,
+      "C": 0.9
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Phục vụ điều tra quốc gia, y học chứng cứ và kiểm định chất lượng sản phẩm."
+  },
+  {
+    "major_code": "7480101",
+    "name": "Khoa học máy tính",
+    "category": "Máy tính & Công nghệ thông tin",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Nhà nghiên cứu khoa học máy tính",
+      "Kiến trúc sư hệ thống phần mềm",
+      "Kỹ sư tối ưu hóa giải thuật"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.9,
+      "A": 0.3,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Trọng tâm nghiên cứu lõi về thuật toán, tính toán đám mây và hệ thống phân tán."
+  },
+  {
+    "major_code": "7480102",
+    "name": "Mạng máy tính và truyền thông dữ liệu",
+    "category": "Máy tính & Công nghệ thông tin",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư hạ tầng mạng viễn thông",
+      "Quản trị viên hệ thống đám mây (Cloud Admin)",
+      "Kỹ sư vận hành trung tâm dữ liệu"
+    ],
+    "riasec": {
+      "R": 0.6,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.3,
+      "E": 0.4,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Mạng 5G, truyền thông vệ tinh thế hệ mới và trung tâm dữ liệu siêu quy mô."
+  },
+  {
+    "major_code": "7480103",
+    "name": "Kỹ thuật phần mềm",
+    "category": "Máy tính & Công nghệ thông tin",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Kỹ sư phần mềm Fullstack",
+      "Kỹ sư kiểm thử phần mềm tự động (QA/QC)",
+      "Quản lý dự án phát triển phần mềm (Scrum Master)"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.9,
+      "A": 0.3,
+      "S": 0.3,
+      "E": 0.5,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Lực lượng nòng cốt phát triển ứng dụng di động, hệ thống web và giải pháp SaaS."
+  },
+  {
+    "major_code": "7480104",
+    "name": "Hệ thống thông tin",
+    "category": "Máy tính & Công nghệ thông tin",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Kiến trúc sư cơ sở dữ liệu",
+      "Chuyên viên phân tích hệ thống thông tin",
+      "Quản trị viên dữ liệu doanh nghiệp"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.4,
+      "E": 0.6,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Xây dựng hạ tầng cơ sở dữ liệu quốc gia và giải pháp tích hợp phần mềm doanh nghiệp."
+  },
+  {
+    "major_code": "7480108",
+    "name": "Trí tuệ nhân tạo",
+    "category": "Máy tính & Công nghệ thông tin",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư Trí tuệ nhân tạo (AI Engineer)",
+      "Kỹ sư học máy (Machine Learning Engineer)",
+      "Nghiên cứu viên mô hình ngôn ngữ lớn (LLM Researcher)"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.9,
+      "A": 0.3,
+      "S": 0.2,
+      "E": 0.5,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Lĩnh vực công nghệ đột phá toàn cầu; phát triển mô hình sinh (Generative AI) và thị giác máy tính."
+  },
+  {
+    "major_code": "7480201",
+    "name": "Công nghệ thông tin",
+    "category": "Máy tính & Công nghệ thông tin",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Kỹ sư phát triển phần mềm Backend",
+      "Kỹ sư vận hành DevOps / SRE",
+      "Chuyên viên giải pháp CNTT doanh nghiệp"
+    ],
+    "riasec": {
+      "R": 0.5,
+      "I": 0.9,
+      "A": 0.3,
+      "S": 0.3,
+      "E": 0.5,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Ngành đào tạo chủ lực phục vụ chương trình Chuyển đổi số Quốc gia đến năm 2030."
+  },
+  {
+    "major_code": "7480202",
+    "name": "An toàn thông tin",
+    "category": "Máy tính & Công nghệ thông tin",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Chuyên viên phân tích an ninh mạng (SOC Analyst)",
+      "Kỹ sư kiểm thử thâm nhập (Penetration Tester)",
+      "Chuyên gia điều tra tội phạm mạng (Digital Forensics)"
+    ],
+    "riasec": {
+      "R": 0.5,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.3,
+      "E": 0.4,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Bảo vệ hệ thống tài chính, dữ liệu cá nhân theo Luật An ninh mạng và Luật 91/2025/QH15."
+  },
+  {
+    "major_code": "7510102",
+    "name": "Công nghệ kỹ thuật kiến trúc",
+    "category": "Công nghệ kỹ thuật",
+    "blocks": [
+      "A00",
+      "A01",
+      "V00"
+    ],
+    "careers": [
+      "Kỹ sư điều phối BIM kiến trúc",
+      "Chuyên viên thiết kế thi công công trình",
+      "Chuyên viên giám sát kỹ thuật kiến trúc"
+    ],
+    "riasec": {
+      "R": 0.7,
+      "I": 0.6,
+      "A": 0.7,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Ứng dụng mô hình thông tin công trình (BIM) và kiến trúc số xanh."
+  },
+  {
+    "major_code": "7510201",
+    "name": "Công nghệ kỹ thuật cơ khí",
+    "category": "Công nghệ kỹ thuật",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư lập trình và vận hành máy CNC",
+      "Kỹ sư thiết kế cơ khí chế tạo máy",
+      "Quản đốc phân xưởng cơ khí"
+    ],
+    "riasec": {
+      "R": 0.9,
+      "I": 0.7,
+      "A": 0.2,
+      "S": 0.1,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Gia công cơ khí chính xác CNC và chế tạo máy móc tự động hóa sản xuất."
+  },
+  {
+    "major_code": "7510203",
+    "name": "Công nghệ kỹ thuật cơ điện tử",
+    "category": "Công nghệ kỹ thuật",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư Robot và Cơ điện tử",
+      "Kỹ sư tích hợp hệ thống tự động",
+      "Chuyên viên bảo trì thiết bị công nghệ cao"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Sự kết hợp giữa cơ khí, điện tử và lập trình điều khiển cho robot công nghiệp."
+  },
+  {
+    "major_code": "7510205",
+    "name": "Công nghệ kỹ thuật ô tô",
+    "category": "Công nghệ kỹ thuật",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư hệ thống ô tô điện (EV Engineer)",
+      "Kỹ sư chẩn đoán và kiểm định kỹ thuật ô tô",
+      "Giám đốc dịch vụ đại lý ô tô"
+    ],
+    "riasec": {
+      "R": 0.9,
+      "I": 0.7,
+      "A": 0.2,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Chuyển dịch thần tốc sang xe điện (EV), pin năng lượng và xe tự hành."
+  },
+  {
+    "major_code": "7510301",
+    "name": "Công nghệ kỹ thuật điện, điện tử",
+    "category": "Công nghệ kỹ thuật",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư thiết kế hệ thống điện",
+      "Kỹ sư kiểm tra chất lượng linh kiện điện tử",
+      "Kỹ sư vận hành trạm biến áp và nguồn điện"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.2,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Lưới điện thông minh (Smart Grid), năng lượng tái tạo và thiết bị điện tử gia dụng."
+  },
+  {
+    "major_code": "7510302",
+    "name": "Công nghệ kỹ thuật điện tử - viễn thông",
+    "category": "Công nghệ kỹ thuật",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư thiết kế vi mạch bán dẫn",
+      "Kỹ sư tối ưu hóa mạng viễn thông",
+      "Kỹ sư phần cứng thiết bị IoT"
+    ],
+    "riasec": {
+      "R": 0.7,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.2,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Hạ tầng trạm phát sóng 5G, thiết bị IoT và thiết kế vi mạch bán dẫn."
+  },
+  {
+    "major_code": "7510303",
+    "name": "Công nghệ kỹ thuật điều khiển và tự động hóa",
+    "category": "Công nghệ kỹ thuật",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư lập trình điều khiển PLC/SCADA",
+      "Kỹ sư tự động hóa dây chuyền sản xuất",
+      "Chuyên viên tích hợp giải pháp Industry 4.0"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nhà máy thông minh (Smart Factory), hệ thống PLC và dây chuyền tự động hóa toàn phần."
+  },
+  {
+    "major_code": "7510401",
+    "name": "Công nghệ kỹ thuật hóa học",
+    "category": "Công nghệ kỹ thuật",
+    "blocks": [
+      "A00",
+      "B00",
+      "D07"
+    ],
+    "careers": [
+      "Kỹ sư vận hành nhà máy hóa chất",
+      "Kỹ sư nghiên cứu công nghệ vật liệu mới",
+      "Chuyên viên kiểm soát an toàn hóa chất"
+    ],
+    "riasec": {
+      "R": 0.7,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.2,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Lọc hóa dầu, công nghệ pin lithium và sản xuất nguyên liệu công nghiệp."
+  },
+  {
+    "major_code": "7510406",
+    "name": "Công nghệ kỹ thuật môi trường",
+    "category": "Công nghệ kỹ thuật",
+    "blocks": [
+      "A00",
+      "B00",
+      "D07"
+    ],
+    "careers": [
+      "Kỹ sư thiết kế hệ thống xử lý nước thải",
+      "Chuyên viên quan trắc môi trường",
+      "Kỹ sư an toàn môi trường doanh nghiệp"
+    ],
+    "riasec": {
+      "R": 0.7,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.5,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Xử lý nước thải công nghiệp, quản lý chất thải rắn và tuần hoàn tài nguyên."
+  },
+  {
+    "major_code": "7510605",
+    "name": "Logistics và Quản lý chuỗi cung ứng",
+    "category": "Công nghệ kỹ thuật",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Chuyên viên điều phối chuỗi cung ứng",
+      "Quản lý trung tâm kho vận thông minh",
+      "Chuyên viên forwarder và giao nhận vận tải"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.7,
+      "A": 0.2,
+      "S": 0.4,
+      "E": 0.8,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Việt Nam giữ vị thế trung tâm vận chuyển hàng hải và hàng không khu vực Đông Nam Á."
+  },
+  {
+    "major_code": "7520114",
+    "name": "Kỹ thuật cơ điện tử",
+    "category": "Kỹ thuật & Công nghiệp",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư nghiên cứu và phát triển Robot",
+      "Kỹ sư hệ thống nhúng cơ điện tử",
+      "Chuyên viên giải pháp tự động hóa"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Chế tạo thiết bị bay không người lái (UAV), tay máy phẫu thuật và công nghệ Robot."
+  },
+  {
+    "major_code": "7520115",
+    "name": "Kỹ thuật nhiệt",
+    "category": "Kỹ thuật & Công nghiệp",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư thiết kế hệ thống HVAC",
+      "Kỹ sư vận hành nhà máy nhiệt điện",
+      "Chuyên viên kiểm toán năng lượng nhiệt"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.7,
+      "A": 0.1,
+      "S": 0.2,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Hệ thống điều hòa trung tâm HVAC, lò hơi công nghiệp và năng lượng nhiệt sạch."
+  },
+  {
+    "major_code": "7520120",
+    "name": "Kỹ thuật hàng không",
+    "category": "Kỹ thuật & Công nghiệp",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư bảo dưỡng tàu bay",
+      "Kỹ sư khí động lực học",
+      "Chuyên viên quản lý an toàn bay"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Bảo dưỡng sửa chữa máy bay (MRO) tại các sân bay lớn Long Thành, Nội Bài."
+  },
+  {
+    "major_code": "7520130",
+    "name": "Kỹ thuật ô tô",
+    "category": "Kỹ thuật & Công nghiệp",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư thiết kế ô tô",
+      "Kỹ sư phần mềm nhúng ô tô (Automotive Embedded)",
+      "Chuyên viên thử nghiệm khí thải và an toàn"
+    ],
+    "riasec": {
+      "R": 0.9,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nghiên cứu khung gầm, hệ truyền động điện và phần mềm điều khiển ô tô thông minh."
+  },
+  {
+    "major_code": "7520201",
+    "name": "Kỹ thuật điện",
+    "category": "Kỹ thuật & Công nghiệp",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư điện lưới quốc gia",
+      "Kỹ sư năng lượng tái tạo",
+      "Chuyên gia phân tích hệ thống điện"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.2,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Quy hoạch điện VIII, truyền tải điện cao thế siêu dẫn và tích hợp điện gió, điện mặt trời."
+  },
+  {
+    "major_code": "7520207",
+    "name": "Kỹ thuật điện tử - viễn thông",
+    "category": "Kỹ thuật & Công nghiệp",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư thiết kế layout vi mạch",
+      "Kỹ sư viễn thông không dây",
+      "Kỹ sư nghiên cứu xử lý tín hiệu số"
+    ],
+    "riasec": {
+      "R": 0.7,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.2,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Sản xuất thiết bị truyền dẫn vệ tinh, thiết kế chip bán dẫn và radar dân sự."
+  },
+  {
+    "major_code": "7520216",
+    "name": "Kỹ thuật điều khiển và tự động hóa",
+    "category": "Kỹ thuật & Công nghiệp",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư hệ thống DCS",
+      "Chuyên gia tự động hóa cảng biển",
+      "Kiến trúc sư giải pháp nhà máy thông minh"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.9,
+      "A": 0.1,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Hệ thống điều khiển phân tán (DCS) cho dầu khí, hóa chất và cảng biển tự động."
+  },
+  {
+    "major_code": "7520301",
+    "name": "Kỹ thuật hóa học",
+    "category": "Kỹ thuật & Công nghiệp",
+    "blocks": [
+      "A00",
+      "B00",
+      "D07"
+    ],
+    "careers": [
+      "Kỹ sư thiết kế quy trình hóa học (Process Engineer)",
+      "Kỹ sư vận hành tháp chưng cất",
+      "Chuyên gia an toàn hóa chất công nghiệp"
+    ],
+    "riasec": {
+      "R": 0.7,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.2,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Thiết kế thiết bị phản ứng hóa học, công nghệ lọc tách và xúc tác nano."
+  },
+  {
+    "major_code": "7520320",
+    "name": "Kỹ thuật vật liệu",
+    "category": "Kỹ thuật & Công nghiệp",
+    "blocks": [
+      "A00",
+      "A01",
+      "B00"
+    ],
+    "careers": [
+      "Kỹ sư vật liệu bán dẫn",
+      "Kỹ sư nghiên cứu composite",
+      "Chuyên viên kiểm định cơ lý vật liệu"
+    ],
+    "riasec": {
+      "R": 0.7,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.1,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Phát triển vật liệu bán dẫn SiC, GaN, sợi carbon composite và hợp kim siêu nhẹ."
+  },
+  {
+    "major_code": "7540101",
+    "name": "Công nghệ thực phẩm",
+    "category": "Sản xuất & Chế biến",
+    "blocks": [
+      "A00",
+      "B00",
+      "D07"
+    ],
+    "careers": [
+      "Kỹ sư phát triển sản phẩm thực phẩm (R&D)",
+      "Quản lý chất lượng thực phẩm (QA/QC)",
+      "Giám sát viên quy trình chế biến thực phẩm"
+    ],
+    "riasec": {
+      "R": 0.6,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.3,
+      "E": 0.4,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Chế biến sâu nông sản xuất khẩu, bao bì thông minh và thực phẩm chức năng."
+  },
+  {
+    "major_code": "7540106",
+    "name": "Đảm bảo chất lượng và an toàn thực phẩm",
+    "category": "Sản xuất & Chế biến",
+    "blocks": [
+      "A00",
+      "B00",
+      "D07"
+    ],
+    "careers": [
+      "Chuyên viên kiểm soát tuân thủ an toàn thực phẩm",
+      "Thanh tra viên an toàn thực phẩm",
+      "Chuyên viên đánh giá chứng nhận ISO"
+    ],
+    "riasec": {
+      "R": 0.5,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.4,
+      "E": 0.4,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Tuân thủ nghiêm ngặt tiêu chuẩn HACCP, ISO 22000 và FDA xuất khẩu."
+  },
+  {
+    "major_code": "7580101",
+    "name": "Kiến trúc",
+    "category": "Kiến trúc & Xây dựng",
+    "blocks": [
+      "V00",
+      "V01",
+      "A01"
+    ],
+    "careers": [
+      "Kiến trúc sư chủ trì thiết kế công trình",
+      "Kiến trúc sư nội thất",
+      "Cố vấn công trình kiến trúc xanh"
+    ],
+    "riasec": {
+      "R": 0.6,
+      "I": 0.7,
+      "A": 0.9,
+      "S": 0.3,
+      "E": 0.5,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Quy hoạch đô thị bền vững, công trình xanh đạt chứng chỉ LEED và LOTUS."
+  },
+  {
+    "major_code": "7580102",
+    "name": "Kiến trúc cảnh quan",
+    "category": "Kiến trúc & Xây dựng",
+    "blocks": [
+      "V00",
+      "V01",
+      "A00"
+    ],
+    "careers": [
+      "Kiến trúc sư cảnh quan",
+      "Quy hoạch viên không gian công cộng",
+      "Quản lý thi công cảnh quan sinh thái"
+    ],
+    "riasec": {
+      "R": 0.6,
+      "I": 0.6,
+      "A": 0.8,
+      "S": 0.4,
+      "E": 0.4,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "exploratory",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Thiết kế công viên sinh thái, khu nghỉ dưỡng và cảnh quan đô thị ven sông."
+  },
+  {
+    "major_code": "7580105",
+    "name": "Quy hoạch vùng và đô thị",
+    "category": "Kiến trúc & Xây dựng",
+    "blocks": [
+      "A00",
+      "A01",
+      "V00"
+    ],
+    "careers": [
+      "Chuyên viên quy hoạch đô thị",
+      "Cố vấn phát triển hạ tầng vùng",
+      "Chuyên viên phân tích dữ liệu không gian GIS"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.8,
+      "A": 0.6,
+      "S": 0.5,
+      "E": 0.6,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Chiến lược phân vùng phát triển kinh tế vùng và phát triển đô thị thông minh."
+  },
+  {
+    "major_code": "7580201",
+    "name": "Kỹ thuật xây dựng",
+    "category": "Kiến trúc & Xây dựng",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư thiết kế kết cấu xây dựng",
+      "Chỉ huy trưởng công trường xây dựng",
+      "Kỹ sư giám sát thi công"
+    ],
+    "riasec": {
+      "R": 0.9,
+      "I": 0.7,
+      "A": 0.2,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Xây dựng hạ tầng cao tốc, cảng biển và các tòa nhà chọc trời."
+  },
+  {
+    "major_code": "7580205",
+    "name": "Kỹ thuật xây dựng công trình giao thông",
+    "category": "Kiến trúc & Xây dựng",
+    "blocks": [
+      "A00",
+      "A01"
+    ],
+    "careers": [
+      "Kỹ sư thiết kế cầu đường",
+      "Kỹ sư thi công công trình ngầm",
+      "Chuyên viên quản lý dự án giao thông"
+    ],
+    "riasec": {
+      "R": 0.9,
+      "I": 0.7,
+      "A": 0.1,
+      "S": 0.2,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Các đại dự án đường sắt đô thị Metro, đường sắt tốc độ cao Bắc - Nam và cầu vượt biển."
+  },
+  {
+    "major_code": "7580301",
+    "name": "Quản lý xây dựng",
+    "category": "Kiến trúc & Xây dựng",
+    "blocks": [
+      "A00",
+      "A01",
+      "D01"
+    ],
+    "careers": [
+      "Kỹ sư dự toán và quản lý chi phí (QS Engineer)",
+      "Quản lý dự án xây dựng (Project Manager)",
+      "Chuyên viên quản lý hợp đồng đấu thầu"
+    ],
+    "riasec": {
+      "R": 0.6,
+      "I": 0.7,
+      "A": 0.2,
+      "S": 0.4,
+      "E": 0.8,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Quản lý tiến độ, chi phí và đấu thầu các dự án hạ tầng quy mô tỷ USD."
+  },
+  {
+    "major_code": "7620101",
+    "name": "Nông nghiệp",
+    "category": "Nông, lâm nghiệp & Thủy sản",
+    "blocks": [
+      "B00",
+      "A00",
+      "D08"
+    ],
+    "careers": [
+      "Kỹ sư nông nghiệp công nghệ cao",
+      "Quản lý nông trường hữu cơ",
+      "Chuyên viên tư vấn khuyến nông"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.7,
+      "A": 0.1,
+      "S": 0.4,
+      "E": 0.4,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nông nghiệp hữu cơ, tự động hóa tưới tiêu và sản xuất theo chuỗi giá trị."
+  },
+  {
+    "major_code": "7620105",
+    "name": "Cây trồng",
+    "category": "Nông, lâm nghiệp & Thủy sản",
+    "blocks": [
+      "B00",
+      "A00",
+      "D08"
+    ],
+    "careers": [
+      "Kỹ sư chọn tạo giống cây trồng",
+      "Chuyên viên sinh lý dinh dưỡng thực vật",
+      "Quản lý vườn ươm giống chất lượng cao"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.7,
+      "A": 0.1,
+      "S": 0.3,
+      "E": 0.3,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Chọn tạo giống cây kháng sâu bệnh và thích ứng với xâm nhập mặn."
+  },
+  {
+    "major_code": "7620110",
+    "name": "Bảo vệ thực vật",
+    "category": "Nông, lâm nghiệp & Thủy sản",
+    "blocks": [
+      "B00",
+      "A00",
+      "D08"
+    ],
+    "careers": [
+      "Chuyên viên kiểm dịch thực vật quốc tế",
+      "Kỹ sư quản lý dịch hại tổng hợp (IPM)",
+      "Nghiên cứu viên chế phẩm sinh học"
+    ],
+    "riasec": {
+      "R": 0.7,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.3,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Kiểm dịch thực vật tại cửa khẩu và phát triển thuốc bảo vệ thực vật sinh học."
+  },
+  {
+    "major_code": "7620201",
+    "name": "Lâm học",
+    "category": "Nông, lâm nghiệp & Thủy sản",
+    "blocks": [
+      "B00",
+      "A00",
+      "D08"
+    ],
+    "careers": [
+      "Cán bộ kiểm lâm quản lý rừng",
+      "Chuyên gia phát triển tín chỉ carbon rừng",
+      "Kỹ sư phục hồi hệ sinh thái rừng"
+    ],
+    "riasec": {
+      "R": 0.9,
+      "I": 0.6,
+      "A": 0.2,
+      "S": 0.3,
+      "E": 0.2,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "high",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Quản lý rừng bền vững được cấp chứng chỉ FSC và thương mại hóa tín chỉ carbon rừng."
+  },
+  {
+    "major_code": "7620301",
+    "name": "Nuôi trồng thủy sản",
+    "category": "Nông, lâm nghiệp & Thủy sản",
+    "blocks": [
+      "B00",
+      "A00",
+      "D08"
+    ],
+    "careers": [
+      "Kỹ sư nuôi trồng thủy sản công nghệ cao",
+      "Chuyên viên quản lý dịch bệnh thủy sản",
+      "Chuyên gia tư vấn thức ăn thủy sản"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.7,
+      "A": 0.1,
+      "S": 0.3,
+      "E": 0.4,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Ứng dụng nuôi tôm công nghệ cao siêu thâm canh và nuôi biển xa bờ."
+  },
+  {
+    "major_code": "7640101",
+    "name": "Thú y",
+    "category": "Khác",
+    "blocks": [
+      "B00",
+      "A02",
+      "D08"
+    ],
+    "careers": [
+      "Bác sĩ thú y lâm sàng phòng khám thú cưng",
+      "Chuyên gia kiểm soát dịch tễ trang trại",
+      "Nghiên cứu viên phát triển vaccine thú y"
+    ],
+    "riasec": {
+      "R": 0.8,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.5,
+      "E": 0.4,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Bùng nổ dịch vụ chăm sóc thú cưng tại đô thị và an toàn dịch bệnh chăn nuôi trang trại lớn."
+  },
+  {
+    "major_code": "7720101",
+    "name": "Y khoa",
+    "category": "Sức khỏe & Y dược",
+    "blocks": [
+      "B00"
+    ],
+    "careers": [
+      "Bác sĩ Đa khoa tại bệnh viện tuyến tỉnh/trung ương",
+      "Bác sĩ Chuyên khoa sâu (Ngoại, Nội, Nhi)",
+      "Bác sĩ Cấp cứu và hồi sức tích cực"
+    ],
+    "riasec": {
+      "R": 0.5,
+      "I": 0.9,
+      "A": 0.2,
+      "S": 0.9,
+      "E": 0.4,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Y học chính xác, phẫu thuật nội soi robot và nhu cầu bác sĩ chuyên khoa sâu."
+  },
+  {
+    "major_code": "7720115",
+    "name": "Y học cổ truyền",
+    "category": "Sức khỏe & Y dược",
+    "blocks": [
+      "B00"
+    ],
+    "careers": [
+      "Bác sĩ Y học cổ truyền",
+      "Chuyên gia châm cứu và dưỡng sinh",
+      "Thầy thuốc tư vấn y học phục hồi"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.8,
+      "A": 0.3,
+      "S": 0.9,
+      "E": 0.3,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Kết hợp Đông - Tây y trong phục hồi chức năng và chăm sóc sức khỏe mạn tính."
+  },
+  {
+    "major_code": "7720116",
+    "name": "Y học dự phòng",
+    "category": "Sức khỏe & Y dược",
+    "blocks": [
+      "B00"
+    ],
+    "careers": [
+      "Bác sĩ Dịch tễ học CDC",
+      "Chuyên viên giám sát bệnh truyền nhiễm",
+      "Bác sĩ y tế công cộng học đường"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.9,
+      "A": 0.1,
+      "S": 0.8,
+      "E": 0.4,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "low",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Kiểm soát dịch bệnh truyền nhiễm toàn cầu, tiêm chủng và dịch tễ học thực địa."
+  },
+  {
+    "major_code": "7720201",
+    "name": "Dược học",
+    "category": "Sức khỏe & Y dược",
+    "blocks": [
+      "A00",
+      "B00"
+    ],
+    "careers": [
+      "Dược sĩ Lâm sàng bệnh viện",
+      "Dược sĩ nghiên cứu phát triển thuốc (R&D)",
+      "Quản lý kinh doanh dược phẩm"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.9,
+      "A": 0.1,
+      "S": 0.6,
+      "E": 0.6,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nghiên cứu thử nghiệm lâm sàng, dược lâm sàng bệnh viện và phân phối dược phẩm."
+  },
+  {
+    "major_code": "7720301",
+    "name": "Điều dưỡng",
+    "category": "Sức khỏe & Y dược",
+    "blocks": [
+      "B00"
+    ],
+    "careers": [
+      "Điều dưỡng viên tại bệnh viện",
+      "Điều dưỡng trưởng khoa",
+      "Chuyên viên chăm sóc y tế tại gia"
+    ],
+    "riasec": {
+      "R": 0.4,
+      "I": 0.6,
+      "A": 0.2,
+      "S": 0.9,
+      "E": 0.3,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Thiếu hụt điều dưỡng viên chuyên nghiệp tại Việt Nam và cơ hội làm việc tại Nhật, Đức."
+  },
+  {
+    "major_code": "7720501",
+    "name": "Răng - Hàm - Mặt",
+    "category": "Sức khỏe & Y dược",
+    "blocks": [
+      "B00"
+    ],
+    "careers": [
+      "Bác sĩ Răng - Hàm - Mặt",
+      "Bác sĩ Chỉnh nha thẩm mỹ",
+      "Phẫu thuật viên nha khoa"
+    ],
+    "riasec": {
+      "R": 0.7,
+      "I": 0.8,
+      "A": 0.4,
+      "S": 0.8,
+      "E": 0.5,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "high",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Nhu cầu chỉnh nha, cấy ghép implant nha khoa thẩm mỹ phát triển rất nhanh."
+  },
+  {
+    "major_code": "7720601",
+    "name": "Kỹ thuật xét nghiệm y học",
+    "category": "Sức khỏe & Y dược",
+    "blocks": [
+      "B00",
+      "A00"
+    ],
+    "careers": [
+      "Kỹ thuật viên xét nghiệm y khoa",
+      "Quản lý phòng xét nghiệm sinh hóa",
+      "Chuyên viên xét nghiệm di truyền học"
+    ],
+    "riasec": {
+      "R": 0.6,
+      "I": 0.8,
+      "A": 0.1,
+      "S": 0.4,
+      "E": 0.2,
+      "C": 0.8
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "low",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Xét nghiệm sinh học phân tử, chẩn đoán gen sớm và tự động hóa phòng lab y tế."
+  },
+  {
+    "major_code": "7810101",
+    "name": "Du lịch",
+    "category": "Du lịch, Khách sạn & Dịch vụ",
+    "blocks": [
+      "D01",
+      "C00",
+      "A01"
+    ],
+    "careers": [
+      "Chuyên viên phát triển sản phẩm du lịch",
+      "Chuyên viên quản lý điểm đến",
+      "Nhà nghiên cứu kinh tế du lịch"
+    ],
+    "riasec": {
+      "R": 0.2,
+      "I": 0.5,
+      "A": 0.4,
+      "S": 0.8,
+      "E": 0.8,
+      "C": 0.5
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "medium",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Du lịch sinh thái, phát triển điểm đến thông minh và di sản văn hóa."
+  },
+  {
+    "major_code": "7810103",
+    "name": "Quản trị dịch vụ du lịch và lữ hành",
+    "category": "Du lịch, Khách sạn & Dịch vụ",
+    "blocks": [
+      "D01",
+      "C00",
+      "A01"
+    ],
+    "careers": [
+      "Hướng dẫn viên du lịch quốc tế",
+      "Giám đốc điều hành tour (Tour Operator)",
+      "Chuyên viên bán vé và đại lý du lịch"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.4,
+      "A": 0.4,
+      "S": 0.8,
+      "E": 0.8,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "medium",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Tổ chức tour du lịch quốc tế, thiết kế hành trình trải nghiệm cá nhân hóa."
+  },
+  {
+    "major_code": "7810201",
+    "name": "Quản trị khách sạn",
+    "category": "Du lịch, Khách sạn & Dịch vụ",
+    "blocks": [
+      "D01",
+      "A01",
+      "C00"
+    ],
+    "careers": [
+      "Tổng giám đốc khách sạn (General Manager)",
+      "Quản lý bộ phận tiền sảnh (Front Office Manager)",
+      "Giám đốc kinh doanh và tiếp thị khách sạn"
+    ],
+    "riasec": {
+      "R": 0.3,
+      "I": 0.4,
+      "A": 0.4,
+      "S": 0.8,
+      "E": 0.8,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "medium",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Sự hiện diện của các tập đoàn quản lý khách sạn 5 sao toàn cầu tại Việt Nam."
+  },
+  {
+    "major_code": "7810202",
+    "name": "Quản trị nhà hàng và dịch vụ ăn uống",
+    "category": "Du lịch, Khách sạn & Dịch vụ",
+    "blocks": [
+      "D01",
+      "A01",
+      "C00"
+    ],
+    "careers": [
+      "Quản lý nhà hàng cao cấp (Restaurant Manager)",
+      "Giám đốc ẩm thực (F&B Director)",
+      "Chuyên gia phát triển thực đơn và trải nghiệm ẩm thực"
+    ],
+    "riasec": {
+      "R": 0.5,
+      "I": 0.3,
+      "A": 0.5,
+      "S": 0.7,
+      "E": 0.8,
+      "C": 0.6
+    },
+    "cognitive": {
+      "abstract_thinking": "medium",
+      "analytical_reasoning": "medium",
+      "spatial_perception": "medium",
+      "linguistic_ability": "high",
+      "learning_environment": "collaborative",
+      "teamwork_intensity": "highly_collaborative"
+    },
+    "outlook": "Công nghiệp F&B phát triển với chuỗi ẩm thực cao cấp và tiêu chuẩn ẩm thực Michelin."
+  },
+  {
+    "major_code": "7850101",
+    "name": "Quản lý tài nguyên và môi trường",
+    "category": "Môi trường & Tài nguyên",
+    "blocks": [
+      "A00",
+      "B00",
+      "A01"
+    ],
+    "careers": [
+      "Chuyên viên quản lý tài nguyên đất đai và khoáng sản",
+      "Cố vấn tuân thủ ESG doanh nghiệp",
+      "Cán bộ quản lý môi trường tại Sở TN&MT"
+    ],
+    "riasec": {
+      "R": 0.6,
+      "I": 0.8,
+      "A": 0.2,
+      "S": 0.6,
+      "E": 0.5,
+      "C": 0.7
+    },
+    "cognitive": {
+      "abstract_thinking": "high",
+      "analytical_reasoning": "high",
+      "spatial_perception": "medium",
+      "linguistic_ability": "medium",
+      "learning_environment": "structured",
+      "teamwork_intensity": "balanced"
+    },
+    "outlook": "Thực thi chính sách ESG (Môi trường - Xã hội - Quản trị) bắt buộc đối với doanh nghiệp niêm yết."
+  }
+]
