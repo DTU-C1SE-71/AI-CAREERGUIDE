@@ -145,7 +145,7 @@ export function AdminHITLDashboard() {
   const [showLogsModal, setShowLogsModal] = useState(false)
   const [actionToast, setActionToast] = useState<string | null>(null)
   const [systemLogs, setSystemLogs] = useState<string[]>([
-    "[INFO] SQLite/PostgreSQL Dual-RAG Engine initialized (108 MOET Level-IV majors active)",
+    "[INFO] SQLite/PostgreSQL Dual-RAG Engine initialized (435 MOET Level-IV majors active)",
     "[INFO] Stream A (Qwen3-VL OCR) & Stream B (Tavily Academic Whitelist) ready",
     "[INFO] Zero-PII Guardrail active under Law 91/2025/QH15",
   ])
@@ -230,8 +230,8 @@ export function AdminHITLDashboard() {
   const kpis = [
     {
       label: "Ngành chuẩn MOET",
-      value: String(dbHealth?.majors_count || 108),
-      note: "TT09 & TT74 · CSDL trực tuyến",
+      value: String(dbHealth?.majors_count || 435),
+      note: "TT74/2026 · CSDL trực tuyến",
       icon: Database,
       accent: "from-sky-400 to-sky-500",
     },
