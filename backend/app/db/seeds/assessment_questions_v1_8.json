@@ -1,0 +1,1317 @@
+{
+  "version": "1.8",
+  "circular_ref": "74/2026/TT-BGDĐT",
+  "project": "AI CareerGuide - CMU-SE 450 (C1SE.71)",
+  "config": {
+    "xp_per_question": 25,
+    "completion_bonus_xp": 200,
+    "estimated_minutes": 6,
+    "questions_per_riasec_page": 5,
+    "total_riasec_questions": 30,
+    "total_cognitive_questions": 8,
+    "weights": {
+      "riasec": 0.45,
+      "academic": 0.35,
+      "cognitive_preference": 0.2
+    }
+  },
+  "likert_scale": [
+    {
+      "value": 1,
+      "label": "Rất không thích",
+      "emoji": "😣",
+      "weight": 0.0
+    },
+    {
+      "value": 2,
+      "label": "Không thích",
+      "emoji": "🙁",
+      "weight": 0.25
+    },
+    {
+      "value": 3,
+      "label": "Bình thường",
+      "emoji": "😐",
+      "weight": 0.5
+    },
+    {
+      "value": 4,
+      "label": "Khá thích",
+      "emoji": "🙂",
+      "weight": 0.75
+    },
+    {
+      "value": 5,
+      "label": "Rất yêu thích",
+      "emoji": "🤩",
+      "weight": 1.0
+    }
+  ],
+  "riasec_groups": [
+    {
+      "dimension": "R",
+      "step_index": 1,
+      "name_vi": "Thực tế",
+      "name_en": "Realistic",
+      "badge": "Thực tế (Realistic)",
+      "description": "Ưa thích thao tác với máy móc, thiết bị kỹ thuật, công trình, nông lâm nghiệp và hoạt động thực địa.",
+      "related_moet_field_codes": [
+        "51",
+        "52",
+        "54",
+        "58",
+        "62",
+        "64",
+        "84",
+        "86"
+      ]
+    },
+    {
+      "dimension": "I",
+      "step_index": 2,
+      "name_vi": "Nghiên cứu",
+      "name_en": "Investigative",
+      "badge": "Nghiên cứu (Investigative)",
+      "description": "Đam mê khám phá nguyên lý khoa học, toán học, lập trình AI, y sinh và phân tích chuyên sâu.",
+      "related_moet_field_codes": [
+        "42",
+        "44",
+        "46",
+        "48",
+        "72",
+        "31"
+      ]
+    },
+    {
+      "dimension": "A",
+      "step_index": 3,
+      "name_vi": "Nghệ thuật",
+      "name_en": "Artistic",
+      "badge": "Nghệ thuật (Artistic)",
+      "description": "Giàu trí tưởng tượng, yêu thích thiết kế đồ họa, kiến trúc, âm nhạc, điện ảnh, văn chương và sáng tạo.",
+      "related_moet_field_codes": [
+        "21",
+        "22",
+        "32",
+        "58"
+      ]
+    },
+    {
+      "dimension": "S",
+      "step_index": 4,
+      "name_vi": "Xã hội",
+      "name_en": "Social",
+      "badge": "Xã hội (Social)",
+      "description": "Hướng tới con người, thích giảng dạy, chăm sóc y tế, tư vấn tâm lý, ngôn ngữ và phát triển cộng đồng.",
+      "related_moet_field_codes": [
+        "14",
+        "22",
+        "31",
+        "72",
+        "76",
+        "81"
+      ]
+    },
+    {
+      "dimension": "E",
+      "step_index": 5,
+      "name_vi": "Quản lý",
+      "name_en": "Enterprising",
+      "badge": "Quản lý (Enterprising)",
+      "description": "Tự tin dẫn dắt, thuyết phục, đam mê kinh doanh, marketing, thương mại điện tử, luật pháp và quản trị.",
+      "related_moet_field_codes": [
+        "34",
+        "38",
+        "31",
+        "32",
+        "81"
+      ]
+    },
+    {
+      "dimension": "C",
+      "step_index": 6,
+      "name_vi": "Nghiệp vụ",
+      "name_en": "Conventional",
+      "badge": "Nghiệp vụ (Conventional)",
+      "description": "Làm việc có hệ thống, tỉ mỉ với con số tài chính, kế toán, kiểm toán, chuỗi cung ứng (Logistics) và quy chuẩn.",
+      "related_moet_field_codes": [
+        "34",
+        "46",
+        "32",
+        "84",
+        "85"
+      ]
+    }
+  ],
+  "riasec_questions": [
+    {
+      "code": "R1",
+      "order": 1,
+      "dimension": "R",
+      "dimension_badge": "Thực tế (Realistic)",
+      "domain_tag": "Cơ khí, Điện tử & Tự động hóa (Mã 51, 52)",
+      "icon_name": "Wrench",
+      "question_text": "Tôi thích tháo lắp, sửa chữa máy móc, mạch điện tử hoặc vận hành các thiết bị kỹ thuật."
+    },
+    {
+      "code": "R2",
+      "order": 2,
+      "dimension": "R",
+      "dimension_badge": "Thực tế (Realistic)",
+      "domain_tag": "Kiến trúc & Kỹ thuật Xây dựng (Mã 51, 58)",
+      "icon_name": "Compass",
+      "question_text": "Tôi hứng thú với việc đọc bản vẽ kỹ thuật, khảo sát công trình, đo đạc thực địa hoặc chế tạo mô hình vật lý."
+    },
+    {
+      "code": "R3",
+      "order": 3,
+      "dimension": "R",
+      "dimension_badge": "Thực tế (Realistic)",
+      "domain_tag": "Nông - Lâm - Thủy sản, Thú y & Môi trường (Mã 62, 64, 85)",
+      "icon_name": "Sprout",
+      "question_text": "Tôi thích làm việc gần gũi với thiên nhiên, chăm sóc cây trồng, vật nuôi hoặc vận hành nông trại công nghệ cao."
+    },
+    {
+      "code": "R4",
+      "order": 4,
+      "dimension": "R",
+      "dimension_badge": "Thực tế (Realistic)",
+      "domain_tag": "Kỹ thuật Y học & Công nghệ Thực phẩm (Mã 54, 72)",
+      "icon_name": "Microscope",
+      "question_text": "Tôi thích thao tác trực tiếp với dụng cụ phòng thí nghiệm, thiết bị xét nghiệm - hình ảnh y học hoặc quy trình chế biến thực phẩm."
+    },
+    {
+      "code": "R5",
+      "order": 5,
+      "dimension": "R",
+      "dimension_badge": "Thực tế (Realistic)",
+      "domain_tag": "Thể thao, Vận tải & An ninh - Quốc phòng (Mã 81, 84, 86)",
+      "icon_name": "ShieldCheck",
+      "question_text": "Tôi yêu thích các hoạt động đòi hỏi sức bền thể chất, huấn luyện thể thao, điều khiển phương tiện vận tải hoặc nghiệp vụ thực địa."
+    },
+    {
+      "code": "I1",
+      "order": 6,
+      "dimension": "I",
+      "dimension_badge": "Nghiên cứu (Investigative)",
+      "domain_tag": "Toán học & Khoa học tính toán (Mã 46)",
+      "icon_name": "BrainCircuit",
+      "question_text": "Tôi thích tìm hiểu nguyên lý khoa học, giải các bài toán logic phức tạp và suy luận tìm ra bản chất vấn đề."
+    },
+    {
+      "code": "I2",
+      "order": 7,
+      "dimension": "I",
+      "dimension_badge": "Nghiên cứu (Investigative)",
+      "domain_tag": "Máy tính, CNTT, Khoa học dữ liệu & AI (Mã 46, 48)",
+      "icon_name": "Code2",
+      "question_text": "Tôi hứng thú với việc phân tích dữ liệu lớn, tìm quy luật từ biểu đồ hoặc lập trình thuật toán trí tuệ nhân tạo."
+    },
+    {
+      "code": "I3",
+      "order": 8,
+      "dimension": "I",
+      "dimension_badge": "Nghiên cứu (Investigative)",
+      "domain_tag": "Y khoa, Dược học & Khoa học sự sống (Mã 42, 72)",
+      "icon_name": "Dna",
+      "question_text": "Tôi tò mò về cơ chế sinh học của cơ thể người, di truyền học, tác dụng của dược chất hoặc phương pháp chẩn đoán bệnh."
+    },
+    {
+      "code": "I4",
+      "order": 9,
+      "dimension": "I",
+      "dimension_badge": "Nghiên cứu (Investigative)",
+      "domain_tag": "Vật lý, Hóa học, Bán dẫn & Khoa học Trái đất (Mã 44, 52)",
+      "icon_name": "Atom",
+      "question_text": "Tôi thích nghiên cứu về công nghệ bán dẫn, vật liệu mới, phản ứng hóa học, năng lượng tái tạo hoặc biến đổi khí hậu."
+    },
+    {
+      "code": "I5",
+      "order": 10,
+      "dimension": "I",
+      "dimension_badge": "Nghiên cứu (Investigative)",
+      "domain_tag": "Kinh tế học, Tâm lý học & Khu vực học (Mã 22, 31)",
+      "icon_name": "BookOpenCheck",
+      "question_text": "Tôi thích đọc tài liệu học thuật để phân tích sâu về hành vi tâm lý con người, lịch sử văn hóa hoặc các quy luật kinh tế vĩ mô."
+    },
+    {
+      "code": "A1",
+      "order": 11,
+      "dimension": "A",
+      "dimension_badge": "Nghệ thuật (Artistic)",
+      "domain_tag": "Thiết kế Đồ họa, Thời trang & Nghệ thuật số (Mã 21)",
+      "icon_name": "Palette",
+      "question_text": "Tôi thích sáng tạo hình ảnh, vẽ minh họa, thiết kế đồ họa kỹ thuật số, thời trang hoặc sản phẩm mỹ thuật ứng dụng."
+    },
+    {
+      "code": "A2",
+      "order": 12,
+      "dimension": "A",
+      "dimension_badge": "Nghệ thuật (Artistic)",
+      "domain_tag": "Kiến trúc, Nội thất & Cảnh quan đô thị (Mã 58)",
+      "icon_name": "Layers",
+      "question_text": "Tôi nhạy cảm với thẩm mỹ không gian 3D, thích thiết kế kiến trúc, trang trí nội thất hoặc quy hoạch cảnh quan."
+    },
+    {
+      "code": "A3",
+      "order": 13,
+      "dimension": "A",
+      "dimension_badge": "Nghệ thuật (Artistic)",
+      "domain_tag": "Báo chí, Truyền thông đa phương tiện & Điện ảnh (Mã 21, 32)",
+      "icon_name": "Clapperboard",
+      "question_text": "Tôi thích viết kịch bản, sáng tác văn học, làm báo chí, nhiếp ảnh, quay dựng phim hoặc sản xuất nội dung đa phương tiện."
+    },
+    {
+      "code": "A4",
+      "order": 14,
+      "dimension": "A",
+      "dimension_badge": "Nghệ thuật (Artistic)",
+      "domain_tag": "Âm nhạc & Nghệ thuật trình diễn (Mã 21)",
+      "icon_name": "Music",
+      "question_text": "Tôi có niềm đam mê lớn với âm nhạc, thanh nhạc, biểu diễn nhạc cụ, công nghệ âm thanh hoặc nghệ thuật sân khấu, diễn xuất."
+    },
+    {
+      "code": "A5",
+      "order": 15,
+      "dimension": "A",
+      "dimension_badge": "Nghệ thuật (Artistic)",
+      "domain_tag": "Tư duy Đổi mới & Phá cách (Đa lĩnh vực)",
+      "icon_name": "Sparkles",
+      "question_text": "Tôi thường có những ý tưởng độc đáo khác biệt, thích tự do biểu đạt cá tính và không muốn bị gò bó trong khuôn mẫu cứng nhắc."
+    },
+    {
+      "code": "S1",
+      "order": 16,
+      "dimension": "S",
+      "dimension_badge": "Xã hội (Social)",
+      "domain_tag": "Khoa học Giáo dục & Đào tạo Giáo viên (Mã 14)",
+      "icon_name": "GraduationCap",
+      "question_text": "Tôi thích giảng giải kiến thức, thiết kế bài giảng và kiên nhẫn hướng dẫn người khác cùng tiến bộ trong học tập."
+    },
+    {
+      "code": "S2",
+      "order": 17,
+      "dimension": "S",
+      "dimension_badge": "Xã hội (Social)",
+      "domain_tag": "Điều dưỡng, Y tế công cộng & Dinh dưỡng (Mã 72)",
+      "icon_name": "HeartPulse",
+      "question_text": "Tôi giàu lòng trắc ẩn, muốn trực tiếp chăm sóc người bệnh, phục hồi chức năng hoặc tư vấn dinh dưỡng, bảo vệ sức khỏe cộng đồng."
+    },
+    {
+      "code": "S3",
+      "order": 18,
+      "dimension": "S",
+      "dimension_badge": "Xã hội (Social)",
+      "domain_tag": "Tâm lý học lâm sàng & Tham vấn học đường (Mã 31)",
+      "icon_name": "Users",
+      "question_text": "Tôi biết lắng nghe, dễ thấu cảm và biết cách giúp người khác giải tỏa căng thẳng, tháo gỡ khúc mắc tâm lý."
+    },
+    {
+      "code": "S4",
+      "order": 19,
+      "dimension": "S",
+      "dimension_badge": "Xã hội (Social)",
+      "domain_tag": "Công tác xã hội & Du lịch - Dịch vụ (Mã 76, 81)",
+      "icon_name": "Handshake",
+      "question_text": "Tôi hào hứng khi tham gia hoạt động cộng đồng, công tác xã hội hoặc đón tiếp, hướng dẫn và mang lại trải nghiệm tốt cho du khách."
+    },
+    {
+      "code": "S5",
+      "order": 20,
+      "dimension": "S",
+      "dimension_badge": "Xã hội (Social)",
+      "domain_tag": "Ngôn ngữ nước ngoài & Quan hệ quốc tế (Mã 22, 31, 32)",
+      "icon_name": "Globe2",
+      "question_text": "Tôi thích giao tiếp bằng ngoại ngữ, kết nối văn hóa giữa các quốc gia và làm việc trong môi trường giao lưu quốc tế."
+    },
+    {
+      "code": "E1",
+      "order": 21,
+      "dimension": "E",
+      "dimension_badge": "Quản lý (Enterprising)",
+      "domain_tag": "Quản trị Kinh doanh & Quản lý Dự án (Mã 34)",
+      "icon_name": "Briefcase",
+      "question_text": "Tôi tự tin đảm nhận vai trò trưởng nhóm, điều phối công việc, ra quyết định và dẫn dắt tập thể đạt mục tiêu chung."
+    },
+    {
+      "code": "E2",
+      "order": 22,
+      "dimension": "E",
+      "dimension_badge": "Quản lý (Enterprising)",
+      "domain_tag": "Kinh doanh thương mại, Quốc tế & Thương mại điện tử (Mã 34)",
+      "icon_name": "TrendingUp",
+      "question_text": "Tôi có hứng thú mạnh mẽ với việc khởi nghiệp, thương mại điện tử, phát triển thị trường và nắm bắt cơ hội kinh doanh."
+    },
+    {
+      "code": "E3",
+      "order": 23,
+      "dimension": "E",
+      "dimension_badge": "Quản lý (Enterprising)",
+      "domain_tag": "Pháp luật, Luật Kinh tế & Luật Quốc tế (Mã 38)",
+      "icon_name": "Scale",
+      "question_text": "Tôi thích lập luận sắc bén để bảo vệ lẽ phải, đàm phán hợp đồng, giải quyết tranh chấp hoặc vận dụng quy định pháp luật."
+    },
+    {
+      "code": "E4",
+      "order": 24,
+      "dimension": "E",
+      "dimension_badge": "Quản lý (Enterprising)",
+      "domain_tag": "Marketing, Quan hệ công chúng & Thương hiệu (Mã 32, 34)",
+      "icon_name": "Megaphone",
+      "question_text": "Tôi thích xây dựng chiến dịch quảng bá thương hiệu, thuyết trình thu hút đám đông và tạo ảnh hưởng tích cực đến khách hàng."
+    },
+    {
+      "code": "E5",
+      "order": 25,
+      "dimension": "E",
+      "dimension_badge": "Quản lý (Enterprising)",
+      "domain_tag": "Quản trị Nhân lực, Khách sạn & Quản lý công (Mã 31, 34, 81)",
+      "icon_name": "Building2",
+      "question_text": "Tôi thích tổ chức nhân sự, vận hành dịch vụ khách sạn - nhà hàng chuyên nghiệp hoặc hoạch định chính sách quản lý."
+    },
+    {
+      "code": "C1",
+      "order": 26,
+      "dimension": "C",
+      "dimension_badge": "Nghiệp vụ (Conventional)",
+      "domain_tag": "Kế toán, Kiểm toán, Tài chính - Ngân hàng & Fintech (Mã 34)",
+      "icon_name": "Calculator",
+      "question_text": "Tôi thích làm việc chính xác với các con số tài chính, lập bảng cân đối ngân sách, kế toán, kiểm toán hoặc phân tích đầu tư."
+    },
+    {
+      "code": "C2",
+      "order": 27,
+      "dimension": "C",
+      "dimension_badge": "Nghiệp vụ (Conventional)",
+      "domain_tag": "Hệ thống thông tin quản lý, Thống kê & Lưu trữ (Mã 32, 34, 46, 48)",
+      "icon_name": "FolderKanban",
+      "question_text": "Tôi thích sắp xếp cơ sở dữ liệu, phân loại hồ sơ, quản trị thông tin cẩn thận, ngăn nắp và tra cứu nhanh chóng."
+    },
+    {
+      "code": "C3",
+      "order": 28,
+      "dimension": "C",
+      "dimension_badge": "Nghiệp vụ (Conventional)",
+      "domain_tag": "Đảm bảo chất lượng, Kiểm thử & An ninh mạng (Mã 48, 54)",
+      "icon_name": "CheckCircle2",
+      "question_text": "Tôi làm việc tỉ mỉ theo quy trình chuẩn, giỏi rà soát các chi tiết nhỏ để phát hiện lỗi sai và bảo mật hệ thống an toàn."
+    },
+    {
+      "code": "C4",
+      "order": 29,
+      "dimension": "C",
+      "dimension_badge": "Nghiệp vụ (Conventional)",
+      "domain_tag": "Logistics, Chuỗi cung ứng & Khai thác vận tải (Mã 34, 51, 84)",
+      "icon_name": "Truck",
+      "question_text": "Tôi thích lập kế hoạch điều phối hàng hóa, tối ưu hóa lịch trình vận chuyển, quản lý kho bãi và thủ tục chuỗi cung ứng."
+    },
+    {
+      "code": "C5",
+      "order": 30,
+      "dimension": "C",
+      "dimension_badge": "Nghiệp vụ (Conventional)",
+      "domain_tag": "Quản trị văn phòng, Quản lý đất đai & An toàn lao động (Mã 34, 85)",
+      "icon_name": "ClipboardCheck",
+      "question_text": "Tôi cảm thấy hiệu quả nhất khi làm việc trong môi trường có quy định rõ ràng, tuân thủ nghiêm ngặt tiêu chuẩn pháp lý và an toàn."
+    }
+  ],
+  "cognitive_questions": [
+    {
+      "code": "COG_1",
+      "order": 1,
+      "dimension_key": "learning_style",
+      "title": "1. Phong cách Tiếp thu Kiến thức",
+      "subtitle": "Bạn hiểu sâu và nhớ lâu một kiến thức mới nhất khi được tiếp cận theo cách nào?",
+      "options": [
+        {
+          "option_key": "A",
+          "trait_code": "LEARN_VISUAL_SPATIAL",
+          "title": "Trực quan & Mô hình hóa",
+          "description": "Học nhanh qua sơ đồ tư duy, bản vẽ 3D, hình ảnh minh họa, bản đồ và video mô phỏng.",
+          "related_moet_field_codes": [
+            "21",
+            "58",
+            "32",
+            "44"
+          ]
+        },
+        {
+          "option_key": "B",
+          "trait_code": "LEARN_THEORETICAL_ANALYTICAL",
+          "title": "Đọc hiểu & Suy luận Nguyên lý",
+          "description": "Thích đọc giáo trình chuyên sâu, phân tích định lý, công thức và hiểu rõ căn nguyên lý thuyết.",
+          "related_moet_field_codes": [
+            "46",
+            "48",
+            "44",
+            "31",
+            "38"
+          ]
+        },
+        {
+          "option_key": "C",
+          "trait_code": "LEARN_HANDS_ON_PRACTICAL",
+          "title": "Thực hành & Thao tác Thực tế",
+          "description": "Phải tự tay làm thí nghiệm, lắp ráp, viết code, thực hành lâm sàng hoặc ra thực địa mới nắm chắc.",
+          "related_moet_field_codes": [
+            "51",
+            "52",
+            "54",
+            "62",
+            "64",
+            "72"
+          ]
+        },
+        {
+          "option_key": "D",
+          "trait_code": "LEARN_INTERACTIVE_CASE",
+          "title": "Thảo luận & Phân tích Tình huống",
+          "description": "Học hiệu quả nhất khi trao đổi nhóm, tranh biện, đóng vai và giải quyết các tình huống (Case Study) thực tiễn.",
+          "related_moet_field_codes": [
+            "14",
+            "22",
+            "34",
+            "38",
+            "76",
+            "81"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "COG_2",
+      "order": 2,
+      "dimension_key": "work_environment",
+      "title": "2. Môi trường Học tập & Làm việc Ưa thích",
+      "subtitle": "Không gian nào giúp bạn phát huy tối đa sự tập trung và cảm hứng mỗi ngày?",
+      "options": [
+        {
+          "option_key": "A",
+          "trait_code": "ENV_LAB_DIGITAL_QUIET",
+          "title": "Phòng Lab, Trung tâm Dữ liệu & Không gian Yên tĩnh",
+          "description": "Môi trường hiện đại, yên tĩnh để tập trung sâu vào máy tính, thiết bị nghiên cứu hoặc sáng tác cá nhân.",
+          "related_moet_field_codes": [
+            "42",
+            "44",
+            "46",
+            "48",
+            "21"
+          ]
+        },
+        {
+          "option_key": "B",
+          "trait_code": "ENV_DYNAMIC_CORPORATE",
+          "title": "Văn phòng Năng động & Giao thương Mở",
+          "description": "Môi trường doanh nghiệp, truyền thông, sự kiện, thường xuyên kết nối đối tác và khách hàng.",
+          "related_moet_field_codes": [
+            "32",
+            "34",
+            "81"
+          ]
+        },
+        {
+          "option_key": "C",
+          "trait_code": "ENV_FIELD_INDUSTRIAL",
+          "title": "Công trường, Nhà máy & Thực địa Ngoài trời",
+          "description": "Không thích ngồi yên một chỗ; thích di chuyển tại công trình, nhà máy thông minh, nông trại hoặc cảng vận tải.",
+          "related_moet_field_codes": [
+            "51",
+            "52",
+            "58",
+            "62",
+            "84",
+            "85",
+            "86"
+          ]
+        },
+        {
+          "option_key": "D",
+          "trait_code": "ENV_INSTITUTIONAL_SERVICE",
+          "title": "Trường học, Bệnh viện & Cơ quan Chuẩn mực",
+          "description": "Môi trường có tính chuyên môn và kỷ luật cao như giảng đường, cơ sở y tế, tòa án hoặc tổ chức xã hội.",
+          "related_moet_field_codes": [
+            "14",
+            "38",
+            "72",
+            "76"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "COG_3",
+      "order": 3,
+      "dimension_key": "problem_solving",
+      "title": "3. Phương pháp Giải quyết Vấn đề",
+      "subtitle": "Khi đứng trước một thử thách phức tạp, phản xạ tự nhiên đầu tiên của bạn là gì?",
+      "options": [
+        {
+          "option_key": "A",
+          "trait_code": "SOLVE_QUANTITATIVE_LOGIC",
+          "title": "Phân tích Định lượng & Logic Khoa học",
+          "description": "Thu thập dữ liệu, đo lường thông số, lập mô hình toán học hoặc kiểm chứng bằng thực nghiệm.",
+          "related_moet_field_codes": [
+            "44",
+            "46",
+            "48",
+            "52"
+          ]
+        },
+        {
+          "option_key": "B",
+          "trait_code": "SOLVE_CREATIVE_DIVERGENT",
+          "title": "Tư duy Sáng tạo & Đột phá Thẩm mỹ",
+          "description": "Tìm kiếm góc nhìn mới lạ, vượt qua lối mòn để tạo ra giải pháp giàu tính nghệ thuật và cảm xúc.",
+          "related_moet_field_codes": [
+            "21",
+            "22",
+            "32",
+            "58"
+          ]
+        },
+        {
+          "option_key": "C",
+          "trait_code": "SOLVE_HUMAN_EMPATHY",
+          "title": "Thấu cảm & Đặt Con người làm Trung tâm",
+          "description": "Lắng nghe nhu cầu, cân nhắc tác động tâm lý, sức khỏe và sự phát triển bền vững của cộng đồng.",
+          "related_moet_field_codes": [
+            "14",
+            "31",
+            "72",
+            "76",
+            "81"
+          ]
+        },
+        {
+          "option_key": "D",
+          "trait_code": "SOLVE_PROCEDURAL_STRATEGIC",
+          "title": "Chiếu theo Quy chuẩn, Pháp lý & Hiệu quả Kinh tế",
+          "description": "Áp dụng quy định pháp luật, tiêu chuẩn quản trị rủi ro và bài toán tối ưu chi phí - nguồn lực.",
+          "related_moet_field_codes": [
+            "34",
+            "38",
+            "51",
+            "84",
+            "85"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "COG_4",
+      "order": 4,
+      "dimension_key": "interaction_target",
+      "title": "4. Đối tượng Tương tác Chính trong Công việc",
+      "subtitle": "Bạn muốn làm việc trực tiếp với đối tượng nào nhiều nhất trong sự nghiệp tương lai?",
+      "options": [
+        {
+          "option_key": "A",
+          "trait_code": "TARGET_SYSTEMS_MACHINES",
+          "title": "Hệ thống Phần mềm, Máy móc & Công trình",
+          "description": "Tương tác với mã nguồn, vi mạch, robot, dây chuyền công nghiệp hoặc kết cấu hạ tầng.",
+          "related_moet_field_codes": [
+            "48",
+            "51",
+            "52",
+            "58"
+          ]
+        },
+        {
+          "option_key": "B",
+          "trait_code": "TARGET_DATA_FINANCE_LAW",
+          "title": "Dữ liệu, Báo cáo Tài chính & Văn bản Pháp lý",
+          "description": "Tương tác với con số thống kê, dòng tiền, hồ sơ kiểm toán, hợp đồng và quy định nhà nước.",
+          "related_moet_field_codes": [
+            "31",
+            "34",
+            "38",
+            "46"
+          ]
+        },
+        {
+          "option_key": "C",
+          "trait_code": "TARGET_PEOPLE_COMMUNITY",
+          "title": "Con người, Học sinh, Bệnh nhân & Khách hàng",
+          "description": "Trực tiếp giảng dạy, khám chữa bệnh, tư vấn tâm lý, truyền thông hoặc chăm sóc khách hàng.",
+          "related_moet_field_codes": [
+            "14",
+            "22",
+            "32",
+            "72",
+            "76",
+            "81"
+          ]
+        },
+        {
+          "option_key": "D",
+          "trait_code": "TARGET_NATURE_BIO_ART",
+          "title": "Sinh vật Sống, Tự nhiên & Tác phẩm Nghệ thuật",
+          "description": "Tương tác với công nghệ sinh học, cây trồng, thú y, môi trường tự nhiên hoặc sáng tạo nghệ thuật.",
+          "related_moet_field_codes": [
+            "21",
+            "42",
+            "44",
+            "54",
+            "62",
+            "64",
+            "85"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "COG_5",
+      "order": 5,
+      "dimension_key": "gardner_intelligence",
+      "title": "5. Thế mạnh Trí thông minh Đa diện (Howard Gardner)",
+      "subtitle": "Khả năng bẩm sinh nào dưới đây giúp bạn tự tin nhất khi học tập?",
+      "options": [
+        {
+          "option_key": "A",
+          "trait_code": "GARDNER_LOGICAL_MATH",
+          "title": "Trí thông minh Logic - Toán học",
+          "description": "Nhạy bén với con số, thuật toán, suy luận nhân quả và cấu trúc hệ thống chặt chẽ.",
+          "related_moet_field_codes": [
+            "34",
+            "44",
+            "46",
+            "48",
+            "52"
+          ]
+        },
+        {
+          "option_key": "B",
+          "trait_code": "GARDNER_LINGUISTIC_INTERPERSONAL",
+          "title": "Trí thông minh Ngôn ngữ & Tương tác Xã hội",
+          "description": "Giỏi diễn đạt, viết lách, học ngoại ngữ, thuyết phục và đọc vị cảm xúc của người đối diện.",
+          "related_moet_field_codes": [
+            "14",
+            "22",
+            "31",
+            "32",
+            "38",
+            "76",
+            "81"
+          ]
+        },
+        {
+          "option_key": "C",
+          "trait_code": "GARDNER_SPATIAL_MUSICAL",
+          "title": "Trí thông minh Không gian - Thị giác & Âm nhạc",
+          "description": "Tưởng tượng hình học 3D sắc nét, nhạy cảm với màu sắc, bố cục hình ảnh, âm thanh và nhịp điệu.",
+          "related_moet_field_codes": [
+            "21",
+            "58"
+          ]
+        },
+        {
+          "option_key": "D",
+          "trait_code": "GARDNER_NATURALIST_KINESTHETIC",
+          "title": "Trí thông minh Tự nhiên - Sinh học & Vận động",
+          "description": "Quan sát tinh tế thế giới sinh vật, hóa sinh, y học hoặc có đôi tay khéo léo, thể chất dẻo dai.",
+          "related_moet_field_codes": [
+            "42",
+            "51",
+            "54",
+            "62",
+            "64",
+            "72",
+            "85",
+            "86"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "COG_6",
+      "order": 6,
+      "dimension_key": "pressure_tolerance",
+      "title": "6. Khả năng Thích ứng với Áp lực Đặc thù",
+      "subtitle": "Kiểu thử thách nào bạn sẵn sàng chấp nhận để đánh đổi lấy thành tựu nghề nghiệp?",
+      "options": [
+        {
+          "option_key": "A",
+          "trait_code": "PRESSURE_HIGH_STAKES_VITAL",
+          "title": "Trách nhiệm Sinh mạng & Tình huống Khẩn cấp",
+          "description": "Bình tĩnh, chính xác tuyệt đối khi trực cấp cứu y tế, điều tra an ninh hoặc vận hành an toàn bay/hàng hải.",
+          "related_moet_field_codes": [
+            "72",
+            "84",
+            "86"
+          ]
+        },
+        {
+          "option_key": "B",
+          "trait_code": "PRESSURE_MARKET_DEADLINE",
+          "title": "Áp lực Thương trường, Doanh số & Truyền thông",
+          "description": "Hứng khởi trước nhịp độ nhanh, cạnh tranh thị trường, chỉ số KPI kinh doanh và thời hạn sự kiện.",
+          "related_moet_field_codes": [
+            "32",
+            "34",
+            "38",
+            "81"
+          ]
+        },
+        {
+          "option_key": "C",
+          "trait_code": "PRESSURE_DEEP_RND_COMPLEXITY",
+          "title": "Áp lực Giải quyết Bài toán Kỹ thuật & Học thuật Khó",
+          "description": "Kiên trì nhiều tuần liền để tìm lỗi phần mềm, thiết kế vi mạch, giải bài toán khoa học hoặc đồ án kiến trúc.",
+          "related_moet_field_codes": [
+            "21",
+            "42",
+            "44",
+            "46",
+            "48",
+            "52",
+            "58"
+          ]
+        },
+        {
+          "option_key": "D",
+          "trait_code": "PRESSURE_STABLE_SUSTAINABLE",
+          "title": "Ưu tiên Sự Bền vững, Chuẩn mực & Có Kế hoạch",
+          "description": "Phát huy tốt nhất trong công việc có lộ trình rõ ràng như giảng dạy, kế toán, hành chính, nông lâm và môi trường.",
+          "related_moet_field_codes": [
+            "14",
+            "22",
+            "31",
+            "51",
+            "54",
+            "62",
+            "64",
+            "76",
+            "85"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "COG_7",
+      "order": 7,
+      "dimension_key": "output_preference",
+      "title": "7. Thành quả Đầu ra Mang lại Động lực Lớn nhất",
+      "subtitle": "Bạn tự hào nhất khi nhìn thấy kết quả công việc của mình hiển thị dưới dạng nào?",
+      "options": [
+        {
+          "option_key": "A",
+          "trait_code": "OUTPUT_TANGIBLE_TECH_SYSTEM",
+          "title": "Sản phẩm Công nghệ, Máy móc & Công trình Vật lý",
+          "description": "Một ứng dụng phần mềm chạy mượt, hệ thống robot, thiết bị điện tử hoặc tòa nhà hiện hữu ngoài đời thực.",
+          "related_moet_field_codes": [
+            "48",
+            "51",
+            "52",
+            "54",
+            "58"
+          ]
+        },
+        {
+          "option_key": "B",
+          "trait_code": "OUTPUT_ECONOMIC_LEGAL_VALUE",
+          "title": "Tăng trưởng Kinh tế, Hợp đồng & Quyết sách Quản trị",
+          "description": "Doanh thu tăng trưởng, thương vụ thành công, vụ kiện thắng lợi hoặc chuỗi cung ứng vận hành trơn tru.",
+          "related_moet_field_codes": [
+            "31",
+            "34",
+            "38",
+            "84"
+          ]
+        },
+        {
+          "option_key": "C",
+          "trait_code": "OUTPUT_HUMAN_WELLBEING",
+          "title": "Sự Tiến bộ, Sức khỏe & Hạnh phúc của Con người",
+          "description": "Học trò trưởng thành, bệnh nhân bình phục, cộng đồng an toàn và môi trường sống xanh sạch hơn.",
+          "related_moet_field_codes": [
+            "14",
+            "62",
+            "64",
+            "72",
+            "76",
+            "81",
+            "85",
+            "86"
+          ]
+        },
+        {
+          "option_key": "D",
+          "trait_code": "OUTPUT_CREATIVE_SCIENTIFIC_WORK",
+          "title": "Tác phẩm Nghệ thuật, Truyền thông & Công trình Khoa học",
+          "description": "Bộ nhận diện thương hiệu, tác phẩm điện ảnh/âm nhạc, bài báo chất lượng hoặc phát minh khoa học mới.",
+          "related_moet_field_codes": [
+            "21",
+            "22",
+            "32",
+            "42",
+            "44",
+            "46"
+          ]
+        }
+      ]
+    },
+    {
+      "code": "COG_8",
+      "order": 8,
+      "dimension_key": "team_role",
+      "title": "8. Vai trò Tự nhiên trong Dự án Tập thể",
+      "subtitle": "Khi làm dự án chung ở trường, bạn thường đảm nhận vị trí nào tốt nhất?",
+      "options": [
+        {
+          "option_key": "A",
+          "trait_code": "ROLE_TECHNICAL_SPECIALIST",
+          "title": "Chuyên gia Nghiên cứu & Kỹ thuật Độc lập",
+          "description": "Tập trung giải quyết các phần việc đòi hỏi chuyên môn sâu, tính toán hoặc kỹ thuật phức tạp nhất.",
+          "related_moet_field_codes": [
+            "42",
+            "44",
+            "46",
+            "48",
+            "51",
+            "52"
+          ]
+        },
+        {
+          "option_key": "B",
+          "trait_code": "ROLE_STRATEGIC_LEADER",
+          "title": "Người Dẫn dắt, Thuyết trình & Định hướng",
+          "description": "Lập kế hoạch tổng thể, phân công nhiệm vụ, đại diện nhóm thuyết trình và đàm phán.",
+          "related_moet_field_codes": [
+            "31",
+            "34",
+            "38",
+            "86"
+          ]
+        },
+        {
+          "option_key": "C",
+          "trait_code": "ROLE_CREATIVE_COMMUNICATOR",
+          "title": "Người Sáng tạo Nội dung & Kết nối Thành viên",
+          "description": "Đưa ra ý tưởng mới, thiết kế trình bày đẹp mắt, truyền cảm hứng và gắn kết mọi người.",
+          "related_moet_field_codes": [
+            "14",
+            "21",
+            "22",
+            "32",
+            "58",
+            "76",
+            "81"
+          ]
+        },
+        {
+          "option_key": "D",
+          "trait_code": "ROLE_QUALITY_CONTROLLER",
+          "title": "Người Kiểm soát Chất lượng, Quy trình & Hậu cần",
+          "description": "Theo dõi tiến độ, quản lý ngân sách, chuẩn bị thiết bị và kiểm tra tỉ mỉ từng chi tiết trước khi nộp.",
+          "related_moet_field_codes": [
+            "34",
+            "54",
+            "62",
+            "64",
+            "72",
+            "84",
+            "85"
+          ]
+        }
+      ]
+    }
+  ],
+  "qa_persona_presets": [
+    {
+      "id": "PRESET_IT_AI",
+      "name": "Hồ sơ Kỹ sư AI & Phần mềm",
+      "badge": "Khối CNTT & Toán Tin (Mã 48, 46)",
+      "description": "Điểm I (Nghiên cứu) & R/C cao; thiên hướng tư duy thuật toán, làm việc phòng Lab và tạo sản phẩm công nghệ.",
+      "target_moet_majors": [
+        {
+          "major_code": "480107",
+          "major_name": "Trí tuệ nhân tạo"
+        },
+        {
+          "major_code": "480103",
+          "major_name": "Kỹ thuật phần mềm"
+        },
+        {
+          "major_code": "460108",
+          "major_name": "Khoa học dữ liệu"
+        },
+        {
+          "major_code": "480208",
+          "major_name": "An ninh mạng"
+        }
+      ],
+      "riasec_answers": {
+        "R1": 4,
+        "R2": 3,
+        "R3": 2,
+        "R4": 3,
+        "R5": 2,
+        "I1": 5,
+        "I2": 5,
+        "I3": 2,
+        "I4": 4,
+        "I5": 3,
+        "A1": 3,
+        "A2": 2,
+        "A3": 2,
+        "A4": 1,
+        "A5": 4,
+        "S1": 2,
+        "S2": 1,
+        "S3": 2,
+        "S4": 2,
+        "S5": 3,
+        "E1": 3,
+        "E2": 3,
+        "E3": 2,
+        "E4": 2,
+        "E5": 3,
+        "C1": 3,
+        "C2": 5,
+        "C3": 5,
+        "C4": 3,
+        "C5": 4
+      },
+      "cognitive_answers": {
+        "learning_style": "B",
+        "work_environment": "A",
+        "problem_solving": "A",
+        "interaction_target": "A",
+        "gardner_intelligence": "A",
+        "pressure_tolerance": "C",
+        "output_preference": "A",
+        "team_role": "A"
+      }
+    },
+    {
+      "id": "PRESET_MED_PHARMA",
+      "name": "Hồ sơ Bác sĩ Y khoa & Dược sĩ",
+      "badge": "Khối Sức khỏe & Sinh học (Mã 72, 42)",
+      "description": "Điểm I (Nghiên cứu Y Sinh) & S (Chăm sóc con người) vượt trội; chịu được áp lực sinh mạng và môi trường bệnh viện.",
+      "target_moet_majors": [
+        {
+          "major_code": "720101",
+          "major_name": "Y khoa"
+        },
+        {
+          "major_code": "720201",
+          "major_name": "Dược học"
+        },
+        {
+          "major_code": "720501",
+          "major_name": "Răng - Hàm - Mặt"
+        },
+        {
+          "major_code": "720601",
+          "major_name": "Kỹ thuật xét nghiệm y học"
+        }
+      ],
+      "riasec_answers": {
+        "R1": 2,
+        "R2": 2,
+        "R3": 3,
+        "R4": 5,
+        "R5": 3,
+        "I1": 4,
+        "I2": 3,
+        "I3": 5,
+        "I4": 4,
+        "I5": 4,
+        "A1": 2,
+        "A2": 2,
+        "A3": 2,
+        "A4": 2,
+        "A5": 2,
+        "S1": 4,
+        "S2": 5,
+        "S3": 5,
+        "S4": 4,
+        "S5": 3,
+        "E1": 3,
+        "E2": 2,
+        "E3": 2,
+        "E4": 2,
+        "E5": 3,
+        "C1": 2,
+        "C2": 4,
+        "C3": 5,
+        "C4": 2,
+        "C5": 5
+      },
+      "cognitive_answers": {
+        "learning_style": "C",
+        "work_environment": "D",
+        "problem_solving": "C",
+        "interaction_target": "C",
+        "gardner_intelligence": "D",
+        "pressure_tolerance": "A",
+        "output_preference": "C",
+        "team_role": "D"
+      }
+    },
+    {
+      "id": "PRESET_ARCH_DESIGN",
+      "name": "Hồ sơ Kiến trúc sư & Thiết kế Mỹ thuật số",
+      "badge": "Khối Nghệ thuật & Kiến trúc (Mã 21, 58)",
+      "description": "Điểm A (Nghệ thuật) kết hợp R (Bản vẽ/Mô hình) cao; mạnh về trí thông minh không gian 3D và tư duy thị giác.",
+      "target_moet_majors": [
+        {
+          "major_code": "580101",
+          "major_name": "Kiến trúc"
+        },
+        {
+          "major_code": "210403",
+          "major_name": "Thiết kế đồ họa"
+        },
+        {
+          "major_code": "210408",
+          "major_name": "Nghệ thuật số"
+        },
+        {
+          "major_code": "580108",
+          "major_name": "Thiết kế nội thất"
+        }
+      ],
+      "riasec_answers": {
+        "R1": 3,
+        "R2": 5,
+        "R3": 3,
+        "R4": 2,
+        "R5": 2,
+        "I1": 3,
+        "I2": 3,
+        "I3": 1,
+        "I4": 2,
+        "I5": 3,
+        "A1": 5,
+        "A2": 5,
+        "A3": 4,
+        "A4": 4,
+        "A5": 5,
+        "S1": 2,
+        "S2": 1,
+        "S3": 3,
+        "S4": 3,
+        "S5": 3,
+        "E1": 3,
+        "E2": 3,
+        "E3": 2,
+        "E4": 4,
+        "E5": 2,
+        "C1": 2,
+        "C2": 2,
+        "C3": 3,
+        "C4": 1,
+        "C5": 2
+      },
+      "cognitive_answers": {
+        "learning_style": "A",
+        "work_environment": "A",
+        "problem_solving": "B",
+        "interaction_target": "D",
+        "gardner_intelligence": "C",
+        "pressure_tolerance": "C",
+        "output_preference": "D",
+        "team_role": "C"
+      }
+    },
+    {
+      "id": "PRESET_BIZ_LAW_FIN",
+      "name": "Hồ sơ Kinh doanh, Tài chính & Luật",
+      "badge": "Khối Kinh doanh, Luật & Kinh tế (Mã 34, 38, 31)",
+      "description": "Điểm E (Quản lý/Đàm phán) và C (Tài chính/Quy chuẩn) cao; nhạy bén với thương trường, pháp lý và dữ liệu kinh tế.",
+      "target_moet_majors": [
+        {
+          "major_code": "340101",
+          "major_name": "Quản trị kinh doanh"
+        },
+        {
+          "major_code": "340115",
+          "major_name": "Marketing"
+        },
+        {
+          "major_code": "380107",
+          "major_name": "Luật kinh tế"
+        },
+        {
+          "major_code": "340205",
+          "major_name": "Công nghệ tài chính"
+        }
+      ],
+      "riasec_answers": {
+        "R1": 1,
+        "R2": 1,
+        "R3": 1,
+        "R4": 1,
+        "R5": 2,
+        "I1": 3,
+        "I2": 4,
+        "I3": 1,
+        "I4": 1,
+        "I5": 4,
+        "A1": 2,
+        "A2": 2,
+        "A3": 3,
+        "A4": 2,
+        "A5": 3,
+        "S1": 3,
+        "S2": 1,
+        "S3": 3,
+        "S4": 4,
+        "S5": 4,
+        "E1": 5,
+        "E2": 5,
+        "E3": 5,
+        "E4": 5,
+        "E5": 5,
+        "C1": 5,
+        "C2": 4,
+        "C3": 4,
+        "C4": 5,
+        "C5": 4
+      },
+      "cognitive_answers": {
+        "learning_style": "D",
+        "work_environment": "B",
+        "problem_solving": "D",
+        "interaction_target": "B",
+        "gardner_intelligence": "B",
+        "pressure_tolerance": "B",
+        "output_preference": "B",
+        "team_role": "B"
+      }
+    },
+    {
+      "id": "PRESET_EDU_PSYCH_LANG",
+      "name": "Hồ sơ Sư phạm, Tâm lý & Ngôn ngữ",
+      "badge": "Khối Giáo dục, Nhân văn & Xã hội (Mã 14, 22, 31)",
+      "description": "Điểm S (Xã hội/Giảng dạy) kết hợp A/I cao; nổi bật về trí thông minh ngôn ngữ, thấu cảm và phát triển con người.",
+      "target_moet_majors": [
+        {
+          "major_code": "140238",
+          "major_name": "Sư phạm tiếng nước ngoài"
+        },
+        {
+          "major_code": "310401",
+          "major_name": "Tâm lý học"
+        },
+        {
+          "major_code": "220201",
+          "major_name": "Ngôn ngữ Anh"
+        },
+        {
+          "major_code": "320108",
+          "major_name": "Quan hệ công chúng"
+        }
+      ],
+      "riasec_answers": {
+        "R1": 1,
+        "R2": 1,
+        "R3": 2,
+        "R4": 1,
+        "R5": 2,
+        "I1": 3,
+        "I2": 2,
+        "I3": 2,
+        "I4": 1,
+        "I5": 5,
+        "A1": 3,
+        "A2": 2,
+        "A3": 5,
+        "A4": 3,
+        "A5": 4,
+        "S1": 5,
+        "S2": 4,
+        "S3": 5,
+        "S4": 5,
+        "S5": 5,
+        "E1": 4,
+        "E2": 2,
+        "E3": 3,
+        "E4": 4,
+        "E5": 3,
+        "C1": 2,
+        "C2": 3,
+        "C3": 3,
+        "C4": 2,
+        "C5": 3
+      },
+      "cognitive_answers": {
+        "learning_style": "D",
+        "work_environment": "D",
+        "problem_solving": "C",
+        "interaction_target": "C",
+        "gardner_intelligence": "B",
+        "pressure_tolerance": "D",
+        "output_preference": "C",
+        "team_role": "C"
+      }
+    },
+    {
+      "id": "PRESET_MECH_AGRI_ENV",
+      "name": "Hồ sơ Kỹ sư Cơ điện tử, Bán dẫn & Nông nghiệp CNC",
+      "badge": "Khối Kỹ thuật, Công nghệ & Nông lâm (Mã 51, 52, 44, 62)",
+      "description": "Điểm R (Thực tế kỹ thuật/Thực địa) và I (Nghiên cứu vật liệu/sinh học) cao; thích làm việc thực hành tại nhà máy và thực địa.",
+      "target_moet_majors": [
+        {
+          "major_code": "520114",
+          "major_name": "Kỹ thuật cơ điện tử"
+        },
+        {
+          "major_code": "520202",
+          "major_name": "Thiết kế vi mạch"
+        },
+        {
+          "major_code": "440180",
+          "major_name": "Công nghệ bán dẫn"
+        },
+        {
+          "major_code": "420201",
+          "major_name": "Công nghệ sinh học"
+        }
+      ],
+      "riasec_answers": {
+        "R1": 5,
+        "R2": 5,
+        "R3": 5,
+        "R4": 4,
+        "R5": 4,
+        "I1": 4,
+        "I2": 3,
+        "I3": 4,
+        "I4": 5,
+        "I5": 2,
+        "A1": 2,
+        "A2": 3,
+        "A3": 1,
+        "A4": 1,
+        "A5": 2,
+        "S1": 2,
+        "S2": 2,
+        "S3": 2,
+        "S4": 2,
+        "S5": 2,
+        "E1": 3,
+        "E2": 2,
+        "E3": 1,
+        "E4": 1,
+        "E5": 3,
+        "C1": 2,
+        "C2": 3,
+        "C3": 4,
+        "C4": 4,
+        "C5": 4
+      },
+      "cognitive_answers": {
+        "learning_style": "C",
+        "work_environment": "C",
+        "problem_solving": "A",
+        "interaction_target": "A",
+        "gardner_intelligence": "D",
+        "pressure_tolerance": "C",
+        "output_preference": "A",
+        "team_role": "A"
+      }
+    }
+  ]
+}
