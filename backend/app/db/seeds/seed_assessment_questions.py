@@ -33,7 +33,7 @@ def load_raw_seed_data() -> dict:
             cleaned = raw_text.replace(r"\[", "[").replace(r"\]", "]")
             return json.loads(cleaned)
         raise FileNotFoundError(f"Assessment seed file not found at {json_path}")
-
+    
     with open(json_path, "r", encoding="utf-8") as f:
         return json.load(f)
 
