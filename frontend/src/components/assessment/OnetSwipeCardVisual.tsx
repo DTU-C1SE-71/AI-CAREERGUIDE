@@ -33,12 +33,16 @@ import {
 } from "lucide-react"
 import type { OnetMiniIpItem, RiasecDimension } from "../../data/onetMiniIpQuestions"
 
-export function OnetItemVisualIcon({ iconKey }: { iconKey: OnetMiniIpItem["iconKey"] }) {
+export function OnetItemVisualIcon({
+  iconKey,
+}: {
+  iconKey: OnetMiniIpItem["iconKey"]
+}) {
   const Icon = getOnetIcon(iconKey)
   return (
-    <div className="relative mx-auto grid size-20 place-items-center rounded-[26px] border border-sky-200/80 bg-gradient-to-br from-sky-500 via-sky-600 to-cyan-600 text-white shadow-[0_14px_30px_rgba(14,165,233,0.28)]">
-      <div className="pointer-events-none absolute -inset-2 rounded-[30px] bg-sky-400/20 blur-xl" />
-      <Icon className="relative z-10 size-9 stroke-[2]" />
+    <div className="relative mx-auto grid size-20 sm:size-24 place-items-center rounded-[28px] border border-white/80 bg-gradient-to-br from-sky-400/90 via-sky-500/90 to-cyan-500/90 text-white shadow-[inset_0_2px_4px_rgba(255,255,255,0.6),0_16px_36px_rgba(14,165,233,0.28)] backdrop-blur-xl">
+      <div className="pointer-events-none absolute -inset-3 rounded-[34px] bg-sky-400/25 blur-xl" />
+      <Icon className="relative z-10 size-9 sm:size-11 stroke-[1.9]" />
     </div>
   )
 }
@@ -54,7 +58,7 @@ export function LiveRiasecHexagon({
   const maxR = 76
 
   const toPoint = (idx: number, pct: number) => {
-    const angle = (-Math.PI / 2) + (idx * Math.PI * 2) / 6
+    const angle = -Math.PI / 2 + (idx * Math.PI * 2) / 6
     const r = (Math.max(12, Math.min(100, pct)) / 100) * maxR
     return `${(cx + r * Math.cos(angle)).toFixed(1)},${(
       cy +
@@ -63,7 +67,7 @@ export function LiveRiasecHexagon({
   }
 
   const labelPoint = (idx: number) => {
-    const angle = (-Math.PI / 2) + (idx * Math.PI * 2) / 6
+    const angle = -Math.PI / 2 + (idx * Math.PI * 2) / 6
     const r = maxR + 18
     return {
       x: cx + r * Math.cos(angle),
@@ -77,18 +81,16 @@ export function LiveRiasecHexagon({
 
   return (
     <svg viewBox="0 0 220 220" className="mx-auto h-52 w-52 select-none">
-      {/* Concentric Hexagon Grid */}
       {[25, 50, 75, 100].map((level) => (
         <polygon
           key={level}
           points={dims.map((_, i) => toPoint(i, level)).join(" ")}
-          fill={level === 100 ? "rgba(240,249,255,0.6)" : "none"}
+          fill={level === 100 ? "rgba(240,249,255,0.55)" : "none"}
           stroke="rgba(14,165,233,0.18)"
           strokeWidth="1"
         />
       ))}
 
-      {/* Axes */}
       {dims.map((d, i) => {
         const end = toPoint(i, 100).split(",")
         const lp = labelPoint(i)
@@ -106,7 +108,7 @@ export function LiveRiasecHexagon({
               x={lp.x}
               y={lp.y + 4}
               textAnchor="middle"
-              className="fill-sky-900 text-[12px] font-black"
+              className="fill-sky-900 text-[13px] font-black"
             >
               {d}
             </text>
@@ -114,7 +116,6 @@ export function LiveRiasecHexagon({
         )
       })}
 
-      {/* Data Polygon */}
       <polygon
         points={polygonPoints}
         fill="rgba(14,165,233,0.28)"
@@ -123,7 +124,6 @@ export function LiveRiasecHexagon({
         strokeLinejoin="round"
       />
 
-      {/* Vertices */}
       {dims.map((d, i) => {
         const pt = toPoint(i, scores[d] ?? 50).split(",")
         return (
