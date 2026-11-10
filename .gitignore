@@ -81,3 +81,8 @@ frontend/src_backup_prior_to_zip/
 *~
 .DS_Store
 Thumbs.db
+
+# Agent progress & Office temporary lock files
+/PROGRESS.md
+~$*.docx
+~$*.xlsx
