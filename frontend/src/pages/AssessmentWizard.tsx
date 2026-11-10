@@ -3,18 +3,18 @@ import { motion } from "framer-motion"
 import {
   ArrowLeft,
   ArrowRight,
-  BrainCircuit,
   Check,
-  Clock3,
+  Compass,
+  Gamepad2,
   Loader2,
   RotateCcw,
-  ShieldCheck,
+  Sparkles,
+  Zap,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router"
 import { AcademicInputForm } from "../components/assessment/AcademicInputForm"
-import { CognitiveQuestionCard } from "../components/assessment/CognitiveQuestionCard"
-import { QuestionCard } from "../components/assessment/QuestionCard"
+import { RoleplaySceneVisual } from "../components/assessment/RoleplaySceneVisual"
 import { Button } from "../components/common/Button"
 import { Card } from "../components/common/Card"
 import { PageContainer } from "../components/layout/PageContainer"
@@ -22,6 +22,11 @@ import {
   defaultCognitiveQuestions,
   type CognitiveQuestionItem,
 } from "../data/cognitiveQuestions"
+import {
+  REACTION_CARDS,
+  ROLEPLAY_SCENES,
+  STATIONS_META,
+} from "../data/roleplayScenes"
 import { useAssessment } from "../hooks/useAssessment"
 import { apiRequest } from "../services/api"
 
@@ -55,53 +60,53 @@ interface ActiveQuestionsResponse {
   }>
 }
 
-const defaultRiasecFallback: QuestionItem[] = [
-  { code: "R1", dimension: "R", dimension_badge: "Thực tế (Realistic)", domain_tag: "Cơ khí, Điện tử & Tự động hóa (Mã 51, 52)", question_text: "Tôi thích tháo lắp, sửa chữa máy móc, mạch điện tử hoặc vận hành các thiết bị kỹ thuật." },
-  { code: "R2", dimension: "R", dimension_badge: "Thực tế (Realistic)", domain_tag: "Kiến trúc & Kỹ thuật Xây dựng (Mã 51, 58)", question_text: "Tôi hứng thú với việc đọc bản vẽ kỹ thuật, khảo sát công trình, đo đạc thực địa hoặc chế tạo mô hình vật lý." },
-  { code: "R3", dimension: "R", dimension_badge: "Thực tế (Realistic)", domain_tag: "Nông - Lâm - Thủy sản, Thú y & Môi trường (Mã 62, 64, 85)", question_text: "Tôi thích làm việc gần gũi với thiên nhiên, chăm sóc cây trồng, vật nuôi hoặc vận hành nông trại công nghệ cao." },
-  { code: "R4", dimension: "R", dimension_badge: "Thực tế (Realistic)", domain_tag: "Kỹ thuật Y học & Công nghệ Thực phẩm (Mã 54, 72)", question_text: "Tôi thích thao tác trực tiếp với dụng cụ phòng thí nghiệm, thiết bị xét nghiệm - hình ảnh y học hoặc quy trình chế biến thực phẩm." },
-  { code: "R5", dimension: "R", dimension_badge: "Thực tế (Realistic)", domain_tag: "Thể thao, Vận tải & An ninh - Quốc phòng (Mã 81, 84, 86)", question_text: "Tôi yêu thích các hoạt động đòi hỏi sức bền thể chất, huấn luyện thể thao, điều khiển phương tiện vận tải hoặc nghiệp vụ thực địa." },
-  { code: "I1", dimension: "I", dimension_badge: "Nghiên cứu (Investigative)", domain_tag: "Toán học & Khoa học tính toán (Mã 46)", question_text: "Tôi thích tìm hiểu nguyên lý khoa học, giải các bài toán logic phức tạp và suy luận tìm ra bản chất vấn đề." },
-  { code: "I2", dimension: "I", dimension_badge: "Nghiên cứu (Investigative)", domain_tag: "Máy tính, CNTT, Khoa học dữ liệu & AI (Mã 46, 48)", question_text: "Tôi hứng thú với việc phân tích dữ liệu lớn, tìm quy luật từ biểu đồ hoặc lập trình thuật toán trí tuệ nhân tạo." },
-  { code: "I3", dimension: "I", dimension_badge: "Nghiên cứu (Investigative)", domain_tag: "Y khoa, Dược học & Khoa học sự sống (Mã 42, 72)", question_text: "Tôi tò mò về cơ chế sinh học của cơ thể người, di truyền học, tác dụng của dược chất hoặc phương pháp chẩn đoán bệnh." },
-  { code: "I4", dimension: "I", dimension_badge: "Nghiên cứu (Investigative)", domain_tag: "Vật lý, Hóa học, Bán dẫn & Khoa học Trái đất (Mã 44, 52)", question_text: "Tôi thích nghiên cứu về công nghệ bán dẫn, vật liệu mới, phản ứng hóa học, năng lượng tái tạo hoặc biến đổi khí hậu." },
-  { code: "I5", dimension: "I", dimension_badge: "Nghiên cứu (Investigative)", domain_tag: "Kinh tế học, Tâm lý học & Khu vực học (Mã 22, 31)", question_text: "Tôi thích đọc tài liệu học thuật để phân tích sâu về hành vi tâm lý con người, lịch sử văn hóa hoặc các quy luật kinh tế vĩ mô." },
-  { code: "A1", dimension: "A", dimension_badge: "Nghệ thuật (Artistic)", domain_tag: "Thiết kế Đồ họa, Thời trang & Nghệ thuật số (Mã 21)", question_text: "Tôi thích sáng tạo hình ảnh, vẽ minh họa, thiết kế đồ họa kỹ thuật số, thời trang hoặc sản phẩm mỹ thuật ứng dụng." },
-  { code: "A2", dimension: "A", dimension_badge: "Nghệ thuật (Artistic)", domain_tag: "Kiến trúc, Nội thất & Cảnh quan đô thị (Mã 58)", question_text: "Tôi nhạy cảm với thẩm mỹ không gian 3D, thích thiết kế kiến trúc, trang trí nội thất hoặc quy hoạch cảnh quan." },
-  { code: "A3", dimension: "A", dimension_badge: "Nghệ thuật (Artistic)", domain_tag: "Báo chí, Truyền thông đa phương tiện & Điện ảnh (Mã 21, 32)", question_text: "Tôi thích viết kịch bản, sáng tác văn học, làm báo chí, nhiếp ảnh, quay dựng phim hoặc sản xuất nội dung đa phương tiện." },
-  { code: "A4", dimension: "A", dimension_badge: "Nghệ thuật (Artistic)", domain_tag: "Âm nhạc & Nghệ thuật trình diễn (Mã 21)", question_text: "Tôi có niềm đam mê lớn với âm nhạc, thanh nhạc, biểu diễn nhạc cụ, công nghệ âm thanh hoặc nghệ thuật sân khấu, diễn xuất." },
-  { code: "A5", dimension: "A", dimension_badge: "Nghệ thuật (Artistic)", domain_tag: "Tư duy Đổi mới & Phá cách (Đa lĩnh vực)", question_text: "Tôi thường có những ý tưởng độc đáo khác biệt, thích tự do biểu đạt cá tính và không muốn bị gò bó trong khuôn mẫu cứng nhắc." },
-  { code: "S1", dimension: "S", dimension_badge: "Xã hội (Social)", domain_tag: "Khoa học Giáo dục & Đào tạo Giáo viên (Mã 14)", question_text: "Tôi thích giảng giải kiến thức, thiết kế bài giảng và kiên nhẫn hướng dẫn người khác cùng tiến bộ trong học tập." },
-  { code: "S2", dimension: "S", dimension_badge: "Xã hội (Social)", domain_tag: "Điều dưỡng, Y tế công cộng & Dinh dưỡng (Mã 72)", question_text: "Tôi giàu lòng trắc ẩn, muốn trực tiếp chăm sóc người bệnh, phục hồi chức năng hoặc tư vấn dinh dưỡng, bảo vệ sức khỏe cộng đồng." },
-  { code: "S3", dimension: "S", dimension_badge: "Xã hội (Social)", domain_tag: "Tâm lý học lâm sàng & Tham vấn học đường (Mã 31)", question_text: "Tôi biết lắng nghe, dễ thấu cảm và biết cách giúp người khác giải tỏa căng thẳng, tháo gỡ khúc mắc tâm lý." },
-  { code: "S4", dimension: "S", dimension_badge: "Xã hội (Social)", domain_tag: "Công tác xã hội & Du lịch - Dịch vụ (Mã 76, 81)", question_text: "Tôi hào hứng khi tham gia hoạt động cộng đồng, công tác xã hội hoặc đón tiếp, hướng dẫn và mang lại trải nghiệm tốt cho du khách." },
-  { code: "S5", dimension: "S", dimension_badge: "Xã hội (Social)", domain_tag: "Ngôn ngữ nước ngoài & Quan hệ quốc tế (Mã 22, 31, 32)", question_text: "Tôi thích giao tiếp bằng ngoại ngữ, kết nối văn hóa giữa các quốc gia và làm việc trong môi trường giao lưu quốc tế." },
-  { code: "E1", dimension: "E", dimension_badge: "Quản lý (Enterprising)", domain_tag: "Quản trị Kinh doanh & Quản lý Dự án (Mã 34)", question_text: "Tôi tự tin đảm nhận vai trò trưởng nhóm, điều phối công việc, ra quyết định và dẫn dắt tập thể đạt mục tiêu chung." },
-  { code: "E2", dimension: "E", dimension_badge: "Quản lý (Enterprising)", domain_tag: "Kinh doanh thương mại, Quốc tế & Thương mại điện tử (Mã 34)", question_text: "Tôi có hứng thú mạnh mẽ với việc khởi nghiệp, thương mại điện tử, phát triển thị trường và nắm bắt cơ hội kinh doanh." },
-  { code: "E3", dimension: "E", dimension_badge: "Quản lý (Enterprising)", domain_tag: "Pháp luật, Luật Kinh tế & Luật Quốc tế (Mã 38)", question_text: "Tôi thích lập luận sắc bén để bảo vệ lẽ phải, đàm phán hợp đồng, giải quyết tranh chấp hoặc vận dụng quy định pháp luật." },
-  { code: "E4", dimension: "E", dimension_badge: "Quản lý (Enterprising)", domain_tag: "Marketing, Quan hệ công chúng & Thương hiệu (Mã 32, 34)", question_text: "Tôi thích xây dựng chiến dịch quảng bá thương hiệu, thuyết trình thu hút đám đông và tạo ảnh hưởng tích cực đến khách hàng." },
-  { code: "E5", dimension: "E", dimension_badge: "Quản lý (Enterprising)", domain_tag: "Quản trị Nhân lực, Khách sạn & Quản lý công (Mã 31, 34, 81)", question_text: "Tôi thích tổ chức nhân sự, vận hành dịch vụ khách sạn - nhà hàng chuyên nghiệp hoặc hoạch định chính sách quản lý." },
-  { code: "C1", dimension: "C", dimension_badge: "Nghiệp vụ (Conventional)", domain_tag: "Kế toán, Kiểm toán, Tài chính - Ngân hàng & Fintech (Mã 34)", question_text: "Tôi thích làm việc chính xác với các con số tài chính, lập bảng cân đối ngân sách, kế toán, kiểm toán hoặc phân tích đầu tư." },
-  { code: "C2", dimension: "C", dimension_badge: "Nghiệp vụ (Conventional)", domain_tag: "Hệ thống thông tin quản lý, Thống kê & Lưu trữ (Mã 32, 34, 46, 48)", question_text: "Tôi thích sắp xếp cơ sở dữ liệu, phân loại hồ sơ, quản trị thông tin cẩn thận, ngăn nắp và tra cứu nhanh chóng." },
-  { code: "C3", dimension: "C", dimension_badge: "Nghiệp vụ (Conventional)", domain_tag: "Đảm bảo chất lượng, Kiểm thử & An ninh mạng (Mã 48, 54)", question_text: "Tôi làm việc tỉ mỉ theo quy trình chuẩn, giỏi rà soát các chi tiết nhỏ để phát hiện lỗi sai và bảo mật hệ thống an toàn." },
-  { code: "C4", dimension: "C", dimension_badge: "Nghiệp vụ (Conventional)", domain_tag: "Logistics, Chuỗi cung ứng & Khai thác vận tải (Mã 34, 51, 84)", question_text: "Tôi thích lập kế hoạch điều phối hàng hóa, tối ưu hóa lịch trình vận chuyển, quản lý kho bãi và thủ tục chuỗi cung ứng." },
-  { code: "C5", dimension: "C", dimension_badge: "Nghiệp vụ (Conventional)", domain_tag: "Quản trị văn phòng, Quản lý đất đai & An toàn lao động (Mã 34, 85)", question_text: "Tôi cảm thấy hiệu quả nhất khi làm việc trong môi trường có quy định rõ ràng, tuân thủ nghiêm ngặt tiêu chuẩn pháp lý và an toàn." },
-]
+const defaultRiasecFallback: QuestionItem[] = ROLEPLAY_SCENES.map(
+  (scene, idx) => ({
+    code: scene.code,
+    dimension: scene.group,
+    dimension_badge: scene.stationTitle,
+    domain_tag: scene.sceneBadge,
+    question_text: scene.actionTitle,
+    order_index: idx + 1,
+  })
+)
 
 const RIASEC_ORDER = ["R", "I", "A", "S", "E", "C"] as const
 
 export function AssessmentWizard() {
-  const { assessment, history, update, reset, recordCompletedAttempt } =
-    useAssessment()
-  const [step, setStep] = useState(1)
-  const [scores, setScores] = useState<Record<string, number>>(() =>
-    Object.fromEntries(assessment.scores.map((s) => [s.subject, s.score])),
-  )
-  const [loading, setLoading] = useState(true)
-  const [selectedDimension, setSelectedDimension] = useState<string>("R")
-  const [riasecQuestions, setRiasecQuestions] = useState<QuestionItem[]>(defaultRiasecFallback)
-  const [cognitiveQuestions, setCognitiveQuestions] = useState<CognitiveQuestionItem[]>(defaultCognitiveQuestions)
+  const { assessment, update, reset, recordCompletedAttempt } = useAssessment()
   const navigate = useNavigate()
+  const [step, setStep] = useState<number>(assessment.step || 1)
+  const [scores, setScores] = useState<Record<string, number>>(() => {
+    const mapped = Object.fromEntries(
+      assessment.scores.map((s) => [s.subject, s.score])
+    )
+    return {
+      Toán: mapped["Toán"] ?? 8.2,
+      "Ngữ văn": mapped["Ngữ văn"] ?? 7.1,
+      "Tiếng Anh": mapped["Tiếng Anh"] ?? 7.8,
+      "Vật lý": mapped["Vật lý"] ?? 8.0,
+      "Hóa học": mapped["Hóa học"] ?? 7.4,
+      "Sinh học": mapped["Sinh học"] ?? 6.9,
+      ...mapped,
+    }
+  })
+  const [loading, setLoading] = useState(true)
+  const [riasecQuestions, setRiasecQuestions] = useState<QuestionItem[]>(
+    defaultRiasecFallback
+  )
+  const [cognitiveQuestions, setCognitiveQuestions] = useState<
+    CognitiveQuestionItem[]
+  >(defaultCognitiveQuestions)
+
+  // Mini-Game state for Step 1 (Roleplay Odyssey)
+  const [quickMode18, setQuickMode18] = useState(false)
+  const [sceneIndex, setSceneIndex] = useState(0)
+
+  // Mini-Game state for Step 2 (Cognitive Quest 1..8)
+  const [cogIndex, setCogIndex] = useState(0)
+
+  const autoAdvanceTimer = useRef<number | null>(null)
 
   useEffect(() => {
     let mounted = true
@@ -113,46 +118,53 @@ export function AssessmentWizard() {
           {
             riasec_questions: defaultRiasecFallback,
             cognitive_questions: [],
-          },
+          }
         )
         if (mounted && data) {
           if (data.riasec_questions && data.riasec_questions.length > 0) {
             setRiasecQuestions(data.riasec_questions)
           }
           if (data.cognitive_questions && data.cognitive_questions.length > 0) {
-            const fallbackMap = new Map(defaultCognitiveQuestions.map((q) => [q.code, q]))
-            const parsedCogs: CognitiveQuestionItem[] = data.cognitive_questions.map((q) => {
-              const fb = fallbackMap.get(q.code)
-              const title = fb?.title || q.dimension_badge || q.question_text?.split(":")[0]?.trim() || q.code
-              const subtitle =
-                fb?.subtitle ||
-                (q.question_text && q.question_text.includes(":")
-                  ? q.question_text.split(":").slice(1).join(":").trim()
-                  : q.question_text || "")
-              const options =
-                q.options && q.options.length > 0
-                  ? q.options.map((opt) => ({
-                      option_key: opt.option_key,
-                      trait_code: opt.trait_code,
-                      title: opt.title,
-                      description: opt.description,
-                    }))
-                  : fb?.options || []
+            const fallbackMap = new Map(
+              defaultCognitiveQuestions.map((q) => [q.code, q])
+            )
+            const parsedCogs: CognitiveQuestionItem[] =
+              data.cognitive_questions.map((q) => {
+                const fb = fallbackMap.get(q.code)
+                const title =
+                  fb?.title ||
+                  q.dimension_badge ||
+                  q.question_text?.split(":")[0]?.trim() ||
+                  q.code
+                const subtitle =
+                  fb?.subtitle ||
+                  (q.question_text && q.question_text.includes(":")
+                    ? q.question_text.split(":").slice(1).join(":").trim()
+                    : q.question_text || "")
+                const options =
+                  q.options && q.options.length > 0
+                    ? q.options.map((opt) => ({
+                        option_key: opt.option_key,
+                        trait_code: opt.trait_code,
+                        title: opt.title,
+                        description: opt.description,
+                      }))
+                    : fb?.options || []
 
-              return {
-                code: q.code,
-                dimension: q.dimension || fb?.dimension,
-                dimension_badge: fb?.dimension_badge || q.dimension_badge,
-                title,
-                subtitle,
-                options,
-              }
-            })
+                return {
+                  code: q.code,
+                  dimension: q.dimension || fb?.dimension,
+                  dimension_badge: fb?.dimension_badge || q.dimension_badge,
+                  title,
+                  subtitle,
+                  options,
+                }
+              })
             setCognitiveQuestions(parsedCogs)
           }
         }
-      } catch (err) {
-        console.error("Failed to load questions from API:", err)
+      } catch {
+        // Fallback already in state
       } finally {
         if (mounted) setLoading(false)
       }
@@ -160,513 +172,787 @@ export function AssessmentWizard() {
     loadQuestions()
     return () => {
       mounted = false
+      if (autoAdvanceTimer.current) window.clearTimeout(autoAdvanceTimer.current)
     }
   }, [])
 
-  const progress = step === 1 ? 25 : step === 2 ? 65 : 95
+  const resetAllAnswers = () => {
+    reset()
+    setStep(1)
+    setSceneIndex(0)
+    setCogIndex(0)
+  }
 
-  const currentRiasecQuestions = useMemo(() => {
-    if (selectedDimension === "ALL") return riasecQuestions
-    return riasecQuestions.filter((q) => q.dimension === selectedDimension)
-  }, [selectedDimension, riasecQuestions])
+  // Active scenes list in Step 1 (30 full or 18 core)
+  const activeScenes = useMemo(() => {
+    return quickMode18
+      ? ROLEPLAY_SCENES.filter((s) => s.isCore18)
+      : ROLEPLAY_SCENES
+  }, [quickMode18])
 
-  const dimAnsweredCounts = useMemo(() => {
-    const counts: Record<string, { answered: number; total: number }> = {
-      R: { answered: 0, total: 0 },
-      I: { answered: 0, total: 0 },
-      A: { answered: 0, total: 0 },
-      S: { answered: 0, total: 0 },
-      E: { answered: 0, total: 0 },
-      C: { answered: 0, total: 0 },
+  const safeSceneIndex = Math.min(
+    Math.max(0, sceneIndex),
+    Math.max(0, activeScenes.length - 1)
+  )
+  const currentScene = activeScenes[safeSceneIndex] || ROLEPLAY_SCENES[0]
+
+  // Count how many RIASEC & Cognitive items are answered
+  const riasecGroupCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      R: 0,
+      I: 0,
+      A: 0,
+      S: 0,
+      E: 0,
+      C: 0,
     }
-    riasecQuestions.forEach((q, idx) => {
-      const dim = (q.dimension || q.code[0] || "R").toUpperCase()
-      if (counts[dim]) {
-        counts[dim].total += 1
-        const val = assessment.answers[q.code] ?? assessment.answers[`1-${idx}`]
-        if (typeof val === "number" && val > 0) {
-          counts[dim].answered += 1
-        }
+    ROLEPLAY_SCENES.forEach((scene, idx) => {
+      const val =
+        assessment.answers[scene.code] ?? assessment.answers[`1-${idx}`]
+      if (typeof val === "number" && val >= 1 && val <= 5) {
+        counts[scene.group] = (counts[scene.group] || 0) + 1
       }
     })
     return counts
-  }, [riasecQuestions, assessment.answers])
+  }, [assessment.answers])
 
-  const answeredCount = useMemo(() => {
-    if (step === 1) {
-      return riasecQuestions.filter((q, idx) => {
-        const val = assessment.answers[q.code] ?? assessment.answers[`1-${idx}`]
-        return typeof val === "number" && val > 0
-      }).length
+  // Live RIASEC energy % for the 6-station header
+  const riasecEnergy = useMemo(() => {
+    const energy: Record<string, number> = {
+      R: 0,
+      I: 0,
+      A: 0,
+      S: 0,
+      E: 0,
+      C: 0,
     }
-    if (step === 2) {
-      return cognitiveQuestions.filter((q, idx) => {
-        const val = assessment.cognitive[q.code] ?? assessment.cognitive[`2-${idx}`]
-        return typeof val === "string" && val.trim().length > 0
-      }).length
-    }
-    return Object.keys(scores).length
-  }, [step, riasecQuestions, cognitiveQuestions, assessment.answers, assessment.cognitive, scores])
+    ROLEPLAY_SCENES.forEach((scene, idx) => {
+      const val =
+        assessment.answers[scene.code] ?? assessment.answers[`1-${idx}`]
+      if (typeof val === "number" && val >= 1 && val <= 5) {
+        energy[scene.group] += val * 4
+      }
+    })
+    return energy
+  }, [assessment.answers])
+
+  const totalRiasecAnswered = useMemo(
+    () => Object.values(riasecGroupCounts).reduce((a, b) => a + b, 0),
+    [riasecGroupCounts]
+  )
+
+  const totalCognitiveAnswered = useMemo(() => {
+    return cognitiveQuestions.filter((q, idx) => {
+      const v = assessment.cognitive[q.code] ?? assessment.cognitive[`2-${idx}`]
+      return v !== undefined && v !== null && String(v).trim() !== ""
+    }).length
+  }, [assessment.cognitive, cognitiveQuestions])
 
   const allRiasecGroupsCovered = useMemo(() => {
     return (
-      answeredCount >= 18 &&
-      RIASEC_ORDER.every((dim) => (dimAnsweredCounts[dim]?.answered ?? 0) >= 2)
+      totalRiasecAnswered >= 18 &&
+      RIASEC_ORDER.every((dim) => (riasecGroupCounts[dim] || 0) >= 2)
     )
-  }, [answeredCount, dimAnsweredCounts])
+  }, [totalRiasecAnswered, riasecGroupCounts])
 
-  const nextRiasecDim = useMemo(() => {
-    if (step !== 1 || selectedDimension === "ALL") return null
-    const currIdx = RIASEC_ORDER.indexOf(
-      selectedDimension as (typeof RIASEC_ORDER)[number],
+  const totalXP = useMemo(() => {
+    return (
+      totalRiasecAnswered * 25 +
+      totalCognitiveAnswered * 40 +
+      (step === 3 ? 120 : 0)
     )
-    if (currIdx >= 0 && currIdx < RIASEC_ORDER.length - 1) {
-      return RIASEC_ORDER[currIdx + 1]
-    }
-    // Check if any earlier group has < 2 answers
-    const incomplete = RIASEC_ORDER.find(
-      (d) => (dimAnsweredCounts[d]?.answered ?? 0) < 2,
-    )
-    return incomplete || null
-  }, [step, selectedDimension, dimAnsweredCounts])
+  }, [totalRiasecAnswered, totalCognitiveAnswered, step])
 
   const canContinue = useMemo(() => {
-    if (step === 3) return Object.keys(scores).length >= 3
-    if (step === 2) return answeredCount >= cognitiveQuestions.length
-    // Step 1: if navigating to next RIASEC group tab, require >= 2 answers in current group
-    if (selectedDimension !== "ALL" && nextRiasecDim) {
-      return (dimAnsweredCounts[selectedDimension]?.answered ?? 0) >= 2
+    if (step === 1) return allRiasecGroupsCovered
+    if (step === 2) return totalCognitiveAnswered >= cognitiveQuestions.length
+    if (step === 3) {
+      return Object.values(scores).filter((v) => v > 0).length >= 3
     }
-    return allRiasecGroupsCovered
+    return false
   }, [
     step,
-    scores,
-    answeredCount,
-    cognitiveQuestions.length,
-    selectedDimension,
-    nextRiasecDim,
-    dimAnsweredCounts,
     allRiasecGroupsCovered,
+    totalCognitiveAnswered,
+    cognitiveQuestions.length,
+    scores,
   ])
 
-  const next = () => {
-    if (step === 1 && selectedDimension !== "ALL" && nextRiasecDim && !allRiasecGroupsCovered) {
-      setSelectedDimension(nextRiasecDim)
-      window.scrollTo({ top: 0, behavior: "smooth" })
-      return
-    }
-    if (
-      step === 1 &&
-      selectedDimension !== "ALL" &&
-      RIASEC_ORDER.indexOf(selectedDimension as (typeof RIASEC_ORDER)[number]) <
-        RIASEC_ORDER.length - 1
-    ) {
-      const nextIdx =
-        RIASEC_ORDER.indexOf(selectedDimension as (typeof RIASEC_ORDER)[number]) + 1
-      setSelectedDimension(RIASEC_ORDER[nextIdx])
-      window.scrollTo({ top: 0, behavior: "smooth" })
-      return
-    }
-    if (step < 3) {
-      setStep(step + 1)
-      update({ step: step + 1 })
-      window.scrollTo({ top: 0, behavior: "smooth" })
-    } else {
-      const normalizedScores = Object.entries(scores).map(
-        ([subject, score]) => ({
-          subject,
-          score,
-          zScore: (score - 7.1) / 1.2,
-        }),
+  // Select a reaction in Step 1 and auto-advance smoothly
+  const handleSelectReaction = useCallback(
+    (value: number) => {
+      const globalIdx = ROLEPLAY_SCENES.findIndex(
+        (s) => s.code === currentScene.code
       )
-      recordCompletedAttempt({
-        ...assessment,
-        step: 3,
-        scores: normalizedScores,
-        completed: true,
+      const idxKey = globalIdx >= 0 ? globalIdx : safeSceneIndex
+
+      update({
+        answers: {
+          ...assessment.answers,
+          [currentScene.code]: value,
+          [`1-${idxKey}`]: value,
+        },
       })
 
-      // Send answers to backend in background
-      const riasecMap: Record<string, number> = {}
-      riasecQuestions.forEach((q, idx) => {
-        const val = assessment.answers[q.code] ?? assessment.answers[`1-${idx}`]
-        if (val !== undefined && val !== null) riasecMap[q.code] = Number(val)
-      })
-      const cogMap: Record<string, string> = {}
-      cognitiveQuestions.forEach((q, idx) => {
-        const val = assessment.cognitive[q.code] ?? assessment.cognitive[`2-${idx}`]
-        if (val) cogMap[q.code] = String(val)
+      if (autoAdvanceTimer.current) {
+        window.clearTimeout(autoAdvanceTimer.current)
+      }
+      autoAdvanceTimer.current = window.setTimeout(() => {
+        if (safeSceneIndex < activeScenes.length - 1) {
+          setSceneIndex((prev) => Math.min(activeScenes.length - 1, prev + 1))
+        }
+      }, 220)
+    },
+    [
+      currentScene.code,
+      safeSceneIndex,
+      assessment.answers,
+      update,
+      activeScenes.length,
+    ]
+  )
+
+  // Select an option in Step 2 and auto-advance smoothly
+  const currentCog = cognitiveQuestions[cogIndex] || cognitiveQuestions[0]
+  const handleSelectCognitive = useCallback(
+    (optionKey: string) => {
+      const qKey = currentCog.code || `2-${cogIndex}`
+      update({
+        cognitive: {
+          ...assessment.cognitive,
+          [qKey]: optionKey,
+          [`2-${cogIndex}`]: optionKey,
+        },
       })
 
-      apiRequest("/assessment/submit", null, {
+      if (autoAdvanceTimer.current) {
+        window.clearTimeout(autoAdvanceTimer.current)
+      }
+      autoAdvanceTimer.current = window.setTimeout(() => {
+        if (cogIndex < cognitiveQuestions.length - 1) {
+          setCogIndex((prev) =>
+            Math.min(cognitiveQuestions.length - 1, prev + 1)
+          )
+        }
+      }, 240)
+    },
+    [
+      currentCog.code,
+      cogIndex,
+      assessment.cognitive,
+      update,
+      cognitiveQuestions.length,
+    ]
+  )
+
+  // Keyboard shortcuts (1-5 in Step 1, A-D or 1-4 in Step 2, Left/Right arrows)
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (
+        document.activeElement?.tagName === "INPUT" ||
+        document.activeElement?.tagName === "TEXTAREA"
+      ) {
+        return
+      }
+      if (step === 1) {
+        if (["1", "2", "3", "4", "5"].includes(e.key)) {
+          e.preventDefault()
+          handleSelectReaction(Number(e.key))
+        } else if (e.key === "ArrowRight") {
+          setSceneIndex((p) => Math.min(activeScenes.length - 1, p + 1))
+        } else if (e.key === "ArrowLeft") {
+          setSceneIndex((p) => Math.max(0, p - 1))
+        }
+      } else if (step === 2) {
+        const keyMap: Record<string, string> = {
+          "1": "A",
+          "2": "B",
+          "3": "C",
+          "4": "D",
+          a: "A",
+          b: "B",
+          c: "C",
+          d: "D",
+          A: "A",
+          B: "B",
+          C: "C",
+          D: "D",
+        }
+        if (keyMap[e.key]) {
+          e.preventDefault()
+          handleSelectCognitive(keyMap[e.key])
+        } else if (e.key === "ArrowRight") {
+          setCogIndex((p) => Math.min(cognitiveQuestions.length - 1, p + 1))
+        } else if (e.key === "ArrowLeft") {
+          setCogIndex((p) => Math.max(0, p - 1))
+        }
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [
+    step,
+    handleSelectReaction,
+    handleSelectCognitive,
+    activeScenes.length,
+    cognitiveQuestions.length,
+  ])
+
+  const handleCompleteAssessment = () => {
+    const normalizedScores = Object.entries(scores).map(([subject, score]) => ({
+      subject,
+      score,
+      zScore: (score - 7.1) / 1.2,
+    }))
+    recordCompletedAttempt({
+      ...assessment,
+      step: 3,
+      scores: normalizedScores,
+      completed: true,
+    })
+
+    // Send answers to backend in background
+    const riasecMap: Record<string, number> = {}
+    riasecQuestions.forEach((q, idx) => {
+      const val = assessment.answers[q.code] ?? assessment.answers[`1-${idx}`]
+      if (val !== undefined && val !== null) riasecMap[q.code] = Number(val)
+    })
+    const cogMap: Record<string, string> = {}
+    cognitiveQuestions.forEach((q, idx) => {
+      const val =
+        assessment.cognitive[q.code] ?? assessment.cognitive[`2-${idx}`]
+      if (val) cogMap[q.code] = String(val)
+    })
+
+    apiRequest("/assessment/submit", null, {
+      method: "POST",
+      body: JSON.stringify({
+        riasec_answers: riasecMap,
+        cognitive_answers: cogMap,
+      }),
+    }).catch((err) => console.log("Background submit response:", err))
+
+    if (Object.keys(scores).length > 0) {
+      apiRequest("/assessment/grades", null, {
         method: "POST",
         body: JSON.stringify({
-          riasec_answers: riasecMap,
-          cognitive_answers: cogMap,
+          academic_year: "2025-2026",
+          semester: "HK1-L12",
+          grades: scores,
         }),
-      }).catch((err) => console.log("Background submit response:", err))
-
-      if (Object.keys(scores).length > 0) {
-        apiRequest("/assessment/grades", null, {
-          method: "POST",
-          body: JSON.stringify({
-            academic_year: "2025-2026",
-            semester: "HK1-L12",
-            grades: scores,
-          }),
-        }).catch((err) => console.log("Background grades submit notice:", err))
-      }
-
-      confetti({
-        particleCount: 140,
-        spread: 80,
-        origin: { y: 0.65 },
-        colors: ["#0284c7", "#10b981", "#f59e0b"],
-      })
-      setTimeout(() => navigate("/dashboard"), 700)
+      }).catch((err) => console.log("Background grades submit notice:", err))
     }
+
+    confetti({
+      particleCount: 75,
+      spread: 65,
+      origin: { y: 0.6 },
+    })
+    navigate("/dashboard")
   }
 
-  const handleReset = () => {
-    reset()
-    setStep(1)
-    setSelectedDimension("R")
-    setScores({})
-  }
+  const currentGlobalIndex = ROLEPLAY_SCENES.findIndex(
+    (s) => s.code === currentScene.code
+  )
+  const currentSceneValue =
+    assessment.answers[currentScene.code] ??
+    assessment.answers[`1-${currentGlobalIndex}`]
+
+  const currentCogValue =
+    assessment.cognitive[currentCog.code] ??
+    assessment.cognitive[`2-${cogIndex}`]
 
   return (
-    <section className="min-h-[calc(100vh-72px)] bg-transparent py-8 sm:py-12">
-      <PageContainer className="max-w-5xl">
-        {/* Header */}
-        <div className="mb-7 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div>
-            <span className="text-xs font-extrabold uppercase tracking-widest text-sky-600">
-              AI CareerGuide · Đánh giá 3 trụ cột (TT74/2026)
+    <section className="py-5 sm:py-7">
+      <PageContainer className="max-w-3xl">
+        {/* Top Game HUD Bar (Liquid Glass, Unified Sky/Cyan Palette) */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/80 bg-white/70 px-4 py-3 shadow-[0_8px_28px_rgba(14,165,233,0.08)] backdrop-blur-xl">
+          <div className="flex items-center gap-2.5">
+            <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-sm">
+              <Gamepad2 className="size-5" />
             </span>
-            <h1 className="mt-1 text-2xl font-black tracking-tight sm:text-3xl">
-              Trắc nghiệm định hướng cá nhân
-            </h1>
-          </div>
-          <div className="flex items-center gap-3 text-xs font-semibold text-slate-500">
-            <span className="flex items-center gap-1.5">
-              <Clock3 size={14} className="text-sky-600" />
-              6 – 8 phút (38 câu)
-            </span>
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck size={14} className="text-sky-600" />
-              {history.length > 0
-                ? `${history.length} lần đã lưu`
-                : "Tự động lưu"}
-            </span>
-            <button
-              onClick={handleReset}
-              className="flex items-center gap-1 rounded-xl border border-white/80 bg-white/60 px-2.5 py-1 text-slate-600 backdrop-blur-md hover:bg-white hover:text-sky-700 transition-colors"
-              title="Làm lại từ đầu"
-            >
-              <RotateCcw size={13} />
-              <span>Làm lại</span>
-            </button>
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="mb-6">
-          <div className="mb-2 flex justify-between text-xs font-bold">
-            <span className="text-sky-600">
-              Bước {step} / 3 · {step === 1 ? "Sở thích RIASEC (45%)" : step === 2 ? "Thiên hướng Nhận thức (20%)" : "Điểm học thuật (35%)"}
-            </span>
-            <span className="text-slate-500">
-              {step < 3
-                ? `${answeredCount} / ${step === 1 ? riasecQuestions.length : cognitiveQuestions.length} câu`
-                : `${progress}%`}
-            </span>
-          </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/70">
-            <motion.div
-              className="h-full rounded-full bg-sky-600"
-              animate={{ width: `${progress}%` }}
-            />
-          </div>
-          <div className="mt-2.5 grid grid-cols-3 text-[11px] font-bold text-slate-400">
-            <span className={step >= 1 ? "text-sky-600" : ""}>
-              01 · Sở thích ({riasecQuestions.length})
-            </span>
-            <span className={`text-center ${step >= 2 ? "text-sky-600" : ""}`}>
-              02 · Nhận thức ({cognitiveQuestions.length})
-            </span>
-            <span className={`text-right ${step >= 3 ? "text-sky-600" : ""}`}>
-              03 · Điểm học tập
-            </span>
-          </div>
-        </div>
-
-        {/* Step Banner (Liquid Glass) */}
-        <motion.div
-          key={step}
-          initial={{ opacity: 0, x: 18 }}
-          animate={{ opacity: 1, x: 0 }}
-        >
-          <Card className="mb-5 overflow-hidden rounded-3xl p-5 sm:p-6">
-            <div className="flex items-center gap-4">
-              <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-500/15 text-sky-600">
-                <BrainCircuit size={22} />
-              </span>
-              <div>
-                <h2 className="text-lg font-black text-slate-900 sm:text-xl">
-                  {step === 1
-                    ? "Bạn hứng thú với hoạt động nào nhất?"
-                    : step === 2
-                      ? "Phong cách tư duy & giải quyết vấn đề"
-                      : "Nhập điểm học bạ hoặc điểm thi gần nhất"}
-                </h2>
-                <p className="mt-0.5 text-xs font-medium text-slate-500">
-                  {step === 3
-                    ? "Nhập tối thiểu 3 môn học (thang điểm 10) để đối chiếu tổ hợp xét tuyển."
-                    : step === 2
-                      ? "Hoàn thành đủ 8 câu trắc nghiệm tình huống để chuẩn hóa Ma trận Nhận thức."
-                      : "Làm lần lượt từng nhóm 5 câu (R → I → A → S → E → C) từ 1 (Không thích) đến 5 (Rất thích)."}
-                </p>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-sm font-black tracking-tight text-slate-900">
+                  Hành Trình Khám Phá Tương Lai
+                </h1>
+                <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-black text-sky-700">
+                  {totalXP} XP
+                </span>
               </div>
+              <p className="text-[11px] font-semibold text-slate-500">
+                Nhập vai tương tác · Mở khóa 435 ngành chuẩn Bộ GD&ĐT
+              </p>
             </div>
-          </Card>
+          </div>
 
-          {/* Dimension Tabs for Step 1 */}
-          {step === 1 && (
-            <div className="mb-4 flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/85 bg-white/55 p-1.5 backdrop-blur-xl">
-              {[
-                { key: "R", label: "R · Thực tế" },
-                { key: "I", label: "I · Nghiên cứu" },
-                { key: "A", label: "A · Nghệ thuật" },
-                { key: "S", label: "S · Xã hội" },
-                { key: "E", label: "E · Quản lý" },
-                { key: "C", label: "C · Nghiệp vụ" },
-                { key: "ALL", label: `Tất cả (${answeredCount}/${riasecQuestions.length})` },
-              ].map((dim) => {
-                const stat = dim.key !== "ALL" ? dimAnsweredCounts[dim.key] : null
-                const isDone = stat && stat.total > 0 && stat.answered >= stat.total
-                return (
+          {/* 3-Quest Step Switcher */}
+          <div className="flex items-center gap-1.5">
+            {[
+              { id: 1, label: "1. Nhập vai", done: allRiasecGroupsCovered },
+              {
+                id: 2,
+                label: "2. Phản xạ",
+                done: totalCognitiveAnswered >= cognitiveQuestions.length,
+              },
+              { id: 3, label: "3. Học lực", done: assessment.completed },
+            ].map((s) => {
+              const active = step === s.id
+              return (
+                <button
+                  key={s.id}
+                  type="button"
+                  onClick={() => {
+                    if (
+                      s.id === 1 ||
+                      (s.id === 2 && allRiasecGroupsCovered) ||
+                      (s.id === 3 && allRiasecGroupsCovered)
+                    ) {
+                      setStep(s.id)
+                      update({ step: s.id })
+                    }
+                  }}
+                  className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold transition ${
+                    active
+                      ? "bg-sky-600 text-white shadow-sm"
+                      : s.done
+                        ? "bg-sky-50 text-sky-700 border border-sky-200"
+                        : "bg-slate-100/80 text-slate-500"
+                  }`}
+                >
+                  {s.done && !active && (
+                    <Check className="size-3.5 text-sky-600" />
+                  )}
+                  <span>{s.label}</span>
+                </button>
+              )
+            })}
+            {(totalRiasecAnswered > 0 || totalCognitiveAnswered > 0) && (
+              <button
+                type="button"
+                onClick={resetAllAnswers}
+                title="Chơi lại từ đầu"
+                className="ml-1 grid size-8 place-items-center rounded-xl border border-slate-200/80 bg-white/80 text-slate-500 transition hover:border-sky-300 hover:text-sky-700"
+              >
+                <RotateCcw className="size-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        {loading && step < 3 && (
+          <div className="mb-4 flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/70 p-3 text-slate-500 backdrop-blur-md">
+            <Loader2 className="size-4 animate-spin text-sky-600" />
+            <span className="text-xs font-semibold">
+              Đang đồng bộ chặng hành trình...
+            </span>
+          </div>
+        )}
+
+        {/* ==================== STEP 1: ROLEPLAY ODYSSEY ==================== */}
+        {step === 1 && (
+          <div className="space-y-4">
+            {/* 6-Station Odyssey Map Bar + Mode Toggle */}
+            <div className="rounded-2xl border border-white/80 bg-white/70 p-3 shadow-[0_8px_24px_rgba(14,165,233,0.06)] backdrop-blur-xl">
+              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 px-1">
+                <div className="flex items-center gap-2">
+                  <Compass className="size-4 text-sky-600" />
+                  <span className="text-xs font-black text-slate-800">
+                    Bản đồ 6 Trạm Trải Nghiệm ({totalRiasecAnswered}/
+                    {quickMode18 ? 18 : 30})
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5">
                   <button
-                    key={dim.key}
                     type="button"
-                    onClick={() => setSelectedDimension(dim.key)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition-colors ${
-                      selectedDimension === dim.key
-                        ? "bg-sky-600 text-white shadow-2xs"
-                        : isDone
-                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100/80"
-                          : "text-slate-600 hover:bg-white/80"
+                    onClick={() => {
+                      setQuickMode18(true)
+                      setSceneIndex(0)
+                    }}
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
+                      quickMode18
+                        ? "bg-sky-600 text-white"
+                        : "bg-sky-50 text-sky-700 hover:bg-sky-100"
                     }`}
                   >
-                    <span>{dim.label}</span>
-                    {stat && (
+                    ⚡ Nhanh (18 cảnh)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuickMode18(false)
+                      setSceneIndex(0)
+                    }}
+                    className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
+                      !quickMode18
+                        ? "bg-sky-600 text-white"
+                        : "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                    }`}
+                  >
+                    Đầy đủ (30 cảnh)
+                  </button>
+                </div>
+              </div>
+
+              {/* 6 Interactive Station Pills */}
+              <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+                {STATIONS_META.map((station) => {
+                  const isCurrentStation = currentScene.group === station.group
+                  const count = riasecGroupCounts[station.group] || 0
+                  const target = quickMode18 ? 3 : 5
+                  const isDone = count >= target
+                  const firstSceneIdx = activeScenes.findIndex(
+                    (s) => s.group === station.group
+                  )
+
+                  return (
+                    <button
+                      key={station.group}
+                      type="button"
+                      onClick={() => {
+                        if (firstSceneIdx >= 0) setSceneIndex(firstSceneIdx)
+                      }}
+                      className={`group relative overflow-hidden rounded-xl border px-2.5 py-2 text-left transition ${
+                        isCurrentStation
+                          ? "border-sky-500 bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm"
+                          : isDone
+                            ? "border-sky-200 bg-sky-50/90 text-sky-900 hover:border-sky-400"
+                            : "border-slate-200/70 bg-white/80 text-slate-600 hover:border-sky-200"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between text-[10px] font-black">
+                        <span>TRẠM {station.group}</span>
+                        <span>
+                          {Math.min(count, target)}/{target}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 truncate text-[11px] font-bold">
+                        {station.shortName}
+                      </p>
+                      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-black/10">
+                        <div
+                          className={`h-full rounded-full transition-all ${
+                            isCurrentStation ? "bg-white" : "bg-sky-500"
+                          }`}
+                          style={{
+                            width: `${Math.min(
+                              100,
+                              riasecEnergy[station.group] || 0
+                            )}%`,
+                          }}
+                        />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Main Interactive Roleplay Scene Stage */}
+            <motion.div
+              key={currentScene.code}
+              initial={{ opacity: 0, y: 8, scale: 0.99 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.2 }}
+              className="rounded-[26px] border border-white/85 bg-white/75 p-5 sm:p-6 shadow-[0_16px_40px_rgba(14,165,233,0.1)] backdrop-blur-2xl"
+            >
+              {/* Scene Progress Dots */}
+              <div className="mb-4 flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100/90 px-3 py-1 text-xs font-black text-sky-800">
+                  <Sparkles className="size-3.5 text-sky-600" />
+                  Cảnh {safeSceneIndex + 1}/{activeScenes.length} ·{" "}
+                  {currentScene.stationTitle}
+                </span>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    disabled={safeSceneIndex === 0}
+                    onClick={() => setSceneIndex((p) => Math.max(0, p - 1))}
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 transition hover:border-sky-300 disabled:opacity-40"
+                  >
+                    ← Trước
+                  </button>
+                  <button
+                    type="button"
+                    disabled={safeSceneIndex >= activeScenes.length - 1}
+                    onClick={() =>
+                      setSceneIndex((p) =>
+                        Math.min(activeScenes.length - 1, p + 1)
+                      )
+                    }
+                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 transition hover:border-sky-300 disabled:opacity-40"
+                  >
+                    Tiếp →
+                  </button>
+                </div>
+              </div>
+
+              {/* Hologram Scene Illustration */}
+              <RoleplaySceneVisual
+                visualType={currentScene.visualType}
+                group={currentScene.group}
+                sceneBadge={currentScene.sceneBadge}
+              />
+
+              {/* Concise Action Scenario */}
+              <div className="my-5 text-center">
+                <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900">
+                  “{currentScene.actionTitle}”
+                </h2>
+                <p className="mt-1 text-xs font-semibold text-slate-500">
+                  {currentScene.subHint}
+                </p>
+              </div>
+
+              {/* 5 Interactive Reaction Cards (Auto-Advances on Click) */}
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                {REACTION_CARDS.map((card) => {
+                  const selected = currentSceneValue === card.value
+                  return (
+                    <button
+                      key={card.value}
+                      type="button"
+                      onClick={() => handleSelectReaction(card.value)}
+                      className={`group relative flex flex-col items-center justify-center rounded-2xl border p-3 text-center transition-all duration-150 ${
+                        selected
+                          ? "border-sky-500 bg-gradient-to-b from-sky-500 to-cyan-600 text-white shadow-[0_10px_24px_rgba(14,165,233,0.3)] -translate-y-0.5"
+                          : "border-sky-100 bg-white/90 text-slate-800 hover:-translate-y-0.5 hover:border-sky-400 hover:bg-sky-50/70"
+                      }`}
+                    >
+                      <span className="text-xl">{card.emoji}</span>
+                      <span className="mt-1.5 text-xs font-black">
+                        {card.shortLabel}
+                      </span>
                       <span
-                        className={`rounded-full px-1.5 py-0.2 text-[10px] ${
-                          selectedDimension === dim.key
+                        className={`mt-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                          selected
                             ? "bg-white/20 text-white"
-                            : isDone
-                              ? "bg-emerald-200/70 text-emerald-800"
-                              : "bg-slate-200/70 text-slate-600"
+                            : "bg-sky-50 text-sky-700"
                         }`}
                       >
-                        {stat.answered}/{stat.total}
+                        Phím {card.keyHint}
                       </span>
-                    )}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {/* Quick Scene Jump Bar */}
+              <div className="mt-5 flex flex-wrap items-center justify-center gap-1.5 pt-2 border-t border-slate-200/60">
+                {activeScenes.map((s, idx) => {
+                  const gIdx = ROLEPLAY_SCENES.findIndex(
+                    (item) => item.code === s.code
+                  )
+                  const answered =
+                    assessment.answers[s.code] !== undefined ||
+                    assessment.answers[`1-${gIdx}`] !== undefined
+                  const isCurr = idx === safeSceneIndex
+                  return (
+                    <button
+                      key={s.code}
+                      type="button"
+                      onClick={() => setSceneIndex(idx)}
+                      title={`${s.code}: ${s.actionTitle}`}
+                      className={`h-2.5 rounded-full transition-all ${
+                        isCurr
+                          ? "w-6 bg-sky-600"
+                          : answered
+                            ? "w-2.5 bg-cyan-400 hover:bg-sky-500"
+                            : "w-2.5 bg-slate-200 hover:bg-slate-300"
+                      }`}
+                    />
+                  )
+                })}
+              </div>
+            </motion.div>
+          </div>
+        )}
+
+        {/* ==================== STEP 2: COGNITIVE REFLEX QUEST ==================== */}
+        {step === 2 && currentCog && (
+          <motion.div
+            key={currentCog.code}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.2 }}
+            className="rounded-[26px] border border-white/85 bg-white/75 p-5 sm:p-6 shadow-[0_16px_40px_rgba(14,165,233,0.1)] backdrop-blur-2xl"
+          >
+            {/* Header & 8-Challenge Progress */}
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 px-3 py-1 text-xs font-black text-sky-800">
+                <Zap className="size-3.5 text-sky-600" />
+                Thử thách Phản Xạ {cogIndex + 1}/{cognitiveQuestions.length} ·{" "}
+                {currentCog.dimension_badge}
+              </span>
+
+              <div className="flex items-center gap-1">
+                {cognitiveQuestions.map((q, idx) => {
+                  const done =
+                    assessment.cognitive[q.code] !== undefined ||
+                    assessment.cognitive[`2-${idx}`] !== undefined
+                  return (
+                    <button
+                      key={q.code}
+                      type="button"
+                      onClick={() => setCogIndex(idx)}
+                      className={`size-6 rounded-lg text-[11px] font-black transition ${
+                        idx === cogIndex
+                          ? "bg-sky-600 text-white"
+                          : done
+                            ? "bg-sky-100 text-sky-700"
+                            : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {idx + 1}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="mb-5 rounded-2xl bg-gradient-to-r from-sky-900 via-sky-800 to-cyan-900 p-5 text-white">
+              <p className="text-[11px] font-bold uppercase tracking-wider text-cyan-300">
+                Tình huống quyết định #{cogIndex + 1}
+              </p>
+              <h2 className="mt-1 text-base sm:text-lg font-black leading-snug">
+                {currentCog.subtitle}
+              </h2>
+            </div>
+
+            {/* 4 Interactive Choice Cards (A, B, C, D) */}
+            <div className="grid gap-3 sm:grid-cols-2">
+              {currentCog.options.map((opt) => {
+                const isSelected = String(currentCogValue) === opt.option_key
+                return (
+                  <button
+                    key={opt.option_key}
+                    type="button"
+                    onClick={() => handleSelectCognitive(opt.option_key)}
+                    className={`group flex flex-col justify-between rounded-2xl border p-4 text-left transition-all ${
+                      isSelected
+                        ? "border-sky-500 bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-[0_12px_26px_rgba(14,165,233,0.25)] -translate-y-0.5"
+                        : "border-sky-100 bg-white/90 text-slate-800 hover:-translate-y-0.5 hover:border-sky-400 hover:bg-sky-50/60"
+                    }`}
+                  >
+                    <div>
+                      <div className="mb-2 flex items-center justify-between">
+                        <span
+                          className={`inline-flex size-7 items-center justify-center rounded-lg text-xs font-black ${
+                            isSelected
+                              ? "bg-white text-sky-700"
+                              : "bg-sky-100 text-sky-800"
+                          }`}
+                        >
+                          {opt.option_key}
+                        </span>
+                        <span
+                          className={`text-[10px] font-bold ${
+                            isSelected ? "text-sky-100" : "text-slate-400"
+                          }`}
+                        >
+                          Phím {opt.option_key}
+                        </span>
+                      </div>
+                      <h3 className="text-sm font-black leading-snug">
+                        {opt.title}
+                      </h3>
+                      <p
+                        className={`mt-1.5 text-xs leading-relaxed line-clamp-2 ${
+                          isSelected ? "text-sky-50" : "text-slate-500"
+                        }`}
+                      >
+                        {opt.description}
+                      </p>
+                    </div>
                   </button>
                 )
               })}
             </div>
-          )}
+          </motion.div>
+        )}
 
-          {/* Loading Indicator */}
-          {loading && step < 3 && (
-            <div className="flex items-center justify-center p-8 bg-white rounded-2xl border border-slate-200 text-slate-500 gap-2">
-              <Loader2 className="size-5 animate-spin text-sky-600" />
-              <span className="text-xs font-semibold">Đang nạp bộ câu hỏi chuẩn hóa từ CSDL...</span>
-            </div>
-          )}
+        {/* ==================== STEP 3: ACADEMIC POWER-UP ==================== */}
+        {step === 3 && (
+          <Card className="p-5 sm:p-6">
+            <AcademicInputForm
+              scores={scores}
+              onChange={(subject, value) =>
+                setScores((prev) => ({ ...prev, [subject]: value }))
+              }
+            />
+          </Card>
+        )}
 
-          {/* Step 1: Holland RIASEC */}
-          {step === 1 && (
-            <motion.div
-              className="space-y-3"
-              initial="hidden"
-              animate="visible"
-              variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
-            >
-              {currentRiasecQuestions.map((q, index) => {
-                const globalIndex = riasecQuestions.findIndex((item) => item.code === q.code)
-                const idxKey = globalIndex >= 0 ? globalIndex : index
-                const questionKey = q.code || `1-${idxKey}`
-                const currentValue =
-                  assessment.answers[questionKey] ?? assessment.answers[`1-${idxKey}`]
-
-                return (
-                  <motion.div
-                    key={questionKey}
-                    variants={{
-                      hidden: { opacity: 0, y: 10 },
-                      visible: { opacity: 1, y: 0 },
-                    }}
-                  >
-                    <div className="relative">
-                      {(q.domain_tag || q.dimension_badge) && (
-                        <div className="absolute right-4 top-3.5 z-10 hidden sm:flex items-center gap-1.5">
-                          {q.domain_tag && (
-                            <span className="rounded-full bg-slate-100 px-2.5 py-0.5 text-[10px] font-semibold text-slate-600 border border-slate-200">
-                              {q.domain_tag}
-                            </span>
-                          )}
-                          {q.dimension_badge && (
-                            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-[10px] font-bold text-sky-700 border border-sky-200">
-                              {q.dimension_badge}
-                            </span>
-                          )}
-                        </div>
-                      )}
-                      <QuestionCard
-                        index={idxKey + 1}
-                        question={q.question_text}
-                        value={typeof currentValue === "number" ? currentValue : undefined}
-                        onChange={(value) =>
-                          update({
-                            answers: {
-                              ...assessment.answers,
-                              [questionKey]: value,
-                              [`1-${idxKey}`]: value,
-                            },
-                          })
-                        }
-                      />
-                    </div>
-                  </motion.div>
-                )
-              })}
-            </motion.div>
-          )}
-
-          {/* Step 2: Cognitive Multiple Choice */}
-          {step === 2 && (
-            <motion.div
-              className="space-y-4"
-              initial="hidden"
-              animate="visible"
-              variants={{ visible: { transition: { staggerChildren: 0.05 } } }}
-            >
-              {cognitiveQuestions.map((q, index) => {
-                const questionKey = q.code || `2-${index}`
-                const currentSelectedKey =
-                  assessment.cognitive[questionKey] ?? assessment.cognitive[`2-${index}`]
-                const selectedKeyStr =
-                  currentSelectedKey !== undefined && currentSelectedKey !== null
-                    ? String(currentSelectedKey)
-                    : undefined
-
-                return (
-                  <motion.div
-                    key={questionKey}
-                    variants={{
-                      hidden: { opacity: 0, y: 10 },
-                      visible: { opacity: 1, y: 0 },
-                    }}
-                  >
-                    <CognitiveQuestionCard
-                      index={index + 1}
-                      code={q.code}
-                      title={q.title}
-                      subtitle={q.subtitle}
-                      dimensionBadge={q.dimension_badge}
-                      options={q.options}
-                      selectedKey={selectedKeyStr}
-                      onSelect={(optionKey) => {
-                        update({
-                          cognitive: {
-                            ...assessment.cognitive,
-                            [questionKey]: optionKey,
-                            [`2-${index}`]: optionKey,
-                          },
-                        })
-                      }}
-                    />
-                  </motion.div>
-                )
-              })}
-            </motion.div>
-          )}
-
-          {/* Step 3: Academic Input */}
-          {step === 3 && (
-            <Card className="p-6 sm:p-8">
-              <AcademicInputForm
-                scores={scores}
-                onChange={(subject, value) =>
-                  setScores({ ...scores, [subject]: value })
-                }
-              />
-            </Card>
-          )}
-        </motion.div>
-
-        {/* Footer Navigation */}
-        <div className="mt-7 flex items-center justify-between">
+        {/* Footer Quest Action Bar */}
+        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
           <Button
             variant="ghost"
             icon={ArrowLeft}
-            disabled={
-              step === 1 &&
-              (selectedDimension === "R" || selectedDimension === "ALL")
-            }
+            disabled={step === 1 && safeSceneIndex === 0}
             onClick={() => {
-              if (step === 1 && selectedDimension !== "ALL") {
-                const currIdx = RIASEC_ORDER.indexOf(
-                  selectedDimension as (typeof RIASEC_ORDER)[number],
-                )
-                if (currIdx > 0) {
-                  setSelectedDimension(RIASEC_ORDER[currIdx - 1])
-                  window.scrollTo({ top: 0, behavior: "smooth" })
-                  return
-                }
+              if (step === 1 && safeSceneIndex > 0) {
+                setSceneIndex((p) => Math.max(0, p - 1))
+                return
               }
-              setStep(step - 1)
+              if (step === 2 && cogIndex > 0) {
+                setCogIndex((p) => Math.max(0, p - 1))
+                return
+              }
+              const prevStep = Math.max(1, step - 1)
+              setStep(prevStep)
+              update({ step: prevStep })
             }}
           >
             Quay lại
           </Button>
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-2.5">
             {step === 1 && !allRiasecGroupsCovered && (
-              <span className="text-[11px] font-medium text-slate-500 hidden sm:inline">
-                (Đã trả lời {answeredCount}/30 câu · Cần tối thiểu 18 câu & đủ 6 nhóm để sang Bước 2)
+              <span className="text-xs font-bold text-slate-500">
+                Cần tối thiểu 18 cảnh ({totalRiasecAnswered}/18) để qua Chặng 2
               </span>
             )}
-            {step === 2 && answeredCount < cognitiveQuestions.length && (
-              <span className="text-[11px] font-medium text-slate-500 hidden sm:inline">
-                (Đã chọn {answeredCount}/{cognitiveQuestions.length} câu nhận thức)
-              </span>
-            )}
-            {step === 1 && allRiasecGroupsCovered && selectedDimension !== "C" && selectedDimension !== "ALL" && (
+
+            {step === 1 && (
               <Button
-                variant="secondary"
+                icon={ArrowRight}
+                disabled={!allRiasecGroupsCovered}
                 onClick={() => {
                   setStep(2)
                   update({ step: 2 })
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
               >
-                Sang Bước 2 ngay ({answeredCount}/30)
+                Qua Chặng 2: Phản Xạ ({totalRiasecAnswered}/
+                {quickMode18 ? 18 : 30})
               </Button>
             )}
-            <Button
-              icon={step === 3 ? Check : ArrowRight}
-              disabled={!canContinue}
-              onClick={next}
-            >
-              {step === 3
-                ? "Hoàn thành & Xem kết quả"
-                : step === 1 &&
-                    selectedDimension !== "ALL" &&
-                    selectedDimension !== "C"
-                  ? `Nhóm tiếp theo (${nextRiasecDim})`
-                  : "Tiếp tục sang bước kế"}
-            </Button>
+
+            {step === 2 && (
+              <Button
+                icon={ArrowRight}
+                disabled={totalCognitiveAnswered < cognitiveQuestions.length}
+                onClick={() => {
+                  setStep(3)
+                  update({ step: 3 })
+                  window.scrollTo({ top: 0, behavior: "smooth" })
+                }}
+              >
+                Qua Chặng 3: Nạp Điểm ({totalCognitiveAnswered}/
+                {cognitiveQuestions.length})
+              </Button>
+            )}
+
+            {step === 3 && (
+              <Button
+                icon={Check}
+                disabled={!canContinue}
+                onClick={handleCompleteAssessment}
+              >
+                Mở Khóa Bản Đồ 435 Ngành
+              </Button>
+            )}
           </div>
         </div>
       </PageContainer>
