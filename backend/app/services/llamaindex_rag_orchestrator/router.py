@@ -1,11 +1,11 @@
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, Query, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import require_admin, get_current_user, get_optional_current_user
-from app.models.identity import User
+from app.models.identity import User, UserRole
 from app.models.staging import StagingStatus, StagingStreamType
 from app.schemas.staging import (
     StagingRecordCreate,

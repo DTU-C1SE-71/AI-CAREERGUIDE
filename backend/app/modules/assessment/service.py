@@ -277,6 +277,9 @@ async def process_assessment_submission(
         trait_code = traits_map.get(choice_clean, f"TRAIT_{dim_key.upper()}_{choice_clean}")
         cognitive_traits[dim_key] = trait_code
 
+    from app.services.recommender.engine import normalize_student_cognitive_traits
+    cognitive_traits = normalize_student_cognitive_traits(cognitive_traits)
+
     # 3. Identify Top Dominant Traits
     dim_names: Dict[str, str] = {
         "R": "R - Thực tế (Realistic)",

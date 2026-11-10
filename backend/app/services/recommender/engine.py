@@ -439,3 +439,347 @@ def evaluate_admission_feasibility(
         "academic_tier": bm["tier"],
         "academic_tier_label": bm["tier_label"]
     }
+
+
+# ==========================================
+# OPTIMIZED 3-PILLAR FUNCTIONS & SMART SUBSTITUTION ENGINE
+# ==========================================
+
+HEXAGON_OPPOSITES = {
+    "R": "S", "S": "R",
+    "I": "E", "E": "I",
+    "A": "C", "C": "A",
+}
+
+HEXAGON_ADJACENT = {
+    "R": {"I", "C"},
+    "I": {"R", "A"},
+    "A": {"I", "S"},
+    "S": {"A", "E"},
+    "E": {"S", "C"},
+    "C": {"E", "R"},
+}
+
+
+def calculate_enhanced_riasec_fit(
+    student_vector: Dict[str, float],
+    major_vector: Dict[str, float]
+) -> float:
+    """
+    Optimized Pillar 1 (45%):
+    Combines Cosine Similarity (75%) + Top-2 Holland Peak & Hexagonal Alignment (25%)
+    with Flat-Profile differentiation adjustment.
+    """
+    base_cos = calculate_riasec_cosine_similarity(student_vector, major_vector)
+    if base_cos <= 0.0:
+        return 0.0
+
+    s_ranked = sorted(RIASEC_DIMENSIONS, key=lambda d: float(student_vector.get(d, 0.0)), reverse=True)
+    m_ranked = sorted(RIASEC_DIMENSIONS, key=lambda d: float(major_vector.get(d, 0.0)), reverse=True)
+
+    s_top1, s_top2 = s_ranked[0], s_ranked[1]
+    m_top1, m_top2 = m_ranked[0], m_ranked[1]
+
+    # Hexagonal Peak Alignment Score
+    if s_top1 == m_top1 and s_top2 == m_top2:
+        peak_score = 1.0
+    elif s_top1 == m_top1 or (s_top1 == m_top2 and s_top2 == m_top1):
+        peak_score = 0.92
+    elif s_top1 in (m_top1, m_top2) or s_top2 in (m_top1, m_top2):
+        peak_score = 0.78
+    elif m_top1 in HEXAGON_ADJACENT.get(s_top1, set()):
+        peak_score = 0.65
+    elif HEXAGON_OPPOSITES.get(s_top1) == m_top1:
+        peak_score = 0.25
+    else:
+        peak_score = 0.50
+
+    combined = 0.75 * base_cos + 0.25 * peak_score
+
+    # Flat-profile check: dampen artificially inflated scores if student vector has near-zero differentiation
+    s_vals = [max(0.0, float(student_vector.get(d, 0.0))) for d in RIASEC_DIMENSIONS]
+    diff = max(s_vals) - min(s_vals) if s_vals else 0.0
+    if diff < 0.08:
+        combined = 0.65 * combined + 0.35 * 0.60
+
+    return round(max(0.0, min(1.0, combined)), 4)
+
+
+def evaluate_target_anchored_academic_fit(
+    admitted_block_codes: List[str],
+    student_block_results: Dict[str, Any],
+    benchmark_cutoff: float = 18.0,
+    min_recommended: float = 15.5,
+    default_score: float = 0.5
+) -> Tuple[float, Optional[str], Dict[str, Any]]:
+    """
+    Optimized Pillar 2 (35%):
+    Target-Anchored Academic Fit combining national Z-Score CDF with Major Cutoff Alignment.
+    Rewards majors whose admission benchmark matches the student's actual competency zone,
+    and penalizes majors whose cutoff exceeds the student's score.
+    """
+    base_acad, best_block, breakdown = evaluate_academic_readiness_for_major(
+        admitted_block_codes, student_block_results, default_score=default_score
+    )
+    if not best_block or not isinstance(breakdown, dict) or best_block not in breakdown:
+        return base_acad, best_block, breakdown
+
+    raw_sum = float(breakdown[best_block].get("raw_sum", 18.0))
+    gap_to_cutoff = raw_sum - benchmark_cutoff
+    gap_to_min = raw_sum - min_recommended
+
+    if gap_to_min >= -0.5:
+        # Student meets or exceeds the minimum recommended threshold for this major
+        if -1.0 <= gap_to_cutoff <= 3.5:
+            # Sweet spot: major difficulty aligns closely with student's score
+            anchored_score = min(1.0, max(base_acad, 0.82 + 0.04 * max(0.0, gap_to_cutoff + 1.0)))
+        elif gap_to_cutoff > 3.5:
+            # Student is well above cutoff (safe match, slight taper so high-tier majors still shine for top students)
+            anchored_score = min(1.0, 0.65 * base_acad + 0.35 * 0.86)
+        else:
+            anchored_score = max(0.60, base_acad)
+    else:
+        # Student is below minimum threshold -> sharp reduction
+        deficit = abs(gap_to_min)
+        penalty_factor = max(0.10, 1.0 - (deficit / 10.0) * 0.85)
+        anchored_score = max(0.05, base_acad * penalty_factor)
+
+    if raw_sum < min_recommended - 1.0:
+        breakdown["safety_tier"] = "REACH"
+    elif raw_sum >= benchmark_cutoff + 1.0:
+        breakdown["safety_tier"] = "SAFETY"
+    else:
+        breakdown["safety_tier"] = "TARGET"
+    breakdown["gap_to_cutoff"] = round(gap_to_cutoff, 2)
+
+    return round(anchored_score, 4), best_block, breakdown
+
+
+def normalize_student_cognitive_traits(
+    raw_traits: Optional[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """
+    Deterministically maps the 8 Cognitive Assessment answers (COG_1..COG_8 /
+    learning_style..team_role) into the 6 canonical cognitive attributes used
+    by Pillar 3 (abstract_thinking, analytical_reasoning, spatial_perception,
+    linguistic_ability, learning_environment, teamwork_intensity).
+    Preserves any explicit canonical keys already provided.
+    """
+    if not raw_traits:
+        return {}
+
+    canonical_keys = {
+        "abstract_thinking",
+        "analytical_reasoning",
+        "spatial_perception",
+        "linguistic_ability",
+        "learning_environment",
+        "teamwork_intensity",
+    }
+    # If caller already supplied canonical keys and no COG_1..8 keys, return as-is
+    cog_keys = {
+        "COG_1", "COG_2", "COG_3", "COG_4", "COG_5", "COG_6", "COG_7", "COG_8",
+        "learning_style", "work_environment", "problem_solving", "interaction_target",
+        "gardner_intelligence", "pressure_tolerance", "output_preference", "team_role",
+    }
+    if not any(k in raw_traits for k in cog_keys):
+        return dict(raw_traits)
+
+    def _pick(code_key: str, dim_key: str) -> str:
+        val = str(raw_traits.get(code_key) or raw_traits.get(dim_key) or "").upper().strip()
+        if val in ("A", "B", "C", "D"):
+            return val
+        if "VISUAL" in val or "LAB_DIGITAL" in val or "QUANTITATIVE" in val or "SYSTEMS" in val or "LOGICAL_MATH" in val or "HIGH_STAKES" in val or "TANGIBLE_TECH" in val or "TECHNICAL_SPECIALIST" in val:
+            return "A"
+        if "THEORETICAL" in val or "DYNAMIC_CORPORATE" in val or "CREATIVE_DIVERGENT" in val or "DATA_FINANCE" in val or "LINGUISTIC" in val or "MARKET_DEADLINE" in val or "ECONOMIC_LEGAL" in val or "STRATEGIC_LEADER" in val:
+            return "B"
+        if "HANDS_ON" in val or "FIELD_INDUSTRIAL" in val or "HUMAN_EMPATHY" in val or "PEOPLE_COMMUNITY" in val or "SPATIAL_MUSICAL" in val or "DEEP_RND" in val or "HUMAN_WELLBEING" in val or "CREATIVE_COMMUNICATOR" in val:
+            return "C"
+        if "INTERACTIVE" in val or "INSTITUTIONAL" in val or "PROCEDURAL" in val or "NATURE_BIO" in val or "NATURALIST" in val or "STABLE_SUSTAINABLE" in val or "CREATIVE_SCIENTIFIC" in val or "QUALITY_CONTROLLER" in val:
+            return "D"
+        return ""
+
+    c1 = _pick("COG_1", "learning_style")
+    c2 = _pick("COG_2", "work_environment")
+    c3 = _pick("COG_3", "problem_solving")
+    c4 = _pick("COG_4", "interaction_target")
+    c5 = _pick("COG_5", "gardner_intelligence")
+    c6 = _pick("COG_6", "pressure_tolerance")
+    c7 = _pick("COG_7", "output_preference")
+    c8 = _pick("COG_8", "team_role")
+
+    # 1. Analytical Reasoning score
+    analytical_pts = (
+        (2 if c1 == "B" else 0)
+        + (2 if c3 in ("A", "D") else 0)
+        + (1 if c4 in ("A", "B") else 0)
+        + (2 if c5 == "A" else 0)
+        + (2 if c6 == "C" else 0)
+        + (1 if c8 in ("A", "D") else 0)
+    )
+    # 2. Abstract Thinking score
+    abstract_pts = (
+        (2 if c1 in ("A", "B") else 0)
+        + (2 if c3 in ("A", "B") else 0)
+        + (2 if c5 in ("A", "C") else 0)
+        + (2 if c6 == "C" else 0)
+        + (2 if c7 in ("A", "D") else 0)
+    )
+    # 3. Spatial Perception score
+    spatial_pts = (
+        (2 if c1 in ("A", "C") else 0)
+        + (1 if c2 == "C" else 0)
+        + (2 if c3 == "B" else 0)
+        + (1 if c4 in ("A", "D") else 0)
+        + (2 if c5 in ("C", "D") else 0)
+        + (2 if c7 == "A" else 0)
+    )
+    # 4. Linguistic & Interpersonal score
+    linguistic_pts = (
+        (2 if c1 in ("B", "D") else 0)
+        + (2 if c3 in ("C", "D") else 0)
+        + (2 if c4 in ("B", "C") else 0)
+        + (2 if c5 == "B" else 0)
+        + (1 if c7 in ("B", "C") else 0)
+        + (1 if c8 in ("B", "C") else 0)
+    )
+
+    def _to_level(pts: int) -> str:
+        if pts >= 4:
+            return "high"
+        if pts >= 2:
+            return "medium"
+        return "low"
+
+    # 5. Learning Environment
+    if c2 == "B" or c1 == "D":
+        learn_env = "collaborative"
+    elif c2 == "A" and c3 == "B":
+        learn_env = "exploratory"
+    elif c2 == "C" or c1 == "C":
+        learn_env = "exploratory"
+    elif c2 == "A":
+        learn_env = "independent"
+    else:
+        learn_env = "structured"
+
+    # 6. Teamwork Intensity
+    if c8 == "A":
+        team_int = "independent"
+    elif c8 in ("B", "C") or c4 == "C":
+        team_int = "highly_collaborative"
+    else:
+        team_int = "balanced"
+
+    derived = dict(raw_traits)
+    derived.setdefault("analytical_reasoning", _to_level(analytical_pts))
+    derived.setdefault("abstract_thinking", _to_level(abstract_pts))
+    derived.setdefault("spatial_perception", _to_level(spatial_pts))
+    derived.setdefault("linguistic_ability", _to_level(linguistic_pts))
+    derived.setdefault("learning_environment", learn_env)
+    derived.setdefault("teamwork_intensity", team_int)
+    return derived
+
+
+def calculate_asymmetric_cognitive_fit(
+    student_traits: Dict[str, Any],
+    major_attributes: Dict[str, Any]
+) -> float:
+    """
+    Optimized Pillar 3 (20%):
+    Asymmetric Competency Matrix for ability dimensions (student >= required -> 1.0)
+    combined with Symmetric Cultural Fit for learning environment & teamwork.
+    """
+    if not major_attributes:
+        return 0.5
+    student_traits = normalize_student_cognitive_traits(student_traits)
+
+    ordinal_traits = [
+        "abstract_thinking",
+        "analytical_reasoning",
+        "spatial_perception",
+        "linguistic_ability",
+    ]
+    level_scale = {"low": 1, "medium": 2, "high": 3}
+    match_scores: List[float] = []
+
+    for trait in ordinal_traits:
+        s_val = str(student_traits.get(trait, "medium")).lower().strip()
+        m_val = str(major_attributes.get(trait, "medium")).lower().strip()
+        s_num = level_scale.get(s_val, 2)
+        m_num = level_scale.get(m_val, 2)
+
+        if s_num >= m_num:
+            # Student meets or exceeds the cognitive requirement of the major -> full credit
+            match_scores.append(1.0)
+        elif m_num - s_num == 1:
+            match_scores.append(0.55)
+        else:
+            match_scores.append(0.10)
+
+    # Symmetric Learning Environment Match
+    s_env = str(student_traits.get("learning_environment", "structured")).lower().strip()
+    m_env = str(major_attributes.get("learning_environment", "structured")).lower().strip()
+    if s_env == m_env:
+        match_scores.append(1.0)
+    elif (s_env in ("structured", "exploratory") and m_env in ("structured", "exploratory")) or \
+         (s_env in ("collaborative", "exploratory") and m_env in ("collaborative", "exploratory")):
+        match_scores.append(0.6)
+    else:
+        match_scores.append(0.25)
+
+    # Symmetric Teamwork Intensity Match
+    s_team = str(student_traits.get("teamwork_intensity", "balanced")).lower().strip()
+    m_team = str(major_attributes.get("teamwork_intensity", "balanced")).lower().strip()
+    team_scale = {"independent": 1, "balanced": 2, "highly_collaborative": 3}
+    t_diff = abs(team_scale.get(s_team, 2) - team_scale.get(m_team, 2))
+    if t_diff == 0:
+        match_scores.append(1.0)
+    elif t_diff == 1:
+        match_scores.append(0.6)
+    else:
+        match_scores.append(0.2)
+
+    score = sum(match_scores) / len(match_scores) if match_scores else 0.5
+    return round(max(0.0, min(1.0, score)), 4)
+
+
+def extract_6digit_code(major_code: str) -> str:
+    """Normalizes 7-digit (7480101) or 6-digit (480101) code to 6-digit TT74 format."""
+    digits = "".join(ch for ch in str(major_code or "") if ch.isdigit())
+    if len(digits) == 7 and digits.startswith(("7", "8", "9")):
+        return digits[1:]
+    return digits
+
+
+# Cross-field practical substitution pathways (High-cutoff Field -> Accessible Sibling Field)
+CROSS_FIELD_SUBSTITUTION_MAP = {
+    "48": {"48", "46", "51", "34", "32"},  # Máy tính/CNTT -> CNTT ứng dụng, CNKT Điện tử, HTTT quản lý, CN truyền thông
+    "52": {"51", "52", "58", "54"},        # Kỹ thuật hàn lâm (52) -> Công nghệ kỹ thuật ứng dụng (51)
+    "72": {"72", "42", "64", "76", "54"},  # Y Dược điểm cao -> Kỹ thuật Y học, Điều dưỡng, Dinh dưỡng, CN sinh học
+    "34": {"34", "31", "51", "81", "84"},  # Kinh doanh quốc tế/Logistics -> QTKD, Kinh tế, Quản lý công nghiệp, Vận tải
+    "14": {"14", "22", "31", "76"},        # Sư phạm điểm cao -> Khoa học giáo dục, Công nghệ giáo dục, Ngôn ngữ
+    "38": {"38", "31", "34", "76"},        # Luật kinh tế -> Luật, Quản lý nhà nước, Công tác xã hội
+}
+
+
+def are_majors_related_pathway(code_high: str, code_sub: str) -> int:
+    """
+    Returns similarity tier between a blocked high-cutoff major and a candidate substitute major:
+    - 3: Same 4-digit Group (e.g. 480107 AI -> 480104 Hệ thống thông tin)
+    - 2: Same 2-digit Field or Engineering 52 -> 51 sibling (e.g. 520114 KT Cơ điện tử -> 510203 CNKT Cơ điện tử)
+    - 1: Mapped cross-field practical pathway (e.g. 720101 Y khoa -> 420201 Công nghệ sinh học)
+    - 0: Unrelated field
+    """
+    c_h = extract_6digit_code(code_high)
+    c_s = extract_6digit_code(code_sub)
+    if len(c_h) < 4 or len(c_s) < 4:
+        return 0
+    if c_h[:4] == c_s[:4]:
+        return 3
+    if c_h[:2] == c_s[:2] or (c_h[:2] == "52" and c_s[:2] == "51"):
+        return 2
+    if c_s[:2] in CROSS_FIELD_SUBSTITUTION_MAP.get(c_h[:2], set()):
+        return 1
+    return 0
+

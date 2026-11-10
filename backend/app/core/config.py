@@ -48,11 +48,11 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str = "https://api.xkiro.com/v1"
     XAI_API_KEY: str = ""
     XAI_BASE_URL: str = "https://api.xkiro.com/v1"
-    VISION_LLM_MODEL: str = "qwen/qwen3-vl-plus:free"
+    VISION_LLM_MODEL: str = "mistralai/mistral-large-2512"
     TAVILY_API_KEY: str = ""
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536
-    LLM_MODEL: str = "qwen/qwen3.8-max:free"
+    LLM_MODEL: str = "mistralai/mistral-large-2512"
 
     # 3-Pillar Scoring Weights (Default: RIASEC 0.45, Academic 0.35, Preference 0.20)
     WEIGHT_RIASEC: float = 0.45
@@ -74,7 +74,7 @@ class Settings(BaseSettings):
     ]
 
     # CORS Configuration
-    CORS_ORIGINS: List[str] = [
+    CORS_ORIGINS: Union[str, List[str]] = [
         "http://localhost:3000",
         "http://localhost:5173",
         "http://127.0.0.1:3000",
@@ -94,8 +94,15 @@ class Settings(BaseSettings):
     @field_validator("CORS_ORIGINS", mode="before")
     @classmethod
     def assemble_cors_origins(cls, v: Union[str, List[str]]) -> List[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
+        if isinstance(v, str):
+            v_str = v.strip()
+            if v_str.startswith("["):
+                import json
+                try:
+                    return json.loads(v_str)
+                except Exception:
+                    pass
+            return [i.strip() for i in v_str.split(",") if i.strip()]
         elif isinstance(v, list):
             return v
         return [

@@ -69,6 +69,8 @@ interface DynamicFieldTemplate {
     code: string
     name: string
     university: string
+    minCutoff: number
+    replacesHighMajor?: string
     primaryWeight: number
     secondaryWeight: number
     gaps: string[]
@@ -85,9 +87,10 @@ const DYNAMIC_FIELD_TEMPLATES: DynamicFieldTemplate[] = [
     majors: [
       {
         id: "computer-science",
-        code: "7480101",
+        code: "480101",
         name: "Khoa học máy tính",
-        university: "Khối A00, A01 · Chuẩn Bộ GD&ĐT",
+        university: "Khối A00, A01 · Chuẩn TT74/2026 (Cạnh tranh cao ≥ 24.5đ)",
+        minCutoff: 24.0,
         primaryWeight: 0.65,
         secondaryWeight: 0.35,
         gaps: ["Tư duy thuật toán", "Tiếng Anh chuyên ngành", "Kỹ năng làm dự án"],
@@ -95,10 +98,24 @@ const DYNAMIC_FIELD_TEMPLATES: DynamicFieldTemplate[] = [
           "Phù hợp nổi trội với năng lực Nghiên cứu (I) và Thực hành kỹ thuật (R), kết hợp tư duy toán học & giải quyết vấn đề.",
       },
       {
+        id: "artificial-intelligence",
+        code: "480107",
+        name: "Trí tuệ nhân tạo",
+        university: "Khối A00, A01, D07 · Chuẩn TT74/2026 (Cạnh tranh cao ≥ 25.0đ)",
+        minCutoff: 24.5,
+        primaryWeight: 0.7,
+        secondaryWeight: 0.3,
+        gaps: ["Xác suất thống kê", "Python & Học máy", "Đại số tuyến tính"],
+        summary:
+          "Tối ưu cho học sinh có thiên hướng phân tích định lượng, khám phá quy luật dữ liệu và mô hình AI.",
+      },
+      {
         id: "software-engineering",
-        code: "7480201",
+        code: "480103",
         name: "Kỹ thuật phần mềm",
-        university: "Khối A00, A01 · Chuẩn Bộ GD&ĐT",
+        university: "Khối A00, A01, D01 · Chuẩn TT74/2026 (Khá ≥ 20.5đ)",
+        minCutoff: 20.0,
+        replacesHighMajor: "Khoa học máy tính / Trí tuệ nhân tạo (≥ 24.5đ)",
         primaryWeight: 0.55,
         secondaryWeight: 0.45,
         gaps: ["Kiến trúc phần mềm", "Cơ sở dữ liệu", "Lập trình web"],
@@ -106,15 +123,30 @@ const DYNAMIC_FIELD_TEMPLATES: DynamicFieldTemplate[] = [
           "Cân bằng giữa tư duy hệ thống và năng lực xây dựng sản phẩm công nghệ thực tiễn.",
       },
       {
-        id: "data-science",
-        code: "7460108",
-        name: "Khoa học dữ liệu",
-        university: "Khối A00, A01, D07 · Chuẩn Bộ GD&ĐT",
-        primaryWeight: 0.7,
-        secondaryWeight: 0.3,
-        gaps: ["Xác suất thống kê", "Python cơ bản", "Trình bày dữ liệu"],
+        id: "information-systems",
+        code: "480104",
+        name: "Hệ thống thông tin",
+        university: "Khối A00, A01, D01 · Chuẩn TT74/2026 (Vừa sức ≥ 18.5đ)",
+        minCutoff: 18.0,
+        replacesHighMajor: "Khoa học máy tính / Kỹ thuật phần mềm",
+        primaryWeight: 0.6,
+        secondaryWeight: 0.4,
+        gaps: ["Phân tích nghiệp vụ (BA)", "Cơ sở dữ liệu SQL", "Quản trị hệ thống"],
         summary:
-          "Tối ưu cho học sinh có thiên hướng phân tích định lượng, khám phá quy luật dữ liệu và AI.",
+          "Phương án vừa sức cùng nhóm Máy tính (4801), kết nối giải pháp phần mềm với vận hành doanh nghiệp.",
+      },
+      {
+        id: "computer-engineering-tech",
+        code: "480108",
+        name: "Công nghệ kỹ thuật máy tính",
+        university: "Khối A00, A01, D01 · Chuẩn TT74/2026 (Tiêu chuẩn ≥ 15.5đ)",
+        minCutoff: 15.0,
+        replacesHighMajor: "Khoa học máy tính / Kỹ thuật phần mềm",
+        primaryWeight: 0.5,
+        secondaryWeight: 0.5,
+        gaps: ["Thực hành mạng & phần cứng", "Lập trình căn bản", "Quản trị hệ thống"],
+        summary:
+          "Ngành ứng dụng thực hành có ngưỡng điểm an toàn, giữ trọn đam mê Công nghệ thông tin.",
       },
     ],
   },
@@ -125,56 +157,101 @@ const DYNAMIC_FIELD_TEMPLATES: DynamicFieldTemplate[] = [
     secondaryDim: "S",
     majors: [
       {
+        id: "international-business",
+        code: "340120",
+        name: "Kinh doanh quốc tế",
+        university: "Khối A01, D01, D07 · Chuẩn TT74/2026 (Cạnh tranh cao ≥ 24.5đ)",
+        minCutoff: 24.0,
+        primaryWeight: 0.65,
+        secondaryWeight: 0.35,
+        gaps: ["Ngoại thương", "Tiếng Anh thương mại", "Đàm phán quốc tế"],
+        summary:
+          "Định hướng toàn cầu cho học sinh nổi trội nhóm Quản lý (E) và năng lực ngoại ngữ.",
+      },
+      {
         id: "digital-marketing",
-        code: "7340115",
-        name: "Marketing số",
-        university: "Khối A01, D01 · Chuẩn Bộ GD&ĐT",
+        code: "340115",
+        name: "Marketing",
+        university: "Khối A01, D01, C00 · Chuẩn TT74/2026 (Khá ≥ 20.5đ)",
+        minCutoff: 20.0,
+        replacesHighMajor: "Kinh doanh quốc tế (≥ 24.5đ)",
         primaryWeight: 0.6,
         secondaryWeight: 0.4,
-        gaps: ["Viết nội dung", "Phân tích hành vi", "Công cụ quảng cáo"],
+        gaps: ["Chiến lược nội dung", "Phân tích hành vi", "Digital Ads"],
         summary:
           "Phát huy thế mạnh Quản lý (E) và Xã hội (S) trong môi trường truyền thông, thương hiệu và dữ liệu khách hàng.",
       },
       {
         id: "e-commerce",
-        code: "7340122",
+        code: "340122",
         name: "Thương mại điện tử",
-        university: "Khối A00, D01 · Chuẩn Bộ GD&ĐT",
+        university: "Khối A00, A01, D01 · Chuẩn TT74/2026 (Vừa sức ≥ 18.5đ)",
+        minCutoff: 18.0,
+        replacesHighMajor: "Kinh doanh quốc tế / Marketing",
         primaryWeight: 0.65,
         secondaryWeight: 0.35,
         gaps: ["Vận hành chuỗi cung ứng", "SEO & Digital Ads", "Tài chính số"],
         summary:
           "Giao thoa giữa tư duy kinh doanh hiện đại và vận hành nền tảng số đa kênh.",
       },
+      {
+        id: "commercial-business",
+        code: "340121",
+        name: "Kinh doanh thương mại",
+        university: "Khối A00, A01, D01 · Chuẩn TT74/2026 (Tiêu chuẩn ≥ 15.5đ)",
+        minCutoff: 15.0,
+        replacesHighMajor: "Kinh doanh quốc tế / Marketing",
+        primaryWeight: 0.6,
+        secondaryWeight: 0.4,
+        gaps: ["Nghiệp vụ bán hàng", "Quản trị bán lẻ", "Giao tiếp khách hàng"],
+        summary:
+          "Phương án vừa sức trong cùng nhóm Kinh doanh (3401), sát thực tế thị trường và có cơ hội việc làm rộng mở.",
+      },
     ],
   },
   {
-    field_name: "Công nghệ kỹ thuật",
+    field_name: "Kỹ thuật & Công nghệ kỹ thuật",
     icon: "⚙️",
     primaryDim: "R",
     secondaryDim: "I",
     majors: [
       {
-        id: "automation-tech",
-        code: "7510301",
-        name: "Công nghệ kỹ thuật điều khiển & Tự động hóa",
-        university: "Khối A00, A01 · Chuẩn Bộ GD&ĐT",
-        primaryWeight: 0.7,
-        secondaryWeight: 0.3,
-        gaps: ["Vi điều khiển", "Hệ thống nhúng", "Bản vẽ kỹ thuật"],
+        id: "ic-design",
+        code: "520202",
+        name: "Thiết kế vi mạch",
+        university: "Khối A00, A01 · Chuẩn TT74/2026 (Cạnh tranh cao ≥ 24.5đ)",
+        minCutoff: 24.0,
+        primaryWeight: 0.55,
+        secondaryWeight: 0.45,
+        gaps: ["Vật lý bán dẫn", "Thiết kế mạch số", "Tiếng Anh kỹ thuật"],
         summary:
-          "Thế mạnh ở nhóm Thực tế (R) và môn Vật lý - Toán tạo bệ phóng vững chắc cho hệ thống robot & tự động hóa.",
+          "Ngành mũi nhọn chiến lược cho học sinh xuất sắc khối Tự nhiên và đam mê phần cứng vi mạch.",
       },
       {
         id: "electronics-telecom",
-        code: "7520207",
+        code: "520207",
         name: "Kỹ thuật điện tử - viễn thông",
-        university: "Khối A00, A01 · Chuẩn Bộ GD&ĐT",
+        university: "Khối A00, A01 · Chuẩn TT74/2026 (Khá ≥ 19.5đ)",
+        minCutoff: 19.0,
+        replacesHighMajor: "Thiết kế vi mạch (≥ 24.5đ)",
         primaryWeight: 0.6,
         secondaryWeight: 0.4,
         gaps: ["Mạch điện tử", "Xử lý tín hiệu số", "IoT thực hành"],
         summary:
           "Phù hợp với học sinh yêu thích thiết bị phần cứng, vi mạch và mạng truyền thông thế hệ mới.",
+      },
+      {
+        id: "automation-tech",
+        code: "510303",
+        name: "Công nghệ kỹ thuật điều khiển & Tự động hóa",
+        university: "Khối A00, A01, C01 · Chuẩn TT74/2026 (Tiêu chuẩn ≥ 15.5đ)",
+        minCutoff: 15.0,
+        replacesHighMajor: "Thiết kế vi mạch / Kỹ thuật cơ điện tử (Lĩnh vực 52)",
+        primaryWeight: 0.7,
+        secondaryWeight: 0.3,
+        gaps: ["Vi điều khiển PLC", "Hệ thống nhúng", "Bản vẽ kỹ thuật"],
+        summary:
+          "Chuyển dịch sang nhánh Công nghệ Kỹ thuật ứng dụng (5103): giữ trọn đam mê kỹ thuật với điểm chuẩn vừa sức.",
       },
     ],
   },
@@ -185,10 +262,24 @@ const DYNAMIC_FIELD_TEMPLATES: DynamicFieldTemplate[] = [
     secondaryDim: "S",
     majors: [
       {
+        id: "multimedia-comm",
+        code: "320104",
+        name: "Truyền thông đa phương tiện",
+        university: "Khối D01, C00, A01 · Chuẩn TT74/2026 (Khá ≥ 21.0đ)",
+        minCutoff: 20.5,
+        primaryWeight: 0.55,
+        secondaryWeight: 0.45,
+        gaps: ["Kịch bản truyền thông", "Sản xuất nội dung số", "Kỹ năng thuyết trình"],
+        summary:
+          "Kết hợp khả năng sáng tạo nội dung (A) và thấu cảm kết nối cộng đồng (S).",
+      },
+      {
         id: "graphic-design",
-        code: "7210403",
-        name: "Thiết kế đồ họa & Đa phương tiện",
-        university: "Khối D01, H00, V00 · Chuẩn Bộ GD&ĐT",
+        code: "210403",
+        name: "Thiết kế đồ họa",
+        university: "Khối D01, H00, V00 · Chuẩn TT74/2026 (Vừa sức ≥ 18.0đ)",
+        minCutoff: 17.5,
+        replacesHighMajor: "Truyền thông đa phương tiện",
         primaryWeight: 0.75,
         secondaryWeight: 0.25,
         gaps: ["Tư duy thị giác", "Bố cục màu sắc", "Công cụ thiết kế số"],
@@ -196,15 +287,17 @@ const DYNAMIC_FIELD_TEMPLATES: DynamicFieldTemplate[] = [
           "Tối ưu cho nhóm Nghệ thuật (A) nổi trội, yêu thích sáng tạo hình ảnh, UI/UX và truyền thông thị giác.",
       },
       {
-        id: "multimedia-comm",
-        code: "7320104",
-        name: "Truyền thông đa phương tiện",
-        university: "Khối D01, C00, A01 · Chuẩn Bộ GD&ĐT",
-        primaryWeight: 0.55,
-        secondaryWeight: 0.45,
-        gaps: ["Kịch bản truyền thông", "Sản xuất nội dung số", "Kỹ năng thuyết trình"],
+        id: "media-tech",
+        code: "320106",
+        name: "Công nghệ truyền thông",
+        university: "Khối D01, C00, A01 · Chuẩn TT74/2026 (Tiêu chuẩn ≥ 15.5đ)",
+        minCutoff: 15.0,
+        replacesHighMajor: "Truyền thông đa phương tiện",
+        primaryWeight: 0.65,
+        secondaryWeight: 0.35,
+        gaps: ["Sản xuất media", "Thiết kế đa phương tiện", "Quản trị kênh số"],
         summary:
-          "Kết hợp khả năng sáng tạo nội dung (A) và thấu cảm kết nối cộng đồng (S).",
+          "Phương án vừa sức trong cùng nhóm Báo chí & Truyền thông (3201), chú trọng kỹ năng thực hành.",
       },
     ],
   },
@@ -216,14 +309,41 @@ const DYNAMIC_FIELD_TEMPLATES: DynamicFieldTemplate[] = [
     majors: [
       {
         id: "psychology",
-        code: "7310401",
+        code: "310401",
         name: "Tâm lý học",
-        university: "Khối B00, C00, D01 · Chuẩn Bộ GD&ĐT",
+        university: "Khối B00, C00, D01 · Chuẩn TT74/2026 (Khá ≥ 21.0đ)",
+        minCutoff: 20.5,
         primaryWeight: 0.7,
         secondaryWeight: 0.3,
         gaps: ["Kỹ năng lắng nghe sâu", "Phương pháp nghiên cứu tâm lý", "Thống kê xã hội"],
         summary:
           "Phù hợp cao với nhóm Xã hội (S), giàu sự đồng cảm, lắng nghe và hỗ trợ phát triển con người.",
+      },
+      {
+        id: "ed-tech",
+        code: "140103",
+        name: "Công nghệ giáo dục",
+        university: "Khối D01, C00, A01 · Chuẩn TT74/2026 (Vừa sức ≥ 18.0đ)",
+        minCutoff: 17.5,
+        replacesHighMajor: "Sư phạm / Tâm lý học",
+        primaryWeight: 0.65,
+        secondaryWeight: 0.35,
+        gaps: ["Thiết kế học liệu số", "Hệ thống LMS", "Sư phạm tương tác"],
+        summary:
+          "Ngành hiện đại thuộc nhóm Khoa học giáo dục (1401), điểm chuẩn vừa sức và không bị áp lực điểm chuẩn Sư phạm.",
+      },
+      {
+        id: "social-work",
+        code: "760101",
+        name: "Công tác xã hội",
+        university: "Khối C00, D01 · Chuẩn TT74/2026 (Tiêu chuẩn ≥ 15.0đ)",
+        minCutoff: 15.0,
+        replacesHighMajor: "Tâm lý học / Sư phạm",
+        primaryWeight: 0.75,
+        secondaryWeight: 0.25,
+        gaps: ["Tham vấn cộng đồng", "Giao tiếp xã hội", "Quản lý dự án xã hội"],
+        summary:
+          "Phương án an toàn cho học sinh nhóm Xã hội (S), phát huy trọn vẹn năng lực hỗ trợ cộng đồng.",
       },
     ],
   },
@@ -234,15 +354,42 @@ const DYNAMIC_FIELD_TEMPLATES: DynamicFieldTemplate[] = [
     secondaryDim: "E",
     majors: [
       {
+        id: "fintech",
+        code: "340205",
+        name: "Công nghệ tài chính (Fintech)",
+        university: "Khối A00, A01, D01 · Chuẩn TT74/2026 (Cạnh tranh cao ≥ 24.0đ)",
+        minCutoff: 23.5,
+        primaryWeight: 0.6,
+        secondaryWeight: 0.4,
+        gaps: ["Phân tích dữ liệu tài chính", "Thuật toán định lượng", "Ngân hàng số"],
+        summary:
+          "Ngành mũi nhọn kết hợp Nghiệp vụ tài chính (C) và Công nghệ số hiện đại.",
+      },
+      {
         id: "finance-banking",
-        code: "7340201",
+        code: "340201",
         name: "Tài chính - Ngân hàng",
-        university: "Khối A00, A01, D01 · Chuẩn Bộ GD&ĐT",
+        university: "Khối A00, A01, D01 · Chuẩn TT74/2026 (Khá ≥ 19.5đ)",
+        minCutoff: 19.0,
+        replacesHighMajor: "Công nghệ tài chính (Fintech)",
         primaryWeight: 0.65,
         secondaryWeight: 0.35,
         gaps: ["Phân tích báo cáo tài chính", "Kinh tế lượng", "Quản trị rủi ro"],
         summary:
           "Phát huy tối đa tính chính xác, hệ thống của nhóm Nghiệp vụ (C) và tư duy chiến lược (E).",
+      },
+      {
+        id: "accounting",
+        code: "340301",
+        name: "Kế toán",
+        university: "Khối A00, A01, D01 · Chuẩn TT74/2026 (Tiêu chuẩn ≥ 15.5đ)",
+        minCutoff: 15.0,
+        replacesHighMajor: "Tài chính - Ngân hàng / Fintech",
+        primaryWeight: 0.7,
+        secondaryWeight: 0.3,
+        gaps: ["Chuẩn mực kế toán", "Excel & Phần mềm ERP", "Kiểm soát nội bộ"],
+        summary:
+          "Phương án an toàn và ổn định cao cho học sinh có thiên hướng Nghiệp vụ (C).",
       },
     ],
   },
@@ -415,6 +562,7 @@ export function Dashboard() {
     if (!assessment.scores || assessment.scores.length < 3) {
       return {
         block: "Khối A00",
+        rawSum: 25.0,
         zScore: "+1.18",
         percentile: "Top 12%",
       }
@@ -461,7 +609,12 @@ export function Dashboard() {
           : z >= 0.3
             ? "Top 30%"
             : "Top 45%"
-    return { block: best.name, zScore: zStr, percentile: pct }
+    return {
+      block: best.name,
+      rawSum: Number(best.sum.toFixed(1)),
+      zScore: zStr,
+      percentile: pct,
+    }
   }, [assessment.scores])
 
   const cognitiveScorePct = useMemo(() => {
@@ -469,16 +622,28 @@ export function Dashboard() {
     return Math.min(96, 82 + Math.min(14, cogCount * 2))
   }, [assessment.cognitive])
 
-  // Dynamically compute 2-Tier Funnel Recommendations based on the active assessment attempt
+  // Dynamically compute 2-Tier Funnel Recommendations with Hard Academic Cutoff & Sibling Substitution
   const displayedFunnel: FunnelRecommendationData = useMemo(() => {
     const dimMap = Object.fromEntries(
       displayedRiasec.map((d) => [d.key, d]),
     )
+    const studentBestSum = bestBlockStats.rawSum
+
     const computedFields = DYNAMIC_FIELD_TEMPLATES.map((tpl) => {
       const pDim = dimMap[tpl.primaryDim] || { value: 75, academicValue: 75 }
       const sDim = dimMap[tpl.secondaryDim] || { value: 70, academicValue: 70 }
 
-      const computedMajors: Major[] = tpl.majors
+      // Hard Gatekeeper: Filter OUT high-cutoff majors if student's score is below minCutoff
+      const eligibleTemplates = tpl.majors.filter(
+        (m) => studentBestSum >= m.minCutoff,
+      )
+      const hadBlockedHighMajor = eligibleTemplates.length < tpl.majors.length
+      const activeTemplates =
+        eligibleTemplates.length > 0
+          ? eligibleTemplates
+          : [tpl.majors[tpl.majors.length - 1]]
+
+      const computedMajors: Major[] = activeTemplates
         .map((m) => {
           const interestFit = Math.min(
             99,
@@ -489,13 +654,17 @@ export function Dashboard() {
               ),
             ),
           )
+          // Target-Anchored Academic Fit: reward majors whose cutoff aligns with student's score
+          const gap = studentBestSum - m.minCutoff
+          const anchoredBoost = gap >= 0 && gap <= 4.5 ? 6 : 0
           const academicFit = Math.min(
             99,
             Math.max(
               55,
               Math.round(
                 (pDim.academicValue ?? pDim.value) * m.primaryWeight +
-                  (sDim.academicValue ?? sDim.value) * m.secondaryWeight,
+                  (sDim.academicValue ?? sDim.value) * m.secondaryWeight +
+                  anchoredBoost,
               ),
             ),
           )
@@ -509,8 +678,11 @@ export function Dashboard() {
               ),
             ),
           )
-          const feasibility: "TARGET" | "REACH" =
-            academicFit >= 75 ? "TARGET" : "REACH"
+
+          const substitutionNote =
+            hadBlockedHighMajor && m.replacesHighMajor
+              ? `\n\n> **Đề xuất thay thế vừa sức:** Do tổng điểm hiện tại (**${studentBestSum}đ** - ${bestBlockStats.block}) chưa đủ ngưỡng an toàn của ngành *${m.replacesHighMajor}*, hệ thống tự động đề xuất ngành tương đồng **${m.name}** (điểm sàn tham chiếu **≥ ${m.minCutoff}đ**) để tối ưu cơ hội trúng tuyển.`
+              : ""
 
           return {
             id: m.id,
@@ -519,13 +691,13 @@ export function Dashboard() {
             category: tpl.field_name,
             university: m.university,
             match: totalMatch,
-            feasibility,
+            feasibility: "TARGET" as const,
             fit: {
               interest: interestFit,
               academic: academicFit,
               cognitive: cogFit,
             },
-            explanation: `### Vì sao phù hợp?\n${m.summary} (Độ tương thích Sở thích **${interestFit}%**, Học lực **${academicFit}%**, Nhận thức **${cogFit}%**).`,
+            explanation: `### Vì sao phù hợp?\n${m.summary} (Độ tương thích Sở thích **${interestFit}%**, Học lực **${academicFit}%**, Nhận thức **${cogFit}%**).${substitutionNote}`,
             gaps: m.gaps,
           }
         })
@@ -544,7 +716,7 @@ export function Dashboard() {
         icon: tpl.icon,
         match: fieldMatch,
         majors_count: computedMajors.length,
-        majors: computedMajors,
+        majors: computedMajors.slice(0, 3),
       }
     })
       .sort((a, b) => b.match - a.match)
@@ -555,7 +727,7 @@ export function Dashboard() {
       tier1_fields: computedFields,
       all_majors: allMajors,
     }
-  }, [displayedRiasec, cognitiveScorePct])
+  }, [displayedRiasec, cognitiveScorePct, bestBlockStats])
 
   const categories = useMemo(() => {
     const set = new Set<string>()

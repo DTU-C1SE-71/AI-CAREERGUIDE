@@ -464,3 +464,147 @@ class TestPerformanceBenchmark:
         assert elapsed_time < 2.0, f"Scoring exceeded 2.0s limit: took {elapsed_time:.3f}s"
         assert len(scored_majors) == len(MAJORS_DATA)
         assert scored_majors[0][1] >= scored_majors[-1][1], "Sorting must be descending"
+
+
+# =========================================================================
+# 9. ENHANCED 3-PILLAR, HARD CUTOFF SUBSTITUTION & TT74 EXCEL IMPORTER TESTS
+# =========================================================================
+
+class TestEnhancedThreePillarAndImporter:
+    def test_enhanced_riasec_fit_and_flat_profile_dampening(self):
+        from app.services.recommender.engine import calculate_enhanced_riasec_fit
+
+        focused_student = {"R": 0.85, "I": 0.95, "A": 0.15, "S": 0.20, "E": 0.25, "C": 0.40}
+        flat_student = {"R": 0.50, "I": 0.50, "A": 0.50, "S": 0.50, "E": 0.50, "C": 0.50}
+        cs_major = {"R": 0.80, "I": 0.95, "A": 0.20, "S": 0.25, "E": 0.30, "C": 0.65}
+
+        score_focused = calculate_enhanced_riasec_fit(focused_student, cs_major)
+        score_flat = calculate_enhanced_riasec_fit(flat_student, cs_major)
+        assert score_focused > 0.90
+        assert score_flat < score_focused
+
+    def test_target_anchored_academic_fit_and_hard_cutoff(self):
+        from app.services.recommender.engine import evaluate_target_anchored_academic_fit
+
+        student_low = {
+            "A00": {"score_academic": 0.45, "z_score": -0.2, "raw_sum": 20.5},
+        }
+        score_high, _, bd_high = evaluate_target_anchored_academic_fit(
+            ["A00"], student_low, benchmark_cutoff=27.5, min_recommended=25.0
+        )
+        score_low, _, bd_low = evaluate_target_anchored_academic_fit(
+            ["A00"], student_low, benchmark_cutoff=21.0, min_recommended=19.5
+        )
+        assert bd_high["safety_tier"] == "REACH"
+        assert bd_low["safety_tier"] == "TARGET"
+        assert score_low > score_high
+
+    def test_asymmetric_cognitive_overqualification_is_not_penalized(self):
+        from app.services.recommender.engine import calculate_asymmetric_cognitive_fit
+
+        high_student = {
+            "abstract_thinking": "high",
+            "analytical_reasoning": "high",
+            "spatial_perception": "high",
+            "linguistic_ability": "high",
+            "learning_environment": "structured",
+            "teamwork_intensity": "balanced",
+        }
+        medium_major = {
+            "abstract_thinking": "medium",
+            "analytical_reasoning": "medium",
+            "spatial_perception": "low",
+            "linguistic_ability": "medium",
+            "learning_environment": "structured",
+            "teamwork_intensity": "balanced",
+        }
+        score = calculate_asymmetric_cognitive_fit(high_student, medium_major)
+        assert pytest.approx(score, rel=1e-4) == 1.0
+
+    def test_related_pathway_substitution_matching(self):
+        from app.services.recommender.engine import are_majors_related_pathway
+
+        # Same 4-digit group: Khoa học máy tính (7480101) vs Hệ thống thông tin (7480104)
+        assert are_majors_related_pathway("7480101", "7480104") == 3
+        # Engineering (52) -> Engineering Tech (51)
+        assert are_majors_related_pathway("7520201", "7510301") == 2
+        # Medical (720101) -> Medical Lab Tech (720601)
+        assert are_majors_related_pathway("720101", "720601") >= 1
+        # Unrelated: Khoa học máy tính (7480101) vs Hội họa (7210103)
+        assert are_majors_related_pathway("7480101", "7210103") == 0
+
+    def test_tt74_excel_auto_cip_and_riasec_enrichment(self):
+        import importlib.util
+        from pathlib import Path
+
+        ref_path = (
+            Path(__file__).resolve().parents[1]
+            / "app"
+            / "services"
+            / "taxonomy"
+            / "tt74_reference.py"
+        )
+        spec = importlib.util.spec_from_file_location("tt74_reference", ref_path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+
+        # Minimal input with only major_code & major_name
+        enriched = mod.auto_enrich_major_record({
+            "major_code": "480101",
+            "major_name": "Khoa học máy tính",
+        })
+        assert enriched["field_code"] == "48"
+        assert enriched["group_code"] == "4801"
+        assert enriched["cip_code"].startswith("11.07")
+        assert enriched["holland_code"] == "IRC"
+        assert enriched["riasec_vector"]["I"] >= 0.90
+
+        template_path = (
+            Path(__file__).resolve().parents[1]
+            / "app"
+            / "db"
+            / "seeds"
+            / "MOET_Major_Import_Template_Standard.xlsx"
+        )
+        assert template_path.exists()
+        parsed = mod.parse_excel_or_csv_majors(
+            template_path.read_bytes(), template_path.name
+        )
+        assert len(parsed) >= 14
+        assert all("cip_code" in m and "riasec_vector" in m for m in parsed)
+
+    def test_cognitive_8_question_mapper_to_pillar3(self):
+        from app.services.recommender.engine import (
+            normalize_student_cognitive_traits,
+            calculate_asymmetric_cognitive_fit,
+        )
+
+        # Student selecting strong analytical/STEM options across COG_1..COG_8
+        raw_cog = {
+            "COG_1": "B",  # LEARN_THEORETICAL_ANALYTICAL
+            "COG_2": "A",  # ENV_LAB_DIGITAL_QUIET
+            "COG_3": "A",  # SOLVE_QUANTITATIVE_LOGIC
+            "COG_4": "A",  # TARGET_SYSTEMS_MACHINES
+            "COG_5": "A",  # GARDNER_LOGICAL_MATH
+            "COG_6": "C",  # PRESSURE_DEEP_RND_COMPLEXITY
+            "COG_7": "A",  # OUTPUT_TANGIBLE_TECH_SYSTEM
+            "COG_8": "A",  # ROLE_TECHNICAL_SPECIALIST
+        }
+        mapped = normalize_student_cognitive_traits(raw_cog)
+        assert mapped["analytical_reasoning"] == "high"
+        assert mapped["abstract_thinking"] == "high"
+        assert mapped["spatial_perception"] in ("medium", "high")
+        assert mapped["learning_environment"] == "independent"
+        assert mapped["teamwork_intensity"] == "independent"
+
+        cs_major_attr = {
+            "abstract_thinking": "high",
+            "analytical_reasoning": "high",
+            "spatial_perception": "medium",
+            "linguistic_ability": "medium",
+            "learning_environment": "independent",
+            "teamwork_intensity": "independent",
+        }
+        fit_score = calculate_asymmetric_cognitive_fit(raw_cog, cs_major_attr)
+        assert fit_score >= 0.85
+
