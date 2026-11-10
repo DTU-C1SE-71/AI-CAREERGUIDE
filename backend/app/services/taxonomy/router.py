@@ -15,6 +15,7 @@ from app.services.taxonomy import service
 from app.services.taxonomy.tt74_reference import (
     auto_enrich_major_record,
     parse_excel_or_csv_majors,
+    parse_excel_or_csv_sheets,
 )
 
 router = APIRouter(prefix="/taxonomy", tags=["Taxonomy & Pure Guidance Catalog"])
@@ -97,7 +98,7 @@ class PublishMajorsPayload(BaseModel):
 async def download_standard_excel_template():
     """
     Downloads the official standardized MOET Major Excel Template (.xlsx)
-    containing 19 standard columns, 435 TT74/2026 majors, 94 group lookup rules, and AI prompt guide.
+    containing 19 standard columns with field descriptions, CIP/RIASEC group reference, and AI prompt guide.
     """
     from pathlib import Path
     seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"
@@ -117,6 +118,8 @@ async def download_standard_excel_template():
 @router.post("/import-excel", status_code=status.HTTP_200_OK)
 async def import_majors_from_excel(
     file: UploadFile = File(...),
+    preview_only: bool = Query(default=False),
+    sheet_name: Optional[str] = Query(default=None),
     circular_title: str = Query(default="Thông tư 74/2026/TT-BGDĐT"),
     circular_code: str = Query(default="74/2026/TT-BGDĐT"),
     db: AsyncSession = Depends(get_db)
@@ -125,17 +128,38 @@ async def import_majors_from_excel(
     Standardized Excel/CSV Import Endpoint (No LLM / No Manual Entry Required).
     Automatically parses uploaded Excel/CSV, maps 4-digit group codes to CIP & Holland RIASEC,
     fine-tunes vectors by major keywords, and syncs directly to PostgreSQL & active seed catalog.
+    Supports preview_only=true and sheet_name selection for multi-sheet workbooks.
     """
     import json
+    import time
     from pathlib import Path
 
+    t0 = time.perf_counter()
     file_bytes = await file.read()
-    enriched_majors = parse_excel_or_csv_majors(file_bytes, file.filename or "upload.xlsx")
+    active_sheet, enriched_majors, all_sheets = parse_excel_or_csv_sheets(
+        file_bytes, file.filename or "upload.xlsx", preferred_sheet=sheet_name
+    )
+    parse_ms = round((time.perf_counter() - t0) * 1000, 1)
+
     if not enriched_majors:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Không tìm thấy dòng mã ngành hợp lệ (6 hoặc 7 chữ số) trong file tải lên."
         )
+
+    if preview_only:
+        return {
+            "status": "preview",
+            "filename": file.filename,
+            "sheet_name": active_sheet,
+            "parse_ms": parse_ms,
+            "circular_title": circular_title,
+            "circular_code": circular_code,
+            "total": len(enriched_majors),
+            "persisted_to_db": False,
+            "majors": enriched_majors,
+            "sheets": all_sheets,
+        }
 
     persisted_to_db = False
     res = {"inserted": 0, "updated": len(enriched_majors)}
@@ -161,13 +185,15 @@ async def import_majors_from_excel(
     return {
         "status": "success",
         "filename": file.filename,
+        "sheet_name": active_sheet,
+        "parse_ms": parse_ms,
         "circular_title": circular_title,
         "circular_code": circular_code,
         "inserted": res.get("inserted", 0),
         "updated": res.get("updated", len(enriched_majors)),
         "total": len(enriched_majors),
         "persisted_to_db": persisted_to_db,
-        "preview": enriched_majors[:15],
+        "majors": enriched_majors,
     }
 
 
