@@ -201,7 +201,8 @@ async def get_active_questionnaire_set(db: Optional[AsyncSession] = None) -> Ass
 async def process_assessment_submission(
     db: Optional[AsyncSession],
     user_id: uuid.UUID,
-    payload: AssessmentSubmissionRequest
+    payload: AssessmentSubmissionRequest,
+    persist_to_db: bool = True,
 ) -> AssessmentSubmissionResponse:
     """
     100% Deterministic Mathematical Scoring Engine (FR02, NFR04):
@@ -297,8 +298,8 @@ async def process_assessment_submission(
     submission_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
 
-    # 4. Save to Database if DB Session is active
-    if db is not None:
+    # 4. Save to Database if DB Session is active and user exists
+    if db is not None and persist_to_db:
         try:
             submission = StudentAssessmentSubmission(
                 id=submission_id,

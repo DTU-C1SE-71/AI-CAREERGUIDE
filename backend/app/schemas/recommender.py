@@ -10,7 +10,7 @@ class RecommendationRequest(BaseModel):
         default=None,
         description="Optional custom weights: {'w_riasec': 0.45, 'w_academic': 0.35, 'w_preference': 0.20}"
     )
-    top_k: int = Field(default=10, ge=1, le=50)
+    top_k: int = Field(default=10, ge=1, le=500)
 
 
 class MajorRecommendationItem(BaseModel):
@@ -44,19 +44,23 @@ class MajorRecommendationItem(BaseModel):
     explanation: str = Field(
         description="Transparent, deterministic XAI breakdown of why this major was recommended"
     )
-    # Solution B: Dynamic Academic Clustering & Admission Feasibility
+    # Phân tầng khả thi & Ràng buộc điểm (Solution B + Multi-Layer Gatekeeper)
     feasibility_tier: Optional[str] = Field(
         default="TARGET",
-        description="TARGET (Vừa sức), REACH (Thử thách/Mơ ước), or ALTERNATIVE"
+        description="TARGET (Vừa sức/An toàn) hoặc REACH (Thử thách/Chưa đạt ngưỡng)"
     )
     feasibility_label: Optional[str] = Field(default="Vừa sức / Khả thi cao")
     benchmark_cutoff: Optional[float] = Field(default=None)
+    min_recommended: Optional[float] = Field(default=None)
+    best_block_score: Optional[float] = Field(default=None)
     score_gap: Optional[float] = Field(default=None)
+    constraint_passed: bool = Field(default=True)
+    constraint_violations: List[str] = Field(default_factory=list)
     admission_advice: Optional[str] = Field(default=None)
     academic_tier: Optional[str] = Field(default="STANDARD_COMPETITION")
     academic_tier_label: Optional[str] = Field(default="Vừa sức / Tiêu chuẩn")
 
-    # Frontend Compatibility Fields (Natively matches FE Major interface)
+    # Tương thích ngược với DTO Frontend
     id: Optional[str] = None
     code: Optional[str] = None
     name: Optional[str] = None
@@ -89,8 +93,24 @@ class MajorRecommendationItem(BaseModel):
                 "Tư duy thuật toán", "Tiếng Anh chuyên ngành", "Kỹ năng làm dự án"
             ]
         if not self.university:
-            self.university = f"Khối {self.best_matching_block}" if self.best_matching_block else "Chuẩn Bộ GD&ĐT"
+            if self.best_matching_block and self.benchmark_cutoff:
+                self.university = f"Khối {self.best_matching_block} · Chuẩn ~{self.benchmark_cutoff}đ"
+            elif self.best_matching_block:
+                self.university = f"Khối {self.best_matching_block}"
+            else:
+                self.university = "Chuẩn Bộ GD&ĐT"
         return self
+
+
+class EvaluateProfileRequest(BaseModel):
+    """Yêu cầu đánh giá trực tiếp 435 ngành từ hồ sơ bài test (hoặc tự nạp từ CSDL của user)."""
+    riasec_scores: Optional[Dict[str, float]] = None
+    riasec_answers: Optional[Dict[str, int]] = None
+    cognitive_preferences: Optional[Dict[str, Any]] = None
+    cognitive_answers: Optional[Dict[str, Any]] = None
+    grades_by_subject: Optional[Dict[str, float]] = None
+    custom_weights: Optional[Dict[str, float]] = None
+    top_k: int = Field(default=15, ge=1, le=500)
 
 
 class RecommendationResponse(BaseModel):

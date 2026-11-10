@@ -484,7 +484,7 @@ export function AssessmentWizard() {
     setStep(1)
   }
 
-  const handleCompleteAssessment = () => {
+  const handleCompleteAssessment = async () => {
     const finalAnswers: Record<string, number> = { ...assessment.answers }
     CANONICAL_30_CODES.forEach((code, idx) => {
       const val = finalAnswers[code] ?? finalAnswers[`1-${idx}`]
@@ -524,24 +524,34 @@ export function AssessmentWizard() {
       if (val) cogMap[q.code] = String(val)
     })
 
-    apiRequest("/assessment/submit", null, {
-      method: "POST",
-      body: JSON.stringify({
-        riasec_answers: riasecMap,
-        cognitive_answers: cogMap,
-      }),
-    }).catch((err) => console.log("Background submit response:", err))
-
-    if (Object.keys(scores).length > 0) {
-      apiRequest("/assessment/grades", null, {
+    // Đồng bộ kết quả đánh giá và điểm học lực xuống Backend trước khi mở Dashboard
+    const pendingSyncs: Array<Promise<unknown>> = [
+      apiRequest("/assessment/submit", null, {
         method: "POST",
         body: JSON.stringify({
-          academic_year: "2025-2026",
-          semester: "HK1-L12",
-          grades: scores,
+          riasec_answers: riasecMap,
+          cognitive_answers: cogMap,
         }),
-      }).catch((err) => console.log("Background grades submit notice:", err))
+      }),
+    ]
+
+    if (Object.keys(scores).length > 0) {
+      pendingSyncs.push(
+        apiRequest("/assessment/grades", null, {
+          method: "POST",
+          body: JSON.stringify({
+            academic_year: "2025-2026",
+            semester: "HK1-L12",
+            grades: scores,
+          }),
+        })
+      )
     }
+
+    await Promise.race([
+      Promise.allSettled(pendingSyncs),
+      new Promise((resolve) => window.setTimeout(resolve, 1200)),
+    ])
 
     confetti({
       particleCount: 75,

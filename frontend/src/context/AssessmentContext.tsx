@@ -109,32 +109,16 @@ export function summarizeAssessmentAttempt(
   const archetype = ARCHETYPES[topKey] || "Nhà nghiên cứu xã hội & Khoa học"
 
   const sm = Object.fromEntries((scores || []).map((s) => [s.subject, s.score]))
+  const g = (subj: string) => (typeof sm[subj] === "number" ? sm[subj] : 0)
   const blocks = [
-    {
-      name: "Khối A00",
-      sum: (sm["Toán"] || 7.5) + (sm["Vật lý"] || 7.5) + (sm["Hóa học"] || 7.5),
-    },
-    {
-      name: "Khối A01",
-      sum:
-        (sm["Toán"] || 7.5) +
-        (sm["Vật lý"] || 7.5) +
-        (sm["Tiếng Anh"] || 7.5),
-    },
-    {
-      name: "Khối D01",
-      sum:
-        (sm["Toán"] || 7.5) +
-        (sm["Ngữ văn"] || 7.5) +
-        (sm["Tiếng Anh"] || 7.5),
-    },
-    {
-      name: "Khối B00",
-      sum:
-        (sm["Toán"] || 7.5) +
-        (sm["Hóa học"] || 7.5) +
-        (sm["Sinh học"] || 7.5),
-    },
+    { name: "Khối A00", sum: g("Toán") + g("Vật lý") + g("Hóa học") },
+    { name: "Khối A01", sum: g("Toán") + g("Vật lý") + g("Tiếng Anh") },
+    { name: "Khối B00", sum: g("Toán") + g("Hóa học") + g("Sinh học") },
+    { name: "Khối C00", sum: g("Ngữ văn") + g("Lịch sử") + g("Địa lý") },
+    { name: "Khối D01", sum: g("Toán") + g("Ngữ văn") + g("Tiếng Anh") },
+    { name: "Khối D07", sum: g("Toán") + g("Hóa học") + g("Tiếng Anh") },
+    { name: "Khối D14", sum: g("Ngữ văn") + g("Lịch sử") + g("Tiếng Anh") },
+    { name: "Khối D15", sum: g("Ngữ văn") + g("Địa lý") + g("Tiếng Anh") },
   ].sort((a, b) => b.sum - a.sum)
 
   const bestBlock = blocks[0]?.name || "Khối A00"

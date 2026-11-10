@@ -223,9 +223,24 @@ async def bulk_sync_majors(db: AsyncSession, majors_data: List[dict]) -> dict:
     inserted_count = 0
     updated_count = 0
 
-    # Cache existing subject blocks
+    # Cache existing subject blocks & auto-create missing standard blocks
+    from app.services.recommender.engine import STANDARD_SUBJECT_BLOCKS
+
     sb_result = await db.execute(select(SubjectBlock))
     block_map = {b.block_code: b for b in sb_result.scalars().all()}
+    for b_code, b_meta in STANDARD_SUBJECT_BLOCKS.items():
+        if b_code not in block_map:
+            new_blk = SubjectBlock(
+                id=uuid.uuid4(),
+                block_code=b_code,
+                name=b_meta["name"],
+                subjects=b_meta["subjects"],
+                national_mean=float(b_meta["national_mean"]),
+                national_std=float(b_meta["national_std"]),
+            )
+            db.add(new_blk)
+            await db.flush()
+            block_map[b_code] = new_blk
 
     for item in majors_data:
         code = item["major_code"]

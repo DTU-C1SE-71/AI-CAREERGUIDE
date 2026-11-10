@@ -31,10 +31,21 @@ import {
   type RiasecRadarPoint,
 } from "../services/mockData"
 import type { FunnelRecommendationData, Major } from "../types/major"
+import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
+
+interface BestBlockStatsPayload {
+  block: string
+  raw_sum?: number | null
+  z_score?: string
+  percentile?: string
+  failing_subjects?: string[]
+}
 
 interface DashboardOverviewPayload {
+  has_assessment?: boolean
   user_name?: string
   riasecData?: RiasecRadarPoint[]
+  bestBlockStats?: BestBlockStatsPayload | null
   scoreBarData?: Array<{ name: string; value: number }>
   majors?: Major[]
   funnel?: FunnelRecommendationData
@@ -443,16 +454,23 @@ export function Dashboard() {
   useEffect(() => {
     let mounted = true
     if (hasCompletedAssessment) {
+      const payload = buildEvaluateProfilePayload(assessment, 435)
       apiRequest<DashboardOverviewPayload | null>(
-        "/recommender/dashboard/overview",
+        "/recommender/evaluate",
         null,
+        {
+          method: "POST",
+          body: JSON.stringify(payload),
+        },
       )
         .then((res) => {
-          if (mounted && res) {
+          if (mounted && res && res.funnel) {
             setData(res)
           }
         })
         .catch(() => {})
+    } else {
+      setData(null)
     }
 
     apiRequest<TaxonomyCatalogItem[] | null>(
@@ -469,7 +487,7 @@ export function Dashboard() {
     return () => {
       mounted = false
     }
-  }, [hasCompletedAssessment])
+  }, [hasCompletedAssessment, assessment.answers, assessment.cognitive, assessment.scores])
 
   useEffect(() => {
     if (searchParams.get("search") === "1" && catalogRef.current) {
@@ -477,12 +495,12 @@ export function Dashboard() {
     }
   }, [searchParams])
 
-  // Merge user's live/selected assessment answers & scores into RIASEC radar data
+  // Merge user's live/selected assessment answers & scores into RIASEC radar data (prioritizing Backend result)
   const displayedRiasec: RiasecRadarPoint[] = useMemo(() => {
-    const base =
-      data?.riasecData && data.riasecData.length > 0
-        ? data.riasecData
-        : fallbackRiasec
+    if (data?.riasecData && data.riasecData.length > 0) {
+      return data.riasecData
+    }
+    const base = fallbackRiasec
 
     const hasUserAnswers = Object.keys(assessment.answers || {}).length >= 3
     const hasUserScores = (assessment.scores || []).length >= 2
@@ -559,84 +577,87 @@ export function Dashboard() {
   }, [top3Dimensions])
 
   const bestBlockStats = useMemo(() => {
+    if (data?.bestBlockStats && data.bestBlockStats.block) {
+      return {
+        block: data.bestBlockStats.block,
+        rawSum: data.bestBlockStats.raw_sum ?? 0,
+        zScore: data.bestBlockStats.z_score ?? "+0.00",
+        percentile: data.bestBlockStats.percentile ?? "Đã chuẩn hóa",
+        failingSubjects: data.bestBlockStats.failing_subjects ?? [],
+      }
+    }
+
     if (!assessment.scores || assessment.scores.length < 3) {
       return {
-        block: "Khối A00",
-        rawSum: 25.0,
-        zScore: "+1.18",
-        percentile: "Top 12%",
+        block: "Chưa đủ môn",
+        rawSum: 0,
+        zScore: "+0.00",
+        percentile: "Chưa tính",
+        failingSubjects: [] as string[],
       }
     }
     const sm = Object.fromEntries(
       assessment.scores.map((s) => [s.subject, s.score]),
     )
+    const failingSubjects = Object.entries(sm)
+      .filter(([, val]) => typeof val === "number" && val <= 1.0)
+      .map(([subj, val]) => `${subj} (${val}đ)`)
+
+    const g = (subj: string) =>
+      typeof sm[subj] === "number" && Number.isFinite(sm[subj]) ? sm[subj] : 0
     const blocks = [
-      {
-        name: "Khối A00",
-        sum: (sm["Toán"] || 7.5) + (sm["Vật lý"] || 7.5) + (sm["Hóa học"] || 7.5),
-      },
-      {
-        name: "Khối A01",
-        sum:
-          (sm["Toán"] || 7.5) +
-          (sm["Vật lý"] || 7.5) +
-          (sm["Tiếng Anh"] || 7.5),
-      },
-      {
-        name: "Khối D01",
-        sum:
-          (sm["Toán"] || 7.5) +
-          (sm["Ngữ văn"] || 7.5) +
-          (sm["Tiếng Anh"] || 7.5),
-      },
-      {
-        name: "Khối B00",
-        sum:
-          (sm["Toán"] || 7.5) +
-          (sm["Hóa học"] || 7.5) +
-          (sm["Sinh học"] || 7.5),
-      },
+      { name: "Khối A00", sum: g("Toán") + g("Vật lý") + g("Hóa học") },
+      { name: "Khối A01", sum: g("Toán") + g("Vật lý") + g("Tiếng Anh") },
+      { name: "Khối B00", sum: g("Toán") + g("Hóa học") + g("Sinh học") },
+      { name: "Khối C00", sum: g("Ngữ văn") + g("Lịch sử") + g("Địa lý") },
+      { name: "Khối D01", sum: g("Toán") + g("Ngữ văn") + g("Tiếng Anh") },
+      { name: "Khối D07", sum: g("Toán") + g("Hóa học") + g("Tiếng Anh") },
+      { name: "Khối D14", sum: g("Ngữ văn") + g("Lịch sử") + g("Tiếng Anh") },
+      { name: "Khối D15", sum: g("Ngữ văn") + g("Địa lý") + g("Tiếng Anh") },
     ].sort((a, b) => b.sum - a.sum)
 
     const best = blocks[0]
-    const z = (best.sum - 21.3) / 3.2
+    const z = (best.sum - 20.5) / 3.2
     const zStr = `${z >= 0 ? "+" : ""}${z.toFixed(2)}`
     const pct =
       z >= 1.2
         ? "Top 10%"
         : z >= 0.8
-          ? "Top 18%"
+          ? "Top 20%"
           : z >= 0.3
-            ? "Top 30%"
-            : "Top 45%"
+            ? "Top 35%"
+            : z >= 0
+              ? "Top 50%"
+              : "Cần bứt phá"
     return {
       block: best.name,
       rawSum: Number(best.sum.toFixed(1)),
       zScore: zStr,
       percentile: pct,
+      failingSubjects,
     }
-  }, [assessment.scores])
+  }, [data?.bestBlockStats, assessment.scores])
 
   const cognitiveScorePct = useMemo(() => {
     const cogCount = Object.keys(assessment.cognitive || {}).length
     return Math.min(96, 82 + Math.min(14, cogCount * 2))
   }, [assessment.cognitive])
 
-  // Dynamically compute 2-Tier Funnel Recommendations with Hard Academic Cutoff & Sibling Substitution
+  // Offline fallback when Backend API is temporarily unavailable
   const displayedFunnel: FunnelRecommendationData = useMemo(() => {
     const dimMap = Object.fromEntries(
       displayedRiasec.map((d) => [d.key, d]),
     )
     const studentBestSum = bestBlockStats.rawSum
+    const hasFailingGrade = bestBlockStats.failingSubjects.length > 0
 
     const computedFields = DYNAMIC_FIELD_TEMPLATES.map((tpl) => {
       const pDim = dimMap[tpl.primaryDim] || { value: 75, academicValue: 75 }
       const sDim = dimMap[tpl.secondaryDim] || { value: 70, academicValue: 70 }
 
-      // Hard Gatekeeper: Filter OUT high-cutoff majors if student's score is below minCutoff
-      const eligibleTemplates = tpl.majors.filter(
-        (m) => studentBestSum >= m.minCutoff,
-      )
+      const eligibleTemplates = !hasFailingGrade
+        ? tpl.majors.filter((m) => studentBestSum >= m.minCutoff)
+        : []
       const hadBlockedHighMajor = eligibleTemplates.length < tpl.majors.length
       const activeTemplates =
         eligibleTemplates.length > 0
@@ -645,43 +666,51 @@ export function Dashboard() {
 
       const computedMajors: Major[] = activeTemplates
         .map((m) => {
+          const isEligible = !hasFailingGrade && studentBestSum >= m.minCutoff
           const interestFit = Math.min(
             99,
             Math.max(
-              55,
+              35,
               Math.round(
                 pDim.value * m.primaryWeight + sDim.value * m.secondaryWeight,
               ),
             ),
           )
-          // Target-Anchored Academic Fit: reward majors whose cutoff aligns with student's score
           const gap = studentBestSum - m.minCutoff
-          const anchoredBoost = gap >= 0 && gap <= 4.5 ? 6 : 0
-          const academicFit = Math.min(
-            99,
-            Math.max(
-              55,
-              Math.round(
-                (pDim.academicValue ?? pDim.value) * m.primaryWeight +
-                  (sDim.academicValue ?? sDim.value) * m.secondaryWeight +
-                  anchoredBoost,
-              ),
-            ),
-          )
+          const academicFit = isEligible
+            ? Math.min(
+                99,
+                Math.max(
+                  55,
+                  Math.round(
+                    (pDim.academicValue ?? pDim.value) * m.primaryWeight +
+                      (sDim.academicValue ?? sDim.value) * m.secondaryWeight +
+                      (gap >= 0 && gap <= 4.5 ? 6 : 0),
+                  ),
+                ),
+              )
+            : Math.max(12, Math.round((studentBestSum / Math.max(15, m.minCutoff)) * 45))
           const cogFit = cognitiveScorePct
           const totalMatch = Math.min(
             98,
             Math.max(
-              58,
+              25,
               Math.round(
                 0.45 * interestFit + 0.35 * academicFit + 0.2 * cogFit,
               ),
             ),
           )
 
+          const violations: string[] = []
+          if (hasFailingGrade) {
+            violations.push(`Vướng điểm liệt: ${bestBlockStats.failingSubjects[0]}`)
+          } else if (studentBestSum < m.minCutoff) {
+            violations.push(`Điểm ${bestBlockStats.block} (${studentBestSum}đ) < ngưỡng ~${m.minCutoff}đ`)
+          }
+
           const substitutionNote =
-            hadBlockedHighMajor && m.replacesHighMajor
-              ? `\n\n> **Đề xuất thay thế vừa sức:** Do tổng điểm hiện tại (**${studentBestSum}đ** - ${bestBlockStats.block}) chưa đủ ngưỡng an toàn của ngành *${m.replacesHighMajor}*, hệ thống tự động đề xuất ngành tương đồng **${m.name}** (điểm sàn tham chiếu **≥ ${m.minCutoff}đ**) để tối ưu cơ hội trúng tuyển.`
+            hadBlockedHighMajor && m.replacesHighMajor && isEligible
+              ? `\n\n> **Đề xuất thay thế vừa sức:** Do tổng điểm hiện tại (**${studentBestSum}đ** - ${bestBlockStats.block}) chưa đủ ngưỡng an toàn của ngành *${m.replacesHighMajor}*, hệ thống đề xuất ngành tương đồng **${m.name}** (điểm sàn tham chiếu **≥ ${m.minCutoff}đ**).`
               : ""
 
           return {
@@ -691,13 +720,19 @@ export function Dashboard() {
             category: tpl.field_name,
             university: m.university,
             match: totalMatch,
-            feasibility: "TARGET" as const,
+            feasibility: isEligible ? ("TARGET" as const) : ("REACH" as const),
+            feasibility_label: isEligible ? "Khả thi cao" : "Thử thách",
+            best_matching_block: bestBlockStats.block.replace("Khối ", ""),
+            best_block_score: studentBestSum,
+            benchmark_cutoff: m.minCutoff,
+            constraint_passed: isEligible,
+            constraint_violations: violations,
             fit: {
               interest: interestFit,
               academic: academicFit,
               cognitive: cogFit,
             },
-            explanation: `### Vì sao phù hợp?\n${m.summary} (Độ tương thích Sở thích **${interestFit}%**, Học lực **${academicFit}%**, Nhận thức **${cogFit}%**).${substitutionNote}`,
+            explanation: `### Vì sao phù hợp?\n${m.summary} (Sở thích **${interestFit}%**, Học lực **${academicFit}%**, Nhận thức **${cogFit}%**).${substitutionNote}`,
             gaps: m.gaps,
           }
         })
@@ -728,6 +763,13 @@ export function Dashboard() {
       all_majors: allMajors,
     }
   }, [displayedRiasec, cognitiveScorePct, bestBlockStats])
+
+  const activeFunnel = useMemo(() => {
+    if (data?.funnel?.tier1_fields && data.funnel.tier1_fields.length > 0) {
+      return data.funnel
+    }
+    return displayedFunnel
+  }, [data?.funnel, displayedFunnel])
 
   const categories = useMemo(() => {
     const set = new Set<string>()
@@ -973,18 +1015,24 @@ export function Dashboard() {
                       <GraduationCap size={17} className="text-sky-600" />
                       <span className="text-xs font-extrabold text-slate-800">
                         {bestBlockStats.block}
+                        {bestBlockStats.rawSum ? ` · ${bestBlockStats.rawSum}đ` : ""}
                       </span>
                     </div>
                     <span className="text-xs font-extrabold text-sky-700">
                       Z-Score {bestBlockStats.zScore} · {bestBlockStats.percentile}
                     </span>
                   </div>
+                  {bestBlockStats.failingSubjects.length > 0 && (
+                    <div className="mt-2 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 text-[11px] font-bold text-slate-700">
+                      Cảnh báo điểm liệt: {bestBlockStats.failingSubjects.join(", ")}
+                    </div>
+                  )}
                 </Card>
               </div>
 
               {/* Right Column: 2-Tier Recommendation Funnel */}
               <div>
-                <TwoTierFunnelRecommendation funnelData={displayedFunnel} />
+                <TwoTierFunnelRecommendation funnelData={activeFunnel} />
               </div>
             </div>
           </>
