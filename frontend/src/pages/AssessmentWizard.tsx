@@ -4,12 +4,12 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Layers,
   Loader2,
   RotateCcw,
   Sliders,
-  Sparkles,
-  Zap,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router"
@@ -19,7 +19,6 @@ import {
   OnetItemVisualIcon,
 } from "../components/assessment/OnetSwipeCardVisual"
 import { Button } from "../components/common/Button"
-import { Card } from "../components/common/Card"
 import { PageContainer } from "../components/layout/PageContainer"
 import {
   defaultCognitiveQuestions,
@@ -114,7 +113,7 @@ export function AssessmentWizard() {
     CognitiveQuestionItem[]
   >(defaultCognitiveQuestions)
 
-  // Step 1 Mode: 'swipe' (O*NET Mini-IP Swipe Cards) | 'radar' (1-Screen RPG Fast Radar)
+  // Step 1 Mode: 'swipe' (Liquid Glass Card Carousel) | 'radar' (1-Screen Fast Radar)
   const [step1Mode, setStep1Mode] = useState<"swipe" | "radar">("swipe")
   const [cardIndex, setCardIndex] = useState<number>(() => {
     const firstUnanswered = ONET_MINI_IP_ITEMS.findIndex((item) => {
@@ -126,10 +125,11 @@ export function AssessmentWizard() {
     })
     return firstUnanswered >= 0 ? firstUnanswered : 0
   })
-  const [swipeDir, setSwipeDir] = useState<number>(1)
+  const [slideDirection, setSlideDirection] = useState<number>(1)
 
   // Step 2: Cognitive Quest
   const [cogIndex, setCogIndex] = useState(0)
+  const [cogDirection, setCogDirection] = useState(1)
   const autoAdvanceTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -208,10 +208,20 @@ export function AssessmentWizard() {
     assessment.answers[currentCard.code] ??
     assessment.answers[`1-${currentCardCanonicalIdx}`]
 
-  // Rate current O*NET card (1..5) and advance smoothly
+  // Navigate questions (Next / Prev) cleanly on swipe or chevron click
+  const goToNextCard = useCallback(() => {
+    setSlideDirection(1)
+    setCardIndex((p) => Math.min(ONET_MINI_IP_ITEMS.length - 1, p + 1))
+  }, [])
+
+  const goToPrevCard = useCallback(() => {
+    setSlideDirection(-1)
+    setCardIndex((p) => Math.max(0, p - 1))
+  }, [])
+
+  // Rate current O*NET card (1..5) and advance smoothly to next question
   const rateCurrentCard = useCallback(
-    (value: number, dir = 1) => {
-      setSwipeDir(dir)
+    (value: number) => {
       const cIdx = CANONICAL_30_CODES.indexOf(currentCard.code)
       const nextAnswers = {
         ...assessment.answers,
@@ -223,14 +233,15 @@ export function AssessmentWizard() {
       if (autoAdvanceTimer.current) window.clearTimeout(autoAdvanceTimer.current)
       autoAdvanceTimer.current = window.setTimeout(() => {
         if (cardIndex < ONET_MINI_IP_ITEMS.length - 1) {
+          setSlideDirection(1)
           setCardIndex((prev) => prev + 1)
         }
-      }, 150)
+      }, 180)
     },
     [currentCard.code, assessment.answers, update, cardIndex]
   )
 
-  // Apply 1-screen Radar Slider score (1..5) to all 5 items of a RIASEC dimension
+  // Apply 1-screen Radar score (1..5) to all 5 items of a RIASEC dimension
   const setGroupLevel = useCallback(
     (dim: RiasecDimension, levelValue: number) => {
       const nextAnswers = { ...assessment.answers }
@@ -336,6 +347,16 @@ export function AssessmentWizard() {
     assessment.cognitive[currentCog.code] ??
     assessment.cognitive[`2-${cogIndex}`]
 
+  const goToNextCog = useCallback(() => {
+    setCogDirection(1)
+    setCogIndex((p) => Math.min(cognitiveQuestions.length - 1, p + 1))
+  }, [cognitiveQuestions.length])
+
+  const goToPrevCog = useCallback(() => {
+    setCogDirection(-1)
+    setCogIndex((p) => Math.max(0, p - 1))
+  }, [])
+
   const handleSelectCognitive = useCallback(
     (optionKey: string) => {
       const qKey = currentCog.code || `2-${cogIndex}`
@@ -350,6 +371,7 @@ export function AssessmentWizard() {
       if (autoAdvanceTimer.current) window.clearTimeout(autoAdvanceTimer.current)
       autoAdvanceTimer.current = window.setTimeout(() => {
         if (cogIndex < cognitiveQuestions.length - 1) {
+          setCogDirection(1)
           setCogIndex((prev) =>
             Math.min(cognitiveQuestions.length - 1, prev + 1)
           )
@@ -365,7 +387,7 @@ export function AssessmentWizard() {
     ]
   )
 
-  // Keyboard shortcuts
+  // Keyboard navigation: Left/Right arrows ONLY navigate prev/next question; 1-5 rate
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (
@@ -377,14 +399,13 @@ export function AssessmentWizard() {
       if (step === 1 && step1Mode === "swipe") {
         if (["1", "2", "3", "4", "5"].includes(e.key)) {
           e.preventDefault()
-          const val = Number(e.key)
-          rateCurrentCard(val, val >= 4 ? 1 : val <= 2 ? -1 : 1)
+          rateCurrentCard(Number(e.key))
         } else if (e.key === "ArrowRight") {
           e.preventDefault()
-          rateCurrentCard(4, 1) // Quick swipe right = Thích (4)
+          goToNextCard()
         } else if (e.key === "ArrowLeft") {
           e.preventDefault()
-          rateCurrentCard(2, -1) // Quick swipe left = Không thích (2)
+          goToPrevCard()
         }
       } else if (step === 2) {
         const keyMap: Record<string, string> = {
@@ -405,9 +426,11 @@ export function AssessmentWizard() {
           e.preventDefault()
           handleSelectCognitive(keyMap[e.key])
         } else if (e.key === "ArrowRight") {
-          setCogIndex((p) => Math.min(cognitiveQuestions.length - 1, p + 1))
+          e.preventDefault()
+          goToNextCog()
         } else if (e.key === "ArrowLeft") {
-          setCogIndex((p) => Math.max(0, p - 1))
+          e.preventDefault()
+          goToPrevCog()
         }
       }
     }
@@ -417,8 +440,11 @@ export function AssessmentWizard() {
     step,
     step1Mode,
     rateCurrentCard,
+    goToNextCard,
+    goToPrevCard,
     handleSelectCognitive,
-    cognitiveQuestions.length,
+    goToNextCog,
+    goToPrevCog,
   ])
 
   const resetAllAnswers = () => {
@@ -491,35 +517,37 @@ export function AssessmentWizard() {
   }
 
   return (
-    <section className="py-5 sm:py-7">
-      <PageContainer className="max-w-3xl">
-        {/* Top Liquid Glass Bar */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/85 bg-white/75 px-4 py-3 shadow-[0_8px_28px_rgba(14,165,233,0.08)] backdrop-blur-xl">
-          <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-black tracking-tight text-slate-900">
-                O*NET Mini-IP (Chuẩn Bộ Lao động Hoa Kỳ)
-              </h1>
-              <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-black text-sky-700">
-                30 mục · ~1 phút
-              </span>
-            </div>
-            <p className="text-[11px] font-semibold text-slate-500">
-              Rounds et al. (2016) · Ít chữ, trực quan, chuẩn hóa 435 ngành TT74
-            </p>
-          </div>
+    <section className="relative py-6 sm:py-8 overflow-x-clip">
+      {/* Ambient Animated Liquid Glass Background Orbs */}
+      <motion.div
+        animate={{
+          x: [0, 24, -12, 0],
+          y: [0, -18, 12, 0],
+          scale: [1, 1.06, 0.96, 1],
+        }}
+        transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
+        className="pointer-events-none absolute left-1/4 top-12 h-72 w-72 rounded-full bg-sky-300/25 blur-3xl"
+      />
+      <motion.div
+        animate={{
+          x: [0, -28, 16, 0],
+          y: [0, 20, -14, 0],
+          scale: [1, 0.95, 1.08, 1],
+        }}
+        transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+        className="pointer-events-none absolute right-1/4 top-36 h-80 w-80 rounded-full bg-cyan-300/20 blur-3xl"
+      />
 
-          {/* 3-Step Compact Navigation */}
+      <PageContainer className="relative z-10 max-w-3xl">
+        {/* Ultra-Clean Top Liquid Glass Navigation Bar */}
+        <div className="mb-5 flex flex-wrap items-center justify-between gap-2.5 rounded-3xl border border-white/85 bg-white/55 px-4 py-2.5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_12px_32px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
+          {/* 3 Main Steps */}
           <div className="flex items-center gap-1.5">
             {[
-              {
-                id: 1,
-                label: `1. Sở thích (${totalRiasecAnswered}/30)`,
-                done: allRiasecGroupsCovered,
-              },
+              { id: 1, label: "1. Sở thích", done: allRiasecGroupsCovered },
               {
                 id: 2,
-                label: `2. Tư duy (${totalCognitiveAnswered}/8)`,
+                label: "2. Tư duy",
                 done: totalCognitiveAnswered >= cognitiveQuestions.length,
               },
               { id: 3, label: "3. Điểm số", done: assessment.completed },
@@ -535,171 +563,183 @@ export function AssessmentWizard() {
                       update({ step: s.id })
                     }
                   }}
-                  className={`flex items-center gap-1 rounded-xl px-2.5 py-1.5 text-xs font-extrabold transition ${
+                  className={`relative flex items-center gap-1.5 rounded-2xl px-3.5 py-2 text-xs sm:text-sm font-bold transition ${
                     active
-                      ? "bg-sky-600 text-white shadow-sm"
+                      ? "bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-[0_6px_18px_rgba(14,165,233,0.28)]"
                       : s.done
-                        ? "border border-sky-200 bg-sky-50 text-sky-700"
-                        : "bg-slate-100/80 text-slate-500"
+                        ? "border border-sky-200/80 bg-white/75 text-sky-700 hover:bg-white"
+                        : "bg-white/40 text-slate-500 hover:bg-white/70"
                   }`}
                 >
                   {s.done && !active && (
-                    <Check className="size-3 text-sky-600" />
+                    <Check className="size-3.5 text-sky-600" />
                   )}
                   <span>{s.label}</span>
                 </button>
               )
             })}
+          </div>
+
+          {/* Right Utilities: View Mode Switch + Reset */}
+          <div className="flex items-center gap-1.5">
+            {step === 1 && (
+              <div className="flex items-center rounded-2xl border border-white/80 bg-white/55 p-1 backdrop-blur-xl">
+                <button
+                  type="button"
+                  onClick={() => setStep1Mode("swipe")}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                    step1Mode === "swipe"
+                      ? "bg-sky-600 text-white shadow-sm"
+                      : "text-slate-600 hover:text-sky-700"
+                  }`}
+                >
+                  <Layers className="size-3.5" />
+                  <span>Thẻ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep1Mode("radar")}
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                    step1Mode === "radar"
+                      ? "bg-sky-600 text-white shadow-sm"
+                      : "text-slate-600 hover:text-sky-700"
+                  }`}
+                >
+                  <Sliders className="size-3.5" />
+                  <span>Radar</span>
+                </button>
+              </div>
+            )}
+
             {(totalRiasecAnswered > 0 || totalCognitiveAnswered > 0) && (
               <button
                 type="button"
                 onClick={resetAllAnswers}
-                title="Làm lại từ đầu"
-                className="ml-0.5 grid size-8 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 transition hover:border-sky-300 hover:text-sky-700"
+                title="Làm lại"
+                className="grid size-9 place-items-center rounded-2xl border border-white/85 bg-white/60 text-slate-600 backdrop-blur-xl transition hover:border-sky-300 hover:bg-white hover:text-sky-700"
               >
-                <RotateCcw className="size-3.5" />
+                <RotateCcw className="size-4" />
               </button>
             )}
           </div>
         </div>
 
         {loading && step < 3 && (
-          <div className="mb-3 flex items-center justify-center gap-2 rounded-xl border border-sky-100 bg-white/70 p-2 text-slate-500">
-            <Loader2 className="size-3.5 animate-spin text-sky-600" />
-            <span className="text-[11px] font-semibold">
-              Đang đồng bộ câu hỏi...
-            </span>
+          <div className="mb-4 flex items-center justify-center gap-2 text-sky-700/70">
+            <Loader2 className="size-4 animate-spin" />
           </div>
         )}
 
-        {/* ==================== STEP 1: O*NET MINI-IP (SWIPE OR 1-SCREEN RADAR) ==================== */}
+        {/* ==================== STEP 1: LIQUID GLASS QUESTION CARDS & 5 EMOJI CHOICES ==================== */}
         {step === 1 && (
-          <div className="space-y-4">
-            {/* Mode Switcher + Thin Progress */}
-            <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/75 px-4 py-2.5 shadow-[0_6px_20px_rgba(14,165,233,0.06)] backdrop-blur-xl">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setStep1Mode("swipe")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold transition ${
-                    step1Mode === "swipe"
-                      ? "bg-sky-600 text-white shadow-sm"
-                      : "bg-sky-50 text-sky-700 hover:bg-sky-100"
-                  }`}
-                >
-                  <Layers className="size-3.5" />
-                  <span>Quẹt thẻ O*NET (30 thẻ)</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStep1Mode("radar")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-extrabold transition ${
-                    step1Mode === "radar"
-                      ? "bg-sky-600 text-white shadow-sm"
-                      : "bg-sky-50 text-sky-700 hover:bg-sky-100"
-                  }`}
-                >
-                  <Sliders className="size-3.5" />
-                  <span>Chỉnh nhanh 1 màn hình (15s)</span>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <div className="h-2 w-28 overflow-hidden rounded-full bg-sky-100">
-                  <div
-                    className="h-full rounded-full bg-gradient-to-r from-sky-500 to-cyan-500 transition-all duration-300"
-                    style={{
-                      width: `${Math.round((totalRiasecAnswered / 30) * 100)}%`,
-                    }}
-                  />
-                </div>
-                <span className="text-xs font-black text-sky-800">
-                  {totalRiasecAnswered}/30
-                </span>
-              </div>
-            </div>
-
-            {/* MODE A: TINDER SWIPE DECK FOR O*NET MINI-IP */}
+          <div className="space-y-6">
             {step1Mode === "swipe" && (
-              <div className="space-y-4">
-                <div className="relative mx-auto max-w-md pt-2">
-                  {/* Stacked background card depth effect */}
-                  <div className="pointer-events-none absolute inset-x-4 top-5 h-full rounded-[28px] border border-sky-200/50 bg-white/45 backdrop-blur-md" />
-
-                  <AnimatePresence mode="wait">
-                    <SwipeableOnetCard
-                      key={currentCard.code}
-                      item={currentCard}
-                      index={cardIndex}
-                      total={ONET_MINI_IP_ITEMS.length}
-                      swipeDir={swipeDir}
-                      currentValue={
-                        typeof currentCardValue === "number"
-                          ? currentCardValue
-                          : undefined
-                      }
-                      onSwipeRight={() => rateCurrentCard(4, 1)}
-                      onSwipeLeft={() => rateCurrentCard(2, -1)}
-                      onPrev={() => setCardIndex((p) => Math.max(0, p - 1))}
-                      onNext={() =>
-                        setCardIndex((p) =>
-                          Math.min(ONET_MINI_IP_ITEMS.length - 1, p + 1)
-                        )
-                      }
+              <>
+                {/* Liquid Glass Progress Track */}
+                <div className="mx-auto flex max-w-xl items-center gap-3 px-2">
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/50 p-0.5 backdrop-blur-md">
+                    <motion.div
+                      animate={{
+                        width: `${Math.round(
+                          (totalRiasecAnswered / 30) * 100
+                        )}%`,
+                      }}
+                      transition={{ type: "spring", stiffness: 260, damping: 24 }}
+                      className="h-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-cyan-500"
                     />
-                  </AnimatePresence>
+                  </div>
+                  <span className="text-sm font-black text-sky-900">
+                    {totalRiasecAnswered}/30
+                  </span>
                 </div>
 
-                {/* Official 5-Level O*NET Reaction Buttons */}
-                <div className="mx-auto max-w-xl">
-                  <div className="grid grid-cols-5 gap-2">
+                {/* Carousel Stage: Drag / Swipe Left or Right -> Next / Previous Question */}
+                <div className="relative mx-auto flex max-w-2xl items-center justify-center gap-3">
+                  {/* Left Arrow Button (Previous Question) */}
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
+                    disabled={cardIndex === 0}
+                    onClick={goToPrevCard}
+                    aria-label="Câu trước"
+                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/60 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_8px_24px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white/90 disabled:opacity-30"
+                  >
+                    <ChevronLeft className="size-6" />
+                  </motion.button>
+
+                  {/* Center Liquid Glass Card */}
+                  <div className="relative w-full max-w-lg">
+                    {/* Layered Frost Depth */}
+                    <div className="pointer-events-none absolute inset-x-6 -bottom-3 top-5 rounded-[34px] border border-white/60 bg-white/30 backdrop-blur-xl" />
+
+                    <AnimatePresence mode="wait" custom={slideDirection}>
+                      <LiquidGlassQuestionCard
+                        key={currentCard.code}
+                        item={currentCard}
+                        index={cardIndex}
+                        total={ONET_MINI_IP_ITEMS.length}
+                        direction={slideDirection}
+                        onNext={goToNextCard}
+                        onPrev={goToPrevCard}
+                      />
+                    </AnimatePresence>
+                  </div>
+
+                  {/* Right Arrow Button (Next Question) */}
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
+                    disabled={cardIndex >= ONET_MINI_IP_ITEMS.length - 1}
+                    onClick={goToNextCard}
+                    aria-label="Câu tiếp theo"
+                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/60 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_8px_24px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white/90 disabled:opacity-30"
+                  >
+                    <ChevronRight className="size-6" />
+                  </motion.button>
+                </div>
+
+                {/* 5 Clean Big Choices ONLY (No small text underneath) */}
+                <div className="mx-auto max-w-2xl">
+                  <div className="grid grid-cols-5 gap-2.5 sm:gap-3">
                     {ONET_REACTION_SCALE.map((btn) => {
                       const active = currentCardValue === btn.value
                       return (
-                        <button
+                        <motion.button
                           key={btn.value}
                           type="button"
-                          onClick={() =>
-                            rateCurrentCard(
-                              btn.value,
-                              btn.value >= 4 ? 1 : btn.value <= 2 ? -1 : 1
-                            )
-                          }
-                          className={`flex flex-col items-center justify-center rounded-2xl border py-3 px-1.5 text-center transition-all duration-150 ${
+                          whileHover={{ y: -4, scale: 1.03 }}
+                          whileTap={{ scale: 0.94 }}
+                          transition={{
+                            type: "spring",
+                            stiffness: 400,
+                            damping: 22,
+                          }}
+                          onClick={() => rateCurrentCard(btn.value)}
+                          className={`relative flex flex-col items-center justify-center rounded-[24px] border py-4 px-2 text-center backdrop-blur-2xl transition-colors duration-200 ${
                             active
-                              ? "border-sky-500 bg-gradient-to-b from-sky-500 to-cyan-600 text-white shadow-[0_10px_22px_rgba(14,165,233,0.3)] -translate-y-0.5"
-                              : "border-white/85 bg-white/80 text-slate-800 shadow-sm backdrop-blur-xl hover:-translate-y-0.5 hover:border-sky-300 hover:bg-sky-50/70"
+                              ? "border-sky-400 bg-gradient-to-b from-sky-500 to-cyan-500 text-white shadow-[inset_0_1px_2px_rgba(255,255,255,0.6),0_14px_30px_rgba(14,165,233,0.32)]"
+                              : "border-white/90 bg-white/60 text-slate-800 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_8px_24px_rgba(14,165,233,0.08)] hover:border-sky-300 hover:bg-white/85"
                           }`}
                         >
-                          <span className="text-2xl leading-none">
+                          <span className="text-3xl sm:text-4xl leading-none">
                             {btn.emoji}
                           </span>
-                          <span className="mt-1.5 text-[11px] font-black leading-tight">
+                          <span className="mt-2.5 text-xs sm:text-sm font-extrabold tracking-tight leading-tight">
                             {btn.label}
                           </span>
-                          <span
-                            className={`mt-1 text-[9px] font-bold ${
-                              active ? "text-sky-100" : "text-slate-400"
-                            }`}
-                          >
-                            Phím {btn.key}
-                          </span>
-                        </button>
+                        </motion.button>
                       )
                     })}
                   </div>
-                  <p className="mt-2.5 text-center text-[11px] font-semibold text-slate-500">
-                    Kéo thẻ sang phải = Thích 👍 · Sang trái = Không hợp ✕ · Hoặc
-                    bấm phím <kbd className="rounded bg-white px-1.5 py-0.5 shadow-sm">1</kbd>–
-                    <kbd className="rounded bg-white px-1.5 py-0.5 shadow-sm">5</kbd>
-                  </p>
                 </div>
-              </div>
+              </>
             )}
 
-            {/* MODE B: 1-SCREEN INSTANT RADAR & SLIDERS (15 SECONDS) */}
+            {/* MODE B: 1-SCREEN RADAR SLIDERS */}
             {step1Mode === "radar" && (
-              <div className="grid gap-4 rounded-[26px] border border-white/85 bg-white/80 p-5 shadow-[0_14px_36px_rgba(14,165,233,0.08)] backdrop-blur-2xl md:grid-cols-[1.2fr_0.8fr]">
+              <div className="grid gap-5 rounded-[30px] border border-white/90 bg-white/60 p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_50px_rgba(14,165,233,0.12)] backdrop-blur-2xl md:grid-cols-[1.2fr_0.8fr]">
                 <div className="space-y-3">
                   {RIASEC_ORDER.map((dim) => {
                     const meta = RIASEC_META[dim]
@@ -708,170 +748,163 @@ export function AssessmentWizard() {
                     return (
                       <div
                         key={dim}
-                        className="rounded-2xl border border-sky-100/80 bg-white/85 p-3 shadow-sm"
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-white/80 bg-white/70 px-4 py-3 backdrop-blur-xl"
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div>
-                            <span className="text-xs font-black text-slate-900">
-                              {meta.label}
-                            </span>
-                            <p className="text-[11px] font-medium text-slate-500">
-                              {meta.sampleHint}
-                            </p>
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {[1, 2, 3, 4, 5].map((lv) => {
-                              const active = isFilled && Math.round(avg) === lv
-                              return (
-                                <button
-                                  key={lv}
-                                  type="button"
-                                  onClick={() => setGroupLevel(dim, lv)}
-                                  className={`size-7 rounded-lg text-xs font-black transition ${
-                                    active
-                                      ? "bg-sky-600 text-white shadow-sm"
-                                      : "bg-sky-50 text-sky-700 hover:bg-sky-100"
-                                  }`}
-                                >
-                                  {lv}
-                                </button>
-                              )
-                            })}
-                          </div>
+                        <span className="text-sm sm:text-base font-extrabold text-slate-900">
+                          {meta.label}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          {[1, 2, 3, 4, 5].map((lv) => {
+                            const active = isFilled && Math.round(avg) === lv
+                            return (
+                              <motion.button
+                                key={lv}
+                                type="button"
+                                whileTap={{ scale: 0.9 }}
+                                onClick={() => setGroupLevel(dim, lv)}
+                                className={`size-9 rounded-xl text-sm font-black transition ${
+                                  active
+                                    ? "bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-md"
+                                    : "bg-sky-50/80 text-sky-800 hover:bg-sky-100"
+                                }`}
+                              >
+                                {lv}
+                              </motion.button>
+                            )
+                          })}
                         </div>
                       </div>
                     )
                   })}
                 </div>
 
-                {/* Live Hexagon Radar Preview */}
-                <div className="flex flex-col items-center justify-center rounded-2xl border border-sky-100 bg-sky-50/50 p-4 text-center">
-                  <span className="mb-1 inline-flex items-center gap-1 rounded-full bg-white px-3 py-1 text-[10px] font-black uppercase tracking-wider text-sky-700 shadow-sm">
-                    <Sparkles className="size-3" />
-                    Biểu đồ RIASEC trực tiếp
-                  </span>
+                <div className="flex flex-col items-center justify-center rounded-3xl border border-white/80 bg-sky-50/45 p-5 backdrop-blur-xl">
                   <LiveRiasecHexagon scores={riasecGroupPct} />
-                  <p className="mt-1 text-[11px] font-semibold text-slate-500">
-                    Chạm các mức 1–5 bên trái để tự động điền chuẩn 30 câu O*NET
-                  </p>
                 </div>
               </div>
             )}
           </div>
         )}
 
-        {/* ==================== STEP 2: ULTRA-COMPACT COGNITIVE REFLEX ==================== */}
+        {/* ==================== STEP 2: BIG CLEAN LIQUID GLASS COGNITIVE ==================== */}
         {step === 2 && currentCog && (
-          <motion.div
-            key={currentCog.code}
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.18 }}
-            className="rounded-[26px] border border-white/85 bg-white/80 p-5 sm:p-6 shadow-[0_14px_38px_rgba(14,165,233,0.1)] backdrop-blur-2xl"
-          >
-            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 px-3 py-1 text-xs font-black text-sky-800">
-                <Zap className="size-3.5 text-sky-600" />
-                Tình huống {cogIndex + 1}/{cognitiveQuestions.length} ·{" "}
-                {currentCog.dimension_badge}
-              </span>
+          <div className="relative mx-auto flex max-w-3xl items-center justify-center gap-3">
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.92 }}
+              disabled={cogIndex === 0}
+              onClick={goToPrevCog}
+              aria-label="Câu trước"
+              className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/60 text-sky-700 shadow-lg backdrop-blur-2xl disabled:opacity-30"
+            >
+              <ChevronLeft className="size-6" />
+            </motion.button>
 
-              <div className="flex items-center gap-1">
-                {cognitiveQuestions.map((q, idx) => {
-                  const done =
-                    assessment.cognitive[q.code] !== undefined ||
-                    assessment.cognitive[`2-${idx}`] !== undefined
-                  return (
-                    <button
-                      key={q.code}
-                      type="button"
-                      onClick={() => setCogIndex(idx)}
-                      className={`size-6 rounded-lg text-[11px] font-black transition ${
-                        idx === cogIndex
-                          ? "bg-sky-600 text-white"
-                          : done
-                            ? "bg-sky-100 text-sky-700"
-                            : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {idx + 1}
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
+            <AnimatePresence mode="wait" custom={cogDirection}>
+              <motion.div
+                key={currentCog.code}
+                custom={cogDirection}
+                initial={{ opacity: 0, x: cogDirection * 48, scale: 0.97 }}
+                animate={{ opacity: 1, x: 0, scale: 1 }}
+                exit={{ opacity: 0, x: cogDirection * -48, scale: 0.97 }}
+                transition={{ type: "spring", stiffness: 320, damping: 28 }}
+                drag="x"
+                dragConstraints={{ left: 0, right: 0 }}
+                dragElastic={0.35}
+                onDragEnd={(_, info) => {
+                  if (info.offset.x < -55 || info.velocity.x < -300) {
+                    goToNextCog()
+                  } else if (info.offset.x > 55 || info.velocity.x > 300) {
+                    goToPrevCog()
+                  }
+                }}
+                className="w-full rounded-[32px] border border-white/90 bg-white/60 p-6 sm:p-8 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_50px_rgba(14,165,233,0.14)] backdrop-blur-2xl"
+              >
+                <div className="mb-5 flex items-center justify-between">
+                  <span className="rounded-full border border-white/80 bg-white/80 px-3.5 py-1 text-xs font-black text-sky-700">
+                    {cogIndex + 1} / {cognitiveQuestions.length}
+                  </span>
+                </div>
 
-            <h2 className="mb-4 text-base sm:text-lg font-black text-slate-900">
-              {currentCog.subtitle}
-            </h2>
+                <h2 className="mb-6 text-xl sm:text-2xl font-extrabold leading-snug text-slate-900">
+                  {currentCog.subtitle}
+                </h2>
 
-            <div className="grid gap-2.5 sm:grid-cols-2">
-              {currentCog.options.map((opt) => {
-                const isSelected = String(currentCogValue) === opt.option_key
-                return (
-                  <button
-                    key={opt.option_key}
-                    type="button"
-                    onClick={() => handleSelectCognitive(opt.option_key)}
-                    className={`flex items-start gap-3 rounded-2xl border p-3.5 text-left transition-all ${
-                      isSelected
-                        ? "border-sky-500 bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-[0_10px_22px_rgba(14,165,233,0.25)]"
-                        : "border-sky-100 bg-white/90 text-slate-800 hover:border-sky-400 hover:bg-sky-50/70"
-                    }`}
-                  >
-                    <span
-                      className={`mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
-                        isSelected
-                          ? "bg-white text-sky-700"
-                          : "bg-sky-100 text-sky-800"
-                      }`}
-                    >
-                      {opt.option_key}
-                    </span>
-                    <div className="min-w-0">
-                      <h3 className="text-sm font-black leading-snug">
-                        {opt.title}
-                      </h3>
-                      <p
-                        className={`mt-1 text-xs line-clamp-1 ${
-                          isSelected ? "text-sky-100" : "text-slate-500"
+                <div className="grid gap-3 sm:grid-cols-2">
+                  {currentCog.options.map((opt) => {
+                    const isSelected = String(currentCogValue) === opt.option_key
+                    return (
+                      <motion.button
+                        key={opt.option_key}
+                        type="button"
+                        whileHover={{ y: -3, scale: 1.02 }}
+                        whileTap={{ scale: 0.96 }}
+                        onClick={() => handleSelectCognitive(opt.option_key)}
+                        className={`flex items-center gap-3.5 rounded-2xl border p-4 text-left backdrop-blur-xl transition-colors ${
+                          isSelected
+                            ? "border-sky-400 bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-[0_12px_28px_rgba(14,165,233,0.28)]"
+                            : "border-white/90 bg-white/75 text-slate-900 hover:border-sky-300 hover:bg-white"
                         }`}
                       >
-                        {opt.description}
-                      </p>
-                    </div>
-                  </button>
-                )
-              })}
-            </div>
-          </motion.div>
+                        <span
+                          className={`grid size-9 shrink-0 place-items-center rounded-xl text-sm font-black ${
+                            isSelected
+                              ? "bg-white text-sky-700"
+                              : "bg-sky-100 text-sky-800"
+                          }`}
+                        >
+                          {opt.option_key}
+                        </span>
+                        <span className="text-sm sm:text-base font-extrabold leading-snug">
+                          {opt.title}
+                        </span>
+                      </motion.button>
+                    )
+                  })}
+                </div>
+              </motion.div>
+            </AnimatePresence>
+
+            <motion.button
+              type="button"
+              whileHover={{ scale: 1.08 }}
+              whileTap={{ scale: 0.92 }}
+              disabled={cogIndex >= cognitiveQuestions.length - 1}
+              onClick={goToNextCog}
+              aria-label="Câu tiếp theo"
+              className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/60 text-sky-700 shadow-lg backdrop-blur-2xl disabled:opacity-30"
+            >
+              <ChevronRight className="size-6" />
+            </motion.button>
+          </div>
         )}
 
         {/* ==================== STEP 3: ACADEMIC SCORES ==================== */}
         {step === 3 && (
-          <Card className="p-5 sm:p-6">
+          <div className="rounded-[32px] border border-white/90 bg-white/60 p-6 sm:p-8 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_50px_rgba(14,165,233,0.14)] backdrop-blur-2xl">
             <AcademicInputForm
               scores={scores}
               onChange={(subject, value) =>
                 setScores((prev) => ({ ...prev, [subject]: value }))
               }
             />
-          </Card>
+          </div>
         )}
 
-        {/* Bottom Navigation Bar */}
-        <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+        {/* Clean Bottom Footer Bar */}
+        <div className="mt-7 flex items-center justify-between gap-3">
           <Button
             variant="ghost"
             icon={ArrowLeft}
             disabled={step === 1 && (step1Mode === "radar" || cardIndex === 0)}
             onClick={() => {
               if (step === 1 && step1Mode === "swipe" && cardIndex > 0) {
-                setCardIndex((p) => Math.max(0, p - 1))
+                goToPrevCard()
                 return
               }
               if (step === 2 && cogIndex > 0) {
-                setCogIndex((p) => Math.max(0, p - 1))
+                goToPrevCog()
                 return
               }
               const prevStep = Math.max(1, step - 1)
@@ -882,19 +915,12 @@ export function AssessmentWizard() {
             Quay lại
           </Button>
 
-          <div className="flex flex-wrap items-center gap-2.5">
-            {step === 1 && !allRiasecGroupsCovered && (
-              <span className="text-xs font-bold text-slate-500">
-                Cần tối thiểu 18/30 thẻ ({totalRiasecAnswered}/18)
-              </span>
-            )}
-
+          <div>
             {step === 1 && (
               <Button
                 icon={ArrowRight}
                 disabled={!allRiasecGroupsCovered}
                 onClick={() => {
-                  // Auto-fill neutral (3) only if user stops early between 18..29 cards
                   const filled: Record<string, number> = {
                     ...assessment.answers,
                   }
@@ -912,7 +938,7 @@ export function AssessmentWizard() {
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
               >
-                Qua Bước 2 ({totalRiasecAnswered}/30)
+                Tiếp tục
               </Button>
             )}
 
@@ -926,7 +952,7 @@ export function AssessmentWizard() {
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
               >
-                Qua Bước 3 ({totalCognitiveAnswered}/{cognitiveQuestions.length})
+                Tiếp tục
               </Button>
             )}
 
@@ -936,7 +962,7 @@ export function AssessmentWizard() {
                 disabled={Object.values(scores).filter((v) => v > 0).length < 3}
                 onClick={handleCompleteAssessment}
               >
-                Mở Khóa Bản Đồ 435 Ngành
+                Xem kết quả
               </Button>
             )}
           </div>
@@ -946,74 +972,76 @@ export function AssessmentWizard() {
   )
 }
 
-function SwipeableOnetCard({
+function LiquidGlassQuestionCard({
   item,
   index,
   total,
-  swipeDir,
-  currentValue,
-  onSwipeRight,
-  onSwipeLeft,
-  onPrev,
+  direction,
   onNext,
+  onPrev,
 }: {
   item: OnetMiniIpItem
   index: number
   total: number
-  swipeDir: number
-  currentValue?: number
-  onSwipeRight: () => void
-  onSwipeLeft: () => void
-  onPrev: () => void
+  direction: number
   onNext: () => void
+  onPrev: () => void
 }) {
   const x = useMotionValue(0)
-  const rotate = useTransform(x, [-180, 180], [-10, 10])
-  const likeOpacity = useTransform(x, [25, 100], [0, 1])
-  const nopeOpacity = useTransform(x, [-100, -25], [1, 0])
-
-  const meta = RIASEC_META[item.dimension]
+  const rotate = useTransform(x, [-220, 220], [-6, 6])
+  const scaleDrag = useTransform(x, [-220, 0, 220], [0.97, 1, 0.97])
 
   return (
     <motion.div
-      style={{ x, rotate }}
+      custom={direction}
+      style={{ x, rotate, scale: scaleDrag }}
       drag="x"
       dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.45}
+      dragElastic={0.42}
       onDragEnd={(_, info) => {
-        if (info.offset.x > 85) {
-          onSwipeRight()
-        } else if (info.offset.x < -85) {
-          onSwipeLeft()
+        // Swipe left -> Next question; Swipe right -> Previous question
+        if (info.offset.x < -55 || info.velocity.x < -300) {
+          onNext()
+        } else if (info.offset.x > 55 || info.velocity.x > 300) {
+          onPrev()
         }
       }}
-      initial={{ opacity: 0, x: swipeDir >= 0 ? 40 : -40, scale: 0.96 }}
-      animate={{ opacity: 1, x: 0, scale: 1 }}
-      exit={{ opacity: 0, x: swipeDir >= 0 ? -120 : 120, scale: 0.92 }}
-      transition={{ duration: 0.16 }}
-      className="relative cursor-grab active:cursor-grabbing select-none rounded-[28px] border border-white/90 bg-white/85 p-6 sm:p-7 shadow-[0_20px_48px_rgba(14,165,233,0.14)] backdrop-blur-2xl"
+      initial={{
+        opacity: 0,
+        x: direction >= 0 ? 72 : -72,
+        scale: 0.95,
+        filter: "blur(4px)",
+      }}
+      animate={{
+        opacity: 1,
+        x: 0,
+        scale: 1,
+        filter: "blur(0px)",
+      }}
+      exit={{
+        opacity: 0,
+        x: direction >= 0 ? -72 : 72,
+        scale: 0.95,
+        filter: "blur(4px)",
+      }}
+      transition={{
+        type: "spring",
+        stiffness: 320,
+        damping: 28,
+        mass: 0.85,
+      }}
+      className="relative cursor-grab active:cursor-grabbing select-none overflow-hidden rounded-[34px] border border-white/90 bg-white/55 px-6 py-10 sm:px-10 sm:py-12 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_24px_54px_rgba(14,165,233,0.14)] backdrop-blur-2xl"
     >
-      {/* Live Drag Overlay Badges */}
-      <motion.div
-        style={{ opacity: likeOpacity }}
-        className="pointer-events-none absolute right-5 top-5 rounded-xl border-2 border-sky-500 bg-sky-50/90 px-3 py-1 text-xs font-black text-sky-700 rotate-6"
-      >
-        THÍCH 👍
-      </motion.div>
-      <motion.div
-        style={{ opacity: nopeOpacity }}
-        className="pointer-events-none absolute left-5 top-5 rounded-xl border-2 border-slate-400 bg-slate-100/90 px-3 py-1 text-xs font-black text-slate-600 -rotate-6"
-      >
-        BỎ QUA ✕
-      </motion.div>
+      {/* Specular Top Reflection */}
+      <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
 
-      {/* Header Pill + Prev/Next */}
-      <div className="mb-6 flex items-center justify-between gap-2">
-        <span className="rounded-full bg-sky-50 px-3 py-1 text-[11px] font-black text-sky-700 border border-sky-200/80">
-          {index + 1}/{total} · {meta.label}
+      {/* Minimal Top Index + Mobile Prev/Next Tap */}
+      <div className="mb-7 flex items-center justify-between">
+        <span className="rounded-full border border-white/80 bg-white/75 px-3.5 py-1 text-xs sm:text-sm font-black text-sky-800 backdrop-blur-md">
+          {index + 1} / {total}
         </span>
 
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5 sm:hidden">
           <button
             type="button"
             disabled={index === 0}
@@ -1021,9 +1049,9 @@ function SwipeableOnetCard({
               e.stopPropagation()
               onPrev()
             }}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-bold text-slate-600 hover:border-sky-300 disabled:opacity-35"
+            className="grid size-8 place-items-center rounded-full border border-white/80 bg-white/75 text-sky-700 disabled:opacity-30"
           >
-            ←
+            <ChevronLeft className="size-4" />
           </button>
           <button
             type="button"
@@ -1032,40 +1060,21 @@ function SwipeableOnetCard({
               e.stopPropagation()
               onNext()
             }}
-            className="rounded-lg border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-bold text-slate-600 hover:border-sky-300 disabled:opacity-35"
+            className="grid size-8 place-items-center rounded-full border border-white/80 bg-white/75 text-sky-700 disabled:opacity-30"
           >
-            →
+            <ChevronRight className="size-4" />
           </button>
         </div>
       </div>
 
-      {/* Central Visual Icon */}
+      {/* Liquid Glass Hero Icon */}
       <OnetItemVisualIcon iconKey={item.iconKey} />
 
-      {/* Minimal Concise Title + Authentic O*NET English Phrase */}
-      <div className="mt-6 text-center">
-        <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 leading-snug">
-          “{item.titleVi}”
+      {/* BIG CLEAR QUESTION (No quotation marks, no small English text) */}
+      <div className="mt-8 text-center">
+        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 leading-snug">
+          {item.titleVi}
         </h2>
-        <p className="mt-1.5 text-xs font-semibold text-slate-400">
-          O*NET Mini-IP ({item.code}): {item.titleEn}
-        </p>
-      </div>
-
-      {/* Current Answer Status Pill (if revisiting) */}
-      <div className="mt-5 flex justify-center">
-        {currentValue !== undefined ? (
-          <span className="rounded-full bg-sky-100 px-3 py-1 text-[11px] font-black text-sky-800">
-            Đã chọn:{" "}
-            {ONET_REACTION_SCALE.find((r) => r.value === currentValue)?.emoji}{" "}
-            {ONET_REACTION_SCALE.find((r) => r.value === currentValue)?.label} (
-            {currentValue}/5)
-          </span>
-        ) : (
-          <span className="rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-500">
-            Vòng {item.round}/5 · Chạm mức cảm xúc bên dưới hoặc quẹt thẻ
-          </span>
-        )}
       </div>
     </motion.div>
   )
