@@ -31,7 +31,77 @@ import {
   Truck,
   Wrench,
 } from "lucide-react"
-import type { OnetMiniIpItem, RiasecDimension } from "../../data/onetMiniIpQuestions"
+import { useState } from "react"
+import {
+  RIASEC_META,
+  type OnetMiniIpItem,
+  type RiasecDimension,
+} from "../../data/onetMiniIpQuestions"
+
+export function QuestionIllustrationFrame({
+  item,
+  index,
+  total,
+}: {
+  item: OnetMiniIpItem
+  index: number
+  total: number
+}) {
+  const [loaded, setLoaded] = useState(false)
+  const [errored, setErrored] = useState(false)
+  const Icon = getOnetIcon(item.iconKey)
+  const meta = RIASEC_META[item.dimension]
+
+  return (
+    <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-white/85 bg-gradient-to-br from-sky-100 via-sky-50 to-cyan-100 shadow-sm">
+      {/* Skeleton Loading State */}
+      {!loaded && !errored && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-r from-sky-100/80 via-white/90 to-sky-100/80 animate-pulse">
+          <div className="grid size-12 place-items-center rounded-2xl bg-sky-500/15 text-sky-600">
+            <Icon className="size-6 stroke-[2]" />
+          </div>
+          <span className="h-2 w-24 rounded-full bg-sky-200/70" />
+        </div>
+      )}
+
+      {/* Contextual Real Photo Illustration */}
+      {!errored ? (
+        <img
+          src={item.imageUrl}
+          alt={item.titleVi}
+          loading="lazy"
+          draggable={false}
+          onLoad={() => setLoaded(true)}
+          onError={() => setErrored(true)}
+          className={`h-full w-full select-none object-cover transition-all duration-500 ${
+            loaded ? "scale-100 opacity-100" : "scale-105 opacity-0"
+          }`}
+        />
+      ) : (
+        /* Vector Illustration Fallback if offline */
+        <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-sky-500 via-sky-600 to-cyan-500 p-6 text-white">
+          <div className="grid size-16 place-items-center rounded-2xl border border-white/40 bg-white/20 shadow-md backdrop-blur-md">
+            <Icon className="size-8 stroke-[2]" />
+          </div>
+        </div>
+      )}
+
+      {/* Subtle Gradient Overlay for Depth & Readability */}
+      <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/45 via-slate-900/5 to-transparent" />
+
+      {/* Top Badges: Index + RIASEC Group Tag */}
+      <div className="absolute inset-x-3 top-3 flex items-center justify-between gap-2">
+        <span className="rounded-full border border-white/80 bg-white/85 px-3 py-1 text-xs font-black text-sky-900 shadow-sm backdrop-blur-md">
+          {index + 1} / {total}
+        </span>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/75 bg-white/85 px-3 py-1 text-xs font-extrabold text-sky-800 shadow-sm backdrop-blur-md">
+          <Icon className="size-3.5 text-sky-600" />
+          <span>{meta.tag}</span>
+        </span>
+      </div>
+    </div>
+  )
+}
 
 export function OnetItemVisualIcon({
   iconKey,
@@ -40,9 +110,8 @@ export function OnetItemVisualIcon({
 }) {
   const Icon = getOnetIcon(iconKey)
   return (
-    <div className="relative mx-auto grid size-20 sm:size-24 place-items-center rounded-[28px] border border-white/80 bg-gradient-to-br from-sky-400/90 via-sky-500/90 to-cyan-500/90 text-white shadow-[inset_0_2px_4px_rgba(255,255,255,0.6),0_16px_36px_rgba(14,165,233,0.28)] backdrop-blur-xl">
-      <div className="pointer-events-none absolute -inset-3 rounded-[34px] bg-sky-400/25 blur-xl" />
-      <Icon className="relative z-10 size-9 sm:size-11 stroke-[1.9]" />
+    <div className="relative mx-auto grid size-16 place-items-center rounded-2xl border border-white/80 bg-gradient-to-br from-sky-400/90 via-sky-500/90 to-cyan-500/90 text-white shadow-sm backdrop-blur-xl">
+      <Icon className="relative z-10 size-8 stroke-[1.9]" />
     </div>
   )
 }
