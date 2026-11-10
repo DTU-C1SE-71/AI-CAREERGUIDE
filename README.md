@@ -153,6 +153,28 @@ npm run build
 
 ---
 
+## 🌿 7. Quy Trình Vận Hành Nhánh Git Flow (Branching & Review Strategy)
+
+Dự án áp dụng chặt chẽ mô hình **Git Flow chuẩn hóa** ([Xem chi tiết quy định tại GIT_FLOW.md](./GIT_FLOW.md)):
+- `main`: Nhánh chính thức chỉ lưu trữ code đã phát hành. **Nghiêm cấm commit trực tiếp lên `main`**.
+- `develop`: Nhánh tích hợp trung gian cho toàn bộ tính năng đang phát triển.
+- `feature/#<issue>_<short-name>`: Nhánh làm tính năng, tách từ `develop`, merge lại vào `develop` qua Pull Request.
+- `release/<version>`: Chốt phiên bản từ `develop`, chỉ sửa bug cuối kỳ/version trước khi merge vào cả `main` và `develop` kèm version tag (`vX.Y.Z`).
+- `bugfix/*` & `hotfix/*`: Nhánh sửa lỗi phát triển (từ `develop`) hoặc sửa lỗi khẩn cấp production (từ `main`).
+
+```bash
+# Kích hoạt git-flow cục bộ
+git flow init -d
+
+# Bắt đầu tính năng mới
+git flow feature start #123_ten-tinh-nang
+
+# Hoàn tất tính năng và tạo Pull Request vào develop
+git flow feature finish #123_ten-tinh-nang
+```
+
+---
+
 ## 👥 Nhóm Tác Giả & Bản Quyền
 * **Capstone Team C1SE.71** – CMU Software Engineering Capstone
 * **Đại diện kỹ thuật:** Nguyễn Tấn Duy ([@ntanduy25](https://github.com/ntanduy25))
