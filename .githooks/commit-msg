@@ -1,0 +1,25 @@
+#!/bin/sh
+# Git Flow Commit Message Hook
+# Enforces Conventional Commit format: feat|fix|refactor|docs|test|chore|style|perf
+
+commit_msg_file=$1
+commit_msg=$(head -n 1 "$commit_msg_file")
+
+# Allow merge commits
+if echo "$commit_msg" | grep -qE "^Merge "; then
+    exit 0
+fi
+
+# Regex for conventional commits
+pattern="^(feat|fix|refactor|docs|test|chore|style|perf)(\([a-zA-Z0-9_\-]+\))?: .+"
+
+if ! echo "$commit_msg" | grep -qE "$pattern"; then
+    echo "❌ Lỗi: Commit message không đúng quy ước Git Flow!"
+    echo "📌 Định dạng bắt buộc: <type>(<scope>): <mô tả ngắn>"
+    echo "   Các type hợp lệ: feat, fix, refactor, docs, test, chore, style, perf"
+    echo "   Ví dụ: feat: add ringtone preview loading state"
+    echo "          fix(auth): prevent crash when session expires"
+    exit 1
+fi
+
+exit 0
