@@ -563,16 +563,16 @@ export function AssessmentWizard() {
                       update({ step: s.id })
                     }
                   }}
-                  className={`relative flex items-center gap-1.5 rounded-2xl px-3.5 py-2 text-xs sm:text-sm font-bold transition ${
+                  className={`relative flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm sm:text-base font-extrabold transition ${
                     active
                       ? "bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-[0_6px_18px_rgba(14,165,233,0.28)]"
                       : s.done
                         ? "border border-sky-200/80 bg-white/75 text-sky-700 hover:bg-white"
-                        : "bg-white/40 text-slate-500 hover:bg-white/70"
+                        : "bg-white/40 text-slate-600 hover:bg-white/70"
                   }`}
                 >
                   {s.done && !active && (
-                    <Check className="size-3.5 text-sky-600" />
+                    <Check className="size-4 text-sky-600" />
                   )}
                   <span>{s.label}</span>
                 </button>
@@ -581,31 +581,31 @@ export function AssessmentWizard() {
           </div>
 
           {/* Right Utilities: View Mode Switch + Reset */}
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-2">
             {step === 1 && (
               <div className="flex items-center rounded-2xl border border-white/80 bg-white/55 p-1 backdrop-blur-xl">
                 <button
                   type="button"
                   onClick={() => setStep1Mode("swipe")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-extrabold transition ${
                     step1Mode === "swipe"
                       ? "bg-sky-600 text-white shadow-sm"
                       : "text-slate-600 hover:text-sky-700"
                   }`}
                 >
-                  <Layers className="size-3.5" />
+                  <Layers className="size-4" />
                   <span>Thẻ</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setStep1Mode("radar")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-bold transition ${
+                  className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-extrabold transition ${
                     step1Mode === "radar"
                       ? "bg-sky-600 text-white shadow-sm"
                       : "text-slate-600 hover:text-sky-700"
                   }`}
                 >
-                  <Sliders className="size-3.5" />
+                  <Sliders className="size-4" />
                   <span>Radar</span>
                 </button>
               </div>
@@ -648,7 +648,7 @@ export function AssessmentWizard() {
                       className="h-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-cyan-500"
                     />
                   </div>
-                  <span className="text-sm font-black text-sky-900">
+                  <span className="text-base font-black text-sky-900">
                     {totalRiasecAnswered}/30
                   </span>
                 </div>
@@ -717,16 +717,16 @@ export function AssessmentWizard() {
                             damping: 22,
                           }}
                           onClick={() => rateCurrentCard(btn.value)}
-                          className={`relative flex flex-col items-center justify-center rounded-[24px] border py-4 px-2 text-center backdrop-blur-2xl transition-colors duration-200 ${
+                          className={`relative flex flex-col items-center justify-center rounded-[26px] border py-5 px-2.5 text-center backdrop-blur-2xl transition-colors duration-200 ${
                             active
                               ? "border-sky-400 bg-gradient-to-b from-sky-500 to-cyan-500 text-white shadow-[inset_0_1px_2px_rgba(255,255,255,0.6),0_14px_30px_rgba(14,165,233,0.32)]"
                               : "border-white/90 bg-white/60 text-slate-800 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_8px_24px_rgba(14,165,233,0.08)] hover:border-sky-300 hover:bg-white/85"
                           }`}
                         >
-                          <span className="text-3xl sm:text-4xl leading-none">
+                          <span className="text-4xl sm:text-5xl leading-none">
                             {btn.emoji}
                           </span>
-                          <span className="mt-2.5 text-xs sm:text-sm font-extrabold tracking-tight leading-tight">
+                          <span className="mt-3 text-sm sm:text-base font-extrabold tracking-tight leading-tight">
                             {btn.label}
                           </span>
                         </motion.button>
@@ -750,7 +750,7 @@ export function AssessmentWizard() {
                         key={dim}
                         className="flex items-center justify-between gap-3 rounded-2xl border border-white/80 bg-white/70 px-4 py-3 backdrop-blur-xl"
                       >
-                        <span className="text-sm sm:text-base font-extrabold text-slate-900">
+                        <span className="text-base sm:text-lg font-extrabold text-slate-900">
                           {meta.label}
                         </span>
                         <div className="flex items-center gap-1.5">
@@ -762,7 +762,7 @@ export function AssessmentWizard() {
                                 type="button"
                                 whileTap={{ scale: 0.9 }}
                                 onClick={() => setGroupLevel(dim, lv)}
-                                className={`size-9 rounded-xl text-sm font-black transition ${
+                                className={`size-10 rounded-xl text-base font-black transition ${
                                   active
                                     ? "bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-md"
                                     : "bg-sky-50/80 text-sky-800 hover:bg-sky-100"
@@ -822,16 +822,16 @@ export function AssessmentWizard() {
                 className="w-full rounded-[32px] border border-white/90 bg-white/60 p-6 sm:p-8 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_50px_rgba(14,165,233,0.14)] backdrop-blur-2xl"
               >
                 <div className="mb-5 flex items-center justify-between">
-                  <span className="rounded-full border border-white/80 bg-white/80 px-3.5 py-1 text-xs font-black text-sky-700">
+                  <span className="rounded-full border border-white/80 bg-white/80 px-4 py-1.5 text-sm font-black text-sky-700">
                     {cogIndex + 1} / {cognitiveQuestions.length}
                   </span>
                 </div>
 
-                <h2 className="mb-6 text-xl sm:text-2xl font-extrabold leading-snug text-slate-900">
+                <h2 className="mb-7 text-2xl sm:text-3xl font-black leading-snug text-slate-900">
                   {currentCog.subtitle}
                 </h2>
 
-                <div className="grid gap-3 sm:grid-cols-2">
+                <div className="grid gap-3.5 sm:grid-cols-2">
                   {currentCog.options.map((opt) => {
                     const isSelected = String(currentCogValue) === opt.option_key
                     return (
@@ -841,14 +841,14 @@ export function AssessmentWizard() {
                         whileHover={{ y: -3, scale: 1.02 }}
                         whileTap={{ scale: 0.96 }}
                         onClick={() => handleSelectCognitive(opt.option_key)}
-                        className={`flex items-center gap-3.5 rounded-2xl border p-4 text-left backdrop-blur-xl transition-colors ${
+                        className={`flex items-center gap-4 rounded-2xl border p-5 text-left backdrop-blur-xl transition-colors ${
                           isSelected
                             ? "border-sky-400 bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-[0_12px_28px_rgba(14,165,233,0.28)]"
                             : "border-white/90 bg-white/75 text-slate-900 hover:border-sky-300 hover:bg-white"
                         }`}
                       >
                         <span
-                          className={`grid size-9 shrink-0 place-items-center rounded-xl text-sm font-black ${
+                          className={`grid size-11 shrink-0 place-items-center rounded-xl text-base font-black ${
                             isSelected
                               ? "bg-white text-sky-700"
                               : "bg-sky-100 text-sky-800"
@@ -856,7 +856,7 @@ export function AssessmentWizard() {
                         >
                           {opt.option_key}
                         </span>
-                        <span className="text-sm sm:text-base font-extrabold leading-snug">
+                        <span className="text-base sm:text-lg font-extrabold leading-snug">
                           {opt.title}
                         </span>
                       </motion.button>
@@ -893,10 +893,11 @@ export function AssessmentWizard() {
         )}
 
         {/* Clean Bottom Footer Bar */}
-        <div className="mt-7 flex items-center justify-between gap-3">
+        <div className="mt-8 flex items-center justify-between gap-3">
           <Button
             variant="ghost"
             icon={ArrowLeft}
+            className="text-base px-5 py-3"
             disabled={step === 1 && (step1Mode === "radar" || cardIndex === 0)}
             onClick={() => {
               if (step === 1 && step1Mode === "swipe" && cardIndex > 0) {
@@ -919,6 +920,7 @@ export function AssessmentWizard() {
             {step === 1 && (
               <Button
                 icon={ArrowRight}
+                className="text-base px-6 py-3"
                 disabled={!allRiasecGroupsCovered}
                 onClick={() => {
                   const filled: Record<string, number> = {
@@ -945,6 +947,7 @@ export function AssessmentWizard() {
             {step === 2 && (
               <Button
                 icon={ArrowRight}
+                className="text-base px-6 py-3"
                 disabled={totalCognitiveAnswered < cognitiveQuestions.length}
                 onClick={() => {
                   setStep(3)
@@ -959,6 +962,7 @@ export function AssessmentWizard() {
             {step === 3 && (
               <Button
                 icon={Check}
+                className="text-base px-6 py-3"
                 disabled={Object.values(scores).filter((v) => v > 0).length < 3}
                 onClick={handleCompleteAssessment}
               >
@@ -1037,7 +1041,7 @@ function LiquidGlassQuestionCard({
 
       {/* Minimal Top Index + Mobile Prev/Next Tap */}
       <div className="mb-7 flex items-center justify-between">
-        <span className="rounded-full border border-white/80 bg-white/75 px-3.5 py-1 text-xs sm:text-sm font-black text-sky-800 backdrop-blur-md">
+        <span className="rounded-full border border-white/80 bg-white/75 px-4 py-1.5 text-sm sm:text-base font-black text-sky-800 backdrop-blur-md">
           {index + 1} / {total}
         </span>
 
@@ -1049,9 +1053,9 @@ function LiquidGlassQuestionCard({
               e.stopPropagation()
               onPrev()
             }}
-            className="grid size-8 place-items-center rounded-full border border-white/80 bg-white/75 text-sky-700 disabled:opacity-30"
+            className="grid size-9 place-items-center rounded-full border border-white/80 bg-white/75 text-sky-700 disabled:opacity-30"
           >
-            <ChevronLeft className="size-4" />
+            <ChevronLeft className="size-5" />
           </button>
           <button
             type="button"
@@ -1060,9 +1064,9 @@ function LiquidGlassQuestionCard({
               e.stopPropagation()
               onNext()
             }}
-            className="grid size-8 place-items-center rounded-full border border-white/80 bg-white/75 text-sky-700 disabled:opacity-30"
+            className="grid size-9 place-items-center rounded-full border border-white/80 bg-white/75 text-sky-700 disabled:opacity-30"
           >
-            <ChevronRight className="size-4" />
+            <ChevronRight className="size-5" />
           </button>
         </div>
       </div>
@@ -1070,9 +1074,9 @@ function LiquidGlassQuestionCard({
       {/* Liquid Glass Hero Icon */}
       <OnetItemVisualIcon iconKey={item.iconKey} />
 
-      {/* BIG CLEAR QUESTION (No quotation marks, no small English text) */}
+      {/* BIG CLEAR QUESTION (No quotation marks, larger font) */}
       <div className="mt-8 text-center">
-        <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 leading-snug">
+        <h2 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-900 leading-tight">
           {item.titleVi}
         </h2>
       </div>

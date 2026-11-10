@@ -37,11 +37,12 @@ export function MainLayout() {
         initial={false}
         animate={{ paddingLeft: desktop ? (collapsed ? 76 : 300) : 0 }}
         transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="relative z-10 min-h-screen pt-20 lg:pt-0"
+        className="relative z-10 flex min-h-screen flex-col pt-20 lg:pt-0"
       >
         <AnimatePresence mode="wait">
           <motion.main
             key={location.pathname}
+            className="flex-1"
             initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
             animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
             exit={{ opacity: 0, y: -6, filter: "blur(3px)" }}
