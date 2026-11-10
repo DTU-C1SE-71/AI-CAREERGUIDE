@@ -951,10 +951,12 @@ async def chat_with_career_counselor(
                     if not reply_text:
                         m = re.search(r'"reply"\s*:\s*"(.*?)(?:"\s*,\s*"suggested_followups"|"\s*})', cleaned_raw, re.DOTALL)
                         if m:
-                            try:
-                                reply_text = m.group(1).encode('utf-8').decode('unicode_escape')
-                            except Exception:
-                                reply_text = m.group(1)
+                            reply_text = (
+                                m.group(1)
+                                .replace("\\n", "\n")
+                                .replace('\\"', '"')
+                                .replace("\\\\", "\\")
+                            )
                         else:
                             reply_text = clean_json
 
@@ -1032,8 +1034,8 @@ async def test_llm_connection(payload: LLMConnectionTestRequest) -> LLMConnectio
         key = payload.api_key.strip()
     else:
         key = (settings.OPENAI_API_KEY or "").strip()
-    base_url = (payload.base_url or settings.OPENAI_BASE_URL or "").strip()
-    model = (payload.model or settings.LLM_MODEL or "dungcsnd113/deepseek-v4.1-flash-1017-free").strip()
+    base_url = (payload.base_url or settings.OPENAI_BASE_URL or "https://api.xkiro.com/v1").strip()
+    model = (payload.model or settings.LLM_MODEL or "mistralai/mistral-large-2512").strip()
 
     if not key:
         return LLMConnectionTestResponse(
@@ -1041,7 +1043,7 @@ async def test_llm_connection(payload: LLMConnectionTestRequest) -> LLMConnectio
             status_code=400,
             latency_ms=0.0,
             model_used=model,
-            base_url=base_url or settings.OPENAI_BASE_URL or "https://api.xah.io/v1",
+            base_url=base_url or settings.OPENAI_BASE_URL or "https://api.xkiro.com/v1",
             is_configured=False,
             message="Chưa cấu hình API Key. Vui lòng nhập API Key để kiểm tra kết nối.",
             preview_reply=None,

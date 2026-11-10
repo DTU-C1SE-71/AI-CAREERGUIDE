@@ -282,43 +282,112 @@ function SidebarBody({
       <div className="relative mt-2 shrink-0 border-t border-white/70 pt-2.5">
         {user ? (
           <>
-            {showSettingsMenu && !collapsed && (
-              <div className="mb-2 space-y-1.5 rounded-2xl border border-white/85 bg-white/90 p-2.5 text-xs shadow-lg backdrop-blur-xl">
-                <div className="border-b border-slate-100 px-2 py-1">
-                  <p className="truncate text-[11px] font-extrabold text-slate-800">
-                    {user.name}
-                  </p>
-                  <p className="truncate text-[10px] font-medium text-slate-400">
-                    {user.email}
-                  </p>
+            {showSettingsMenu && (
+              <div
+                className={`mb-2.5 space-y-2 rounded-2xl border border-sky-100 bg-white/95 p-3 text-xs shadow-xl backdrop-blur-xl ${
+                  collapsed
+                    ? "fixed bottom-4 left-20 z-[90] w-64"
+                    : "w-full"
+                }`}
+              >
+                <div className="flex items-center gap-2.5 border-b border-slate-100 pb-2.5">
+                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 text-xs font-black text-white shadow-sm">
+                    {user.name.slice(0, 2).toUpperCase()}
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-extrabold text-slate-900">
+                      {user.name}
+                    </p>
+                    <p className="truncate text-[10px] font-medium text-slate-500">
+                      {user.email}
+                    </p>
+                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-bold text-sky-700 border border-sky-200">
+                      <ShieldCheck size={10} />
+                      {user.role === "admin" ? "Quản trị viên Hệ thống" : "Hồ sơ Học sinh THPT"}
+                    </span>
+                  </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setShowSettingsMenu(false)
-                    logout()
-                  }}
-                  className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-bold text-slate-700 hover:bg-slate-100/80"
-                >
-                  <LogOut size={14} />
-                  <span>Đăng xuất</span>
-                </button>
+
+                <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSettingsMenu(false)
+                      onNavigate?.()
+                      navigate("/dashboard")
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-bold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
+                  >
+                    <Compass size={14} className="text-sky-600" />
+                    <span>Hồ sơ Năng lực & Kết quả</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSettingsMenu(false)
+                      onNavigate?.()
+                      navigate("/assessment")
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-bold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
+                  >
+                    <ClipboardCheck size={14} className="text-sky-600" />
+                    <span>Cập nhật Bài đánh giá 3 trụ cột</span>
+                  </button>
+
+                  {user.role === "admin" && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSettingsMenu(false)
+                        onNavigate?.()
+                        navigate("/admin")
+                      }}
+                      className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-bold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
+                    >
+                      <ShieldCheck size={14} className="text-sky-600" />
+                      <span>Quản trị HITL & Dữ liệu Ngành</span>
+                    </button>
+                  )}
+                </div>
+
+                <div className="border-t border-slate-100 pt-1.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSettingsMenu(false)
+                      logout()
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-bold text-rose-600 transition hover:bg-rose-50"
+                  >
+                    <LogOut size={14} />
+                    <span>Đăng xuất tài khoản</span>
+                  </button>
+                </div>
               </div>
             )}
 
             <div
-              className={`flex items-center rounded-2xl border border-white/80 bg-white/55 p-2 backdrop-blur-md ${
+              onClick={() => setShowSettingsMenu((v) => !v)}
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  setShowSettingsMenu((v) => !v)
+                }
+              }}
+              title={`Hồ sơ cá nhân · ${user.name}`}
+              className={`flex cursor-pointer items-center rounded-2xl border border-white/80 bg-white/55 p-2 backdrop-blur-md transition hover:bg-white/85 ${
                 collapsed ? "justify-center" : "gap-2.5"
               }`}
             >
-              <button
-                type="button"
-                onClick={logout}
-                title={collapsed ? `${user.name} · Đăng xuất` : "Đăng xuất"}
-                className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 text-[10px] font-black text-white"
+              <span
+                title={`Mở hồ sơ · ${user.name}`}
+                className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 text-[10px] font-black text-white shadow-xs"
               >
                 {user.name.slice(0, 2).toUpperCase()}
-              </button>
+              </span>
               {!collapsed && (
                 <>
                   <div className="min-w-0 flex-1">
@@ -326,20 +395,18 @@ function SidebarBody({
                       {user.name}
                     </p>
                     <p className="truncate text-[9px] font-semibold text-slate-400">
-                      {user.role === "admin" ? "Quản trị viên" : "Học sinh"}
+                      {user.role === "admin" ? "Quản trị viên · Xem hồ sơ" : "Học sinh · Xem hồ sơ"}
                     </p>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setShowSettingsMenu((v) => !v)}
-                    title="Tài khoản"
+                  <span
+                    title="Tùy chọn hồ sơ"
                     className="group grid size-8 place-items-center rounded-xl text-slate-400 hover:bg-white hover:text-sky-600"
                   >
                     <Settings
                       size={15}
                       className="transition-transform group-hover:rotate-45"
                     />
-                  </button>
+                  </span>
                 </>
               )}
             </div>

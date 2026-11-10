@@ -20,12 +20,16 @@ from app.schemas.recommender import (
 )
 from app.services.recommender.engine import (
     calculate_riasec_cosine_similarity,
+    calculate_enhanced_riasec_fit,
     evaluate_academic_readiness_for_major,
+    evaluate_target_anchored_academic_fit,
     calculate_cognitive_preference_match,
+    calculate_asymmetric_cognitive_fit,
     calculate_3pillar_hybrid_score,
     generate_xai_top_supporting_factors,
     classify_major_academic_benchmark,
     evaluate_admission_feasibility,
+    are_majors_related_pathway,
 )
 
 # Backwards compatibility aliases
@@ -158,19 +162,27 @@ async def calculate_3pillar_recommendations(
     scored_items: List[MajorRecommendationItem] = []
 
     for major in majors:
-        # --- PILLAR 1: Holland RIASEC via Cosine Similarity ---
-        score_riasec = calculate_riasec_cosine_similarity(student_riasec, major.riasec_vector)
+        # --- BENCHMARK TIER & CUTOFF RESOLUTION ---
+        bm_info = classify_major_academic_benchmark(
+            major.major_code, major.name, getattr(major, "category", "")
+        )
 
-        # --- PILLAR 2: Academic Readiness via Z-Score Normalization ---
+        # --- PILLAR 1 (45%): Enhanced Holland RIASEC Fit (Cosine 75% + Hexagonal Peak 25%) ---
+        score_riasec = calculate_enhanced_riasec_fit(student_riasec, major.riasec_vector)
+
+        # --- PILLAR 2 (35%): Target-Anchored Academic Readiness via Z-Score & Cutoff Alignment ---
         admitted_codes = [
             msb.subject_block.block_code for msb in major.subject_blocks if msb.subject_block
         ]
-        score_academic, best_block, block_breakdown = evaluate_academic_readiness_for_major(
-            admitted_codes, student_zscores
+        score_academic, best_block, block_breakdown = evaluate_target_anchored_academic_fit(
+            admitted_codes,
+            student_zscores,
+            benchmark_cutoff=bm_info["benchmark_cutoff"],
+            min_recommended=bm_info["min_recommended"],
         )
 
-        # --- PILLAR 3: Cognitive Preferences via Rule-Based Matching ---
-        score_pref = calculate_cognitive_preference_match(student_pref, major.cognitive_attributes)
+        # --- PILLAR 3 (20%): Asymmetric Cognitive Competency + Symmetric Cultural Fit ---
+        score_pref = calculate_asymmetric_cognitive_fit(student_pref, major.cognitive_attributes)
 
         # --- HOLISTIC 3-PILLAR SCORE ---
         overall_score, weights_dict = calculate_3pillar_hybrid_score(
@@ -198,10 +210,15 @@ async def calculate_3pillar_recommendations(
             mastered_skill_codes=mastered_skills
         )
 
-        # --- SOLUTION B: ADMISSION FEASIBILITY & REALISTIC BENCHMARKING ---
-        raw_block_sum = 18.0
+        # --- ADMISSION FEASIBILITY & HARD CUTOFF EVALUATION ---
+        raw_block_sum = 21.5
         if best_block and isinstance(block_breakdown, dict) and best_block in block_breakdown:
-            raw_block_sum = float(block_breakdown[best_block].get("raw_sum", 18.0))
+            raw_block_sum = float(block_breakdown[best_block].get("raw_sum", 21.5))
+        elif student_zscores:
+            # If major's blocks don't match entered blocks, take max raw_sum across student's entered blocks
+            all_sums = [float(v.get("raw_sum", 18.0)) for v in student_zscores.values() if isinstance(v, dict)]
+            if all_sums:
+                raw_block_sum = max(all_sums)
 
         feasibility = evaluate_admission_feasibility(
             raw_block_sum=raw_block_sum,
@@ -210,27 +227,13 @@ async def calculate_3pillar_recommendations(
             category=major.category
         )
 
-        # Apply feasibility penalty if the student has a severe score gap for reach majors (e.g. 15 pts vs 25.5 pts)
-        final_academic_score = score_academic
-        if feasibility["feasibility_tier"] == "REACH":
-            deficit_ratio = min(1.0, abs(feasibility["score_gap"]) / 15.0)
-            final_academic_score = max(0.05, score_academic * (1.0 - deficit_ratio * 0.6))
-            overall_score, weights_dict = calculate_3pillar_hybrid_score(
-                score_riasec=score_riasec,
-                score_academic=final_academic_score,
-                score_preference=score_pref,
-                w_riasec=w_riasec,
-                w_academic=w_academic,
-                w_preference=w_pref
-            )
-
         # --- DETERMINISTIC XAI EXPLANATIONS ---
         top_factors, summary_expl = generate_xai_top_supporting_factors(
             major_name=major.name,
             score_riasec=score_riasec,
             student_riasec=student_riasec,
             major_riasec=major.riasec_vector,
-            score_academic=final_academic_score,
+            score_academic=score_academic,
             best_block=best_block,
             score_pref=score_pref,
             student_pref=student_pref,
@@ -238,9 +241,9 @@ async def calculate_3pillar_recommendations(
         )
 
         if feasibility["feasibility_tier"] == "REACH":
-            top_factors.insert(0, f"Cảnh báo phân tầng: {feasibility['feasibility_label']}. {feasibility['admission_advice']}")
+            top_factors.insert(0, f"Chặn ngưỡng điểm an toàn: {feasibility['feasibility_label']}. {feasibility['admission_advice']}")
         else:
-            top_factors.insert(0, f"Độ tương thích học lực an toàn: Khối {best_block or 'xét tuyển'} ({raw_block_sum}đ) đạt ngưỡng sàn ({feasibility['benchmark_cutoff']}đ).")
+            top_factors.insert(0, f"Độ tương thích học lực an toàn: Khối {best_block or 'xét tuyển'} ({raw_block_sum}đ) đáp ứng ngưỡng chuẩn (~{feasibility['benchmark_cutoff']}đ).")
 
         scored_items.append(MajorRecommendationItem(
             rank=0,
@@ -250,13 +253,13 @@ async def calculate_3pillar_recommendations(
             category=getattr(major, "category", "Khác") or "Khác",
             overall_score=overall_score,
             score_riasec=score_riasec,
-            score_academic=final_academic_score,
+            score_academic=score_academic,
             score_preference=score_pref,
             best_matching_block=best_block,
             score_breakdown={
                 "weights": weights_dict,
                 "score_riasec": score_riasec,
-                "score_academic": final_academic_score,
+                "score_academic": score_academic,
                 "score_preference": score_pref,
                 "admitted_blocks_evaluated": block_breakdown,
                 "feasibility": feasibility
@@ -275,10 +278,62 @@ async def calculate_3pillar_recommendations(
             academic_tier_label=feasibility["academic_tier_label"]
         ))
 
-    # Deterministic Sort: prioritize realistic TARGET majors if student has low grades (< 17.5)
-    scored_items.sort(
+    # =========================================================================
+    # HARD ACADEMIC GATEKEEPER & SMART SIBLING / PATHWAY SUBSTITUTION
+    # =========================================================================
+    eligible_targets = [it for it in scored_items if it.feasibility_tier == "TARGET"]
+    blocked_reaches = [it for it in scored_items if it.feasibility_tier == "REACH"]
+
+    # Sort blocked high-cutoff majors by pure interest + cognitive passion
+    blocked_reaches.sort(
+        key=lambda it: (0.70 * it.score_riasec + 0.30 * it.score_preference),
+        reverse=True
+    )
+
+    substituted_codes = set()
+    for blocked in blocked_reaches[:6]:
+        if blocked.score_riasec < 0.65:
+            continue
+        # Find the closest eligible TARGET sibling major (same 4-digit group -> same 2-digit field -> 52->51 pathway)
+        best_sub: Optional[MajorRecommendationItem] = None
+        best_sub_metric = -1.0
+        best_rel_tier = 0
+
+        for cand in eligible_targets:
+            if cand.major_code in substituted_codes:
+                continue
+            rel_tier = are_majors_related_pathway(blocked.major_code, cand.major_code)
+            if rel_tier > 0 and cand.score_riasec >= 0.60:
+                metric = (rel_tier * 0.25) + (cand.score_riasec * 0.50) + (cand.overall_score * 0.25)
+                if metric > best_sub_metric:
+                    best_sub_metric = metric
+                    best_sub = cand
+                    best_rel_tier = rel_tier
+
+        if best_sub is not None:
+            substituted_codes.add(best_sub.major_code)
+            pathway_desc = (
+                "cùng nhóm ngành" if best_rel_tier == 3 else (
+                    "cùng lĩnh vực / nhánh Công nghệ Kỹ thuật ứng dụng" if best_rel_tier == 2 else "nhóm ngành liên thông gần gũi"
+                )
+            )
+            sub_msg = (
+                f"Đề xuất thay thế vừa sức cho ngành {blocked.major_name} (điểm chuẩn ~{blocked.benchmark_cutoff}đ): "
+                f"Giữ trọn định hướng sở thích ({round(best_sub.score_riasec * 100, 1)}%) thuộc {pathway_desc} "
+                f"nhưng có ngưỡng điểm an toàn (~{best_sub.benchmark_cutoff}đ)."
+            )
+            best_sub.feasibility_label = f"Thay thế vừa sức cho {blocked.major_name}"
+            best_sub.admission_advice = sub_msg
+            best_sub.top_supporting_factors.insert(0, sub_msg)
+            # Slight priority boost so the smart substitute surfaces in Top recommendations
+            best_sub.overall_score = round(min(0.99, best_sub.overall_score + 0.04), 4)
+
+    # Strictly recommend ONLY eligible TARGET majors (fallback to all only if eligible_targets is empty)
+    final_pool = eligible_targets if len(eligible_targets) >= payload.top_k else scored_items
+    final_pool.sort(
         key=lambda item: (
             1 if item.feasibility_tier == "TARGET" else 0,
+            1 if item.major_code in substituted_codes else 0,
             item.overall_score,
             item.score_academic,
             item.score_riasec
@@ -288,7 +343,7 @@ async def calculate_3pillar_recommendations(
 
     # Assign 1-based ranks and slice top_k
     top_results: List[MajorRecommendationItem] = []
-    for idx, item in enumerate(scored_items[:payload.top_k], start=1):
+    for idx, item in enumerate(final_pool[:payload.top_k], start=1):
         item.rank = idx
         top_results.append(item)
 
