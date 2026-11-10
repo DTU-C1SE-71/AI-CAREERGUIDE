@@ -13,10 +13,14 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router"
-import { AcademicInputForm } from "../components/assessment/AcademicInputForm"
+import {
+  AcademicInputForm,
+  HIGH_SCHOOL_SUBJECTS,
+  type SubjectGrade,
+} from "../components/assessment/AcademicInputForm"
 import {
   LiveRiasecHexagon,
-  OnetItemVisualIcon,
+  QuestionIllustrationFrame,
 } from "../components/assessment/OnetSwipeCardVisual"
 import { Button } from "../components/common/Button"
 import { PageContainer } from "../components/layout/PageContainer"
@@ -75,6 +79,19 @@ const CANONICAL_30_CODES: string[] = [
 
 const RIASEC_ORDER: RiasecDimension[] = ["R", "I", "A", "S", "E", "C"]
 
+const DEFAULT_SUBJECT_SCORES: Record<string, number> = {
+  Toán: 8.2,
+  "Ngữ văn": 7.4,
+  "Tiếng Anh": 7.8,
+  "Vật lý": 8.0,
+  "Hóa học": 7.5,
+  "Sinh học": 7.0,
+  "Lịch sử": 7.2,
+  "Địa lý": 7.5,
+  "GDKT & Pháp luật": 8.0,
+  "Tin học / Công nghệ": 8.4,
+}
+
 const defaultRiasecFallback: QuestionItem[] = CANONICAL_30_CODES.map(
   (code, idx) => {
     const found = ONET_MINI_IP_ITEMS.find((i) => i.code === code)
@@ -95,15 +112,15 @@ export function AssessmentWizard() {
     const mapped = Object.fromEntries(
       assessment.scores.map((s) => [s.subject, s.score])
     )
-    return {
-      Toán: mapped["Toán"] ?? 8.2,
-      "Ngữ văn": mapped["Ngữ văn"] ?? 7.1,
-      "Tiếng Anh": mapped["Tiếng Anh"] ?? 7.8,
-      "Vật lý": mapped["Vật lý"] ?? 8.0,
-      "Hóa học": mapped["Hóa học"] ?? 7.4,
-      "Sinh học": mapped["Sinh học"] ?? 6.9,
-      ...mapped,
-    }
+    const initial: Record<string, number> = {}
+    HIGH_SCHOOL_SUBJECTS.forEach((subj) => {
+      const existing = mapped[subj.name]
+      initial[subj.name] =
+        typeof existing === "number" && Number.isFinite(existing)
+          ? Math.min(10, Math.max(0, existing))
+          : (DEFAULT_SUBJECT_SCORES[subj.name] ?? 7.5)
+    })
+    return initial
   })
   const [loading, setLoading] = useState(true)
   const [riasecQuestions, setRiasecQuestions] = useState<QuestionItem[]>(
@@ -113,7 +130,7 @@ export function AssessmentWizard() {
     CognitiveQuestionItem[]
   >(defaultCognitiveQuestions)
 
-  // Step 1 Mode: 'swipe' (Liquid Glass Card Carousel) | 'radar' (1-Screen Fast Radar)
+  // Step 1 Mode: 'swipe' (Vertical Liquid Glass Card) | 'radar' (1-Screen Fast Radar)
   const [step1Mode, setStep1Mode] = useState<"swipe" | "radar">("swipe")
   const [cardIndex, setCardIndex] = useState<number>(() => {
     const firstUnanswered = ONET_MINI_IP_ITEMS.findIndex((item) => {
@@ -463,11 +480,16 @@ export function AssessmentWizard() {
       finalAnswers[`1-${idx}`] = safeVal
     })
 
-    const normalizedScores = Object.entries(scores).map(([subject, score]) => ({
-      subject,
-      score,
-      zScore: (score - 7.1) / 1.2,
-    }))
+    const normalizedScores: SubjectGrade[] = Object.entries(scores).map(
+      ([subject, score]) => {
+        const clamped = Math.min(10, Math.max(0, Number(score) || 0))
+        return {
+          subject,
+          score: clamped,
+          zScore: (clamped - 7.1) / 1.2,
+        }
+      }
+    )
 
     recordCompletedAttempt({
       ...assessment,
@@ -517,30 +539,31 @@ export function AssessmentWizard() {
   }
 
   return (
-    <section className="relative py-6 sm:py-8 overflow-x-clip">
+    <section className="relative py-4 sm:py-6 overflow-x-clip">
       {/* Ambient Animated Liquid Glass Background Orbs */}
       <motion.div
         animate={{
-          x: [0, 24, -12, 0],
-          y: [0, -18, 12, 0],
-          scale: [1, 1.06, 0.96, 1],
+          x: [0, 20, -10, 0],
+          y: [0, -14, 10, 0],
+          scale: [1, 1.05, 0.96, 1],
         }}
         transition={{ duration: 14, repeat: Infinity, ease: "easeInOut" }}
-        className="pointer-events-none absolute left-1/4 top-12 h-72 w-72 rounded-full bg-sky-300/25 blur-3xl"
+        className="pointer-events-none absolute left-1/4 top-10 h-64 w-64 rounded-full bg-sky-300/25 blur-3xl"
       />
       <motion.div
         animate={{
-          x: [0, -28, 16, 0],
-          y: [0, 20, -14, 0],
-          scale: [1, 0.95, 1.08, 1],
+          x: [0, -24, 14, 0],
+          y: [0, 18, -12, 0],
+          scale: [1, 0.95, 1.06, 1],
         }}
         transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
-        className="pointer-events-none absolute right-1/4 top-36 h-80 w-80 rounded-full bg-cyan-300/20 blur-3xl"
+        className="pointer-events-none absolute right-1/4 top-28 h-72 w-72 rounded-full bg-cyan-300/20 blur-3xl"
       />
 
-      <PageContainer className="relative z-10 max-w-3xl">
-        {/* Ultra-Clean Top Liquid Glass Navigation Bar */}
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-2.5 rounded-3xl border border-white/85 bg-white/55 px-4 py-2.5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_12px_32px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
+      {/* Constrained Container Width: max-w-2xl for balanced desktop/laptop proportions */}
+      <PageContainer className="relative z-10 max-w-2xl">
+        {/* Top Liquid Glass Step Bar */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
           {/* 3 Main Steps */}
           <div className="flex items-center gap-1.5">
             {[
@@ -563,16 +586,16 @@ export function AssessmentWizard() {
                       update({ step: s.id })
                     }
                   }}
-                  className={`relative flex items-center gap-2 rounded-2xl px-4 py-2.5 text-sm sm:text-base font-extrabold transition ${
+                  className={`relative flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-extrabold transition ${
                     active
-                      ? "bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-[0_6px_18px_rgba(14,165,233,0.28)]"
+                      ? "bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-[0_6px_16px_rgba(14,165,233,0.28)]"
                       : s.done
-                        ? "border border-sky-200/80 bg-white/75 text-sky-700 hover:bg-white"
-                        : "bg-white/40 text-slate-600 hover:bg-white/70"
+                        ? "border border-sky-200/80 bg-white/80 text-sky-700 hover:bg-white"
+                        : "bg-white/45 text-slate-600 hover:bg-white/75"
                   }`}
                 >
                   {s.done && !active && (
-                    <Check className="size-4 text-sky-600" />
+                    <Check className="size-3.5 text-sky-600" />
                   )}
                   <span>{s.label}</span>
                 </button>
@@ -581,31 +604,31 @@ export function AssessmentWizard() {
           </div>
 
           {/* Right Utilities: View Mode Switch + Reset */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {step === 1 && (
-              <div className="flex items-center rounded-2xl border border-white/80 bg-white/55 p-1 backdrop-blur-xl">
+              <div className="flex items-center rounded-xl border border-white/80 bg-white/60 p-0.5 backdrop-blur-xl">
                 <button
                   type="button"
                   onClick={() => setStep1Mode("swipe")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-extrabold transition ${
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold transition ${
                     step1Mode === "swipe"
                       ? "bg-sky-600 text-white shadow-sm"
                       : "text-slate-600 hover:text-sky-700"
                   }`}
                 >
-                  <Layers className="size-4" />
+                  <Layers className="size-3.5" />
                   <span>Thẻ</span>
                 </button>
                 <button
                   type="button"
                   onClick={() => setStep1Mode("radar")}
-                  className={`inline-flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-sm font-extrabold transition ${
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold transition ${
                     step1Mode === "radar"
                       ? "bg-sky-600 text-white shadow-sm"
                       : "text-slate-600 hover:text-sky-700"
                   }`}
                 >
-                  <Sliders className="size-4" />
+                  <Sliders className="size-3.5" />
                   <span>Radar</span>
                 </button>
               </div>
@@ -616,28 +639,28 @@ export function AssessmentWizard() {
                 type="button"
                 onClick={resetAllAnswers}
                 title="Làm lại"
-                className="grid size-9 place-items-center rounded-2xl border border-white/85 bg-white/60 text-slate-600 backdrop-blur-xl transition hover:border-sky-300 hover:bg-white hover:text-sky-700"
+                className="grid size-8 place-items-center rounded-xl border border-white/85 bg-white/60 text-slate-600 backdrop-blur-xl transition hover:border-sky-300 hover:bg-white hover:text-sky-700"
               >
-                <RotateCcw className="size-4" />
+                <RotateCcw className="size-3.5" />
               </button>
             )}
           </div>
         </div>
 
         {loading && step < 3 && (
-          <div className="mb-4 flex items-center justify-center gap-2 text-sky-700/70">
+          <div className="mb-3 flex items-center justify-center gap-2 text-sky-700/70">
             <Loader2 className="size-4 animate-spin" />
           </div>
         )}
 
-        {/* ==================== STEP 1: LIQUID GLASS QUESTION CARDS & 5 EMOJI CHOICES ==================== */}
+        {/* ==================== STEP 1: VERTICAL QUESTION CARD + ILLUSTRATION + 5 EMOTICONS ==================== */}
         {step === 1 && (
-          <div className="space-y-6">
+          <div className="space-y-4">
             {step1Mode === "swipe" && (
               <>
-                {/* Liquid Glass Progress Track */}
-                <div className="mx-auto flex max-w-xl items-center gap-3 px-2">
-                  <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/50 p-0.5 backdrop-blur-md">
+                {/* Compact Progress Track */}
+                <div className="mx-auto flex max-w-md items-center gap-3 px-1">
+                  <div className="h-2 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
                     <motion.div
                       animate={{
                         width: `${Math.round(
@@ -648,13 +671,13 @@ export function AssessmentWizard() {
                       className="h-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-cyan-500"
                     />
                   </div>
-                  <span className="text-base font-black text-sky-900">
+                  <span className="text-xs font-black text-sky-900 sm:text-sm">
                     {totalRiasecAnswered}/30
                   </span>
                 </div>
 
-                {/* Carousel Stage: Drag / Swipe Left or Right -> Next / Previous Question */}
-                <div className="relative mx-auto flex max-w-2xl items-center justify-center gap-3">
+                {/* Vertical Card Stage: Constrained max-w-xl with side navigation */}
+                <div className="relative mx-auto flex max-w-xl items-center justify-center gap-2.5">
                   {/* Left Arrow Button (Previous Question) */}
                   <motion.button
                     type="button"
@@ -663,23 +686,25 @@ export function AssessmentWizard() {
                     disabled={cardIndex === 0}
                     onClick={goToPrevCard}
                     aria-label="Câu trước"
-                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/60 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_8px_24px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white/90 disabled:opacity-30"
+                    className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white disabled:opacity-30"
                   >
-                    <ChevronLeft className="size-6" />
+                    <ChevronLeft className="size-5" />
                   </motion.button>
 
-                  {/* Center Liquid Glass Card */}
-                  <div className="relative w-full max-w-lg">
-                    {/* Layered Frost Depth */}
-                    <div className="pointer-events-none absolute inset-x-6 -bottom-3 top-5 rounded-[34px] border border-white/60 bg-white/30 backdrop-blur-xl" />
+                  {/* Unified Vertical Bento Card (Illustration + Question + 5 Emoticon Ratings) */}
+                  <div className="relative w-full max-w-md">
+                    {/* Subtle Stacked Depth Card Behind */}
+                    <div className="pointer-events-none absolute inset-x-4 -bottom-2.5 top-4 rounded-3xl border border-white/60 bg-white/35 backdrop-blur-xl" />
 
                     <AnimatePresence mode="wait" custom={slideDirection}>
-                      <LiquidGlassQuestionCard
+                      <VerticalQuestionCard
                         key={currentCard.code}
                         item={currentCard}
                         index={cardIndex}
                         total={ONET_MINI_IP_ITEMS.length}
+                        selectedValue={currentCardValue}
                         direction={slideDirection}
+                        onRate={rateCurrentCard}
                         onNext={goToNextCard}
                         onPrev={goToPrevCard}
                       />
@@ -694,53 +719,18 @@ export function AssessmentWizard() {
                     disabled={cardIndex >= ONET_MINI_IP_ITEMS.length - 1}
                     onClick={goToNextCard}
                     aria-label="Câu tiếp theo"
-                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/60 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_8px_24px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white/90 disabled:opacity-30"
+                    className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white disabled:opacity-30"
                   >
-                    <ChevronRight className="size-6" />
+                    <ChevronRight className="size-5" />
                   </motion.button>
-                </div>
-
-                {/* 5 Clean Big Choices ONLY (No small text underneath) */}
-                <div className="mx-auto max-w-2xl">
-                  <div className="grid grid-cols-5 gap-2.5 sm:gap-3">
-                    {ONET_REACTION_SCALE.map((btn) => {
-                      const active = currentCardValue === btn.value
-                      return (
-                        <motion.button
-                          key={btn.value}
-                          type="button"
-                          whileHover={{ y: -4, scale: 1.03 }}
-                          whileTap={{ scale: 0.94 }}
-                          transition={{
-                            type: "spring",
-                            stiffness: 400,
-                            damping: 22,
-                          }}
-                          onClick={() => rateCurrentCard(btn.value)}
-                          className={`relative flex flex-col items-center justify-center rounded-[26px] border py-5 px-2.5 text-center backdrop-blur-2xl transition-colors duration-200 ${
-                            active
-                              ? "border-sky-400 bg-gradient-to-b from-sky-500 to-cyan-500 text-white shadow-[inset_0_1px_2px_rgba(255,255,255,0.6),0_14px_30px_rgba(14,165,233,0.32)]"
-                              : "border-white/90 bg-white/60 text-slate-800 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_8px_24px_rgba(14,165,233,0.08)] hover:border-sky-300 hover:bg-white/85"
-                          }`}
-                        >
-                          <span className="text-4xl sm:text-5xl leading-none">
-                            {btn.emoji}
-                          </span>
-                          <span className="mt-3 text-sm sm:text-base font-extrabold tracking-tight leading-tight">
-                            {btn.label}
-                          </span>
-                        </motion.button>
-                      )
-                    })}
-                  </div>
                 </div>
               </>
             )}
 
             {/* MODE B: 1-SCREEN RADAR SLIDERS */}
             {step1Mode === "radar" && (
-              <div className="grid gap-5 rounded-[30px] border border-white/90 bg-white/60 p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_50px_rgba(14,165,233,0.12)] backdrop-blur-2xl md:grid-cols-[1.2fr_0.8fr]">
-                <div className="space-y-3">
+              <div className="grid gap-4 rounded-3xl border border-white/90 bg-white/65 p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl md:grid-cols-[1.2fr_0.8fr]">
+                <div className="space-y-2.5">
                   {RIASEC_ORDER.map((dim) => {
                     const meta = RIASEC_META[dim]
                     const avg = riasecGroupAvg[dim]
@@ -748,12 +738,12 @@ export function AssessmentWizard() {
                     return (
                       <div
                         key={dim}
-                        className="flex items-center justify-between gap-3 rounded-2xl border border-white/80 bg-white/70 px-4 py-3 backdrop-blur-xl"
+                        className="flex items-center justify-between gap-2.5 rounded-2xl border border-white/80 bg-white/75 px-3.5 py-2.5 backdrop-blur-xl"
                       >
-                        <span className="text-base sm:text-lg font-extrabold text-slate-900">
+                        <span className="text-sm sm:text-base font-extrabold text-slate-900">
                           {meta.label}
                         </span>
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1">
                           {[1, 2, 3, 4, 5].map((lv) => {
                             const active = isFilled && Math.round(avg) === lv
                             return (
@@ -762,9 +752,9 @@ export function AssessmentWizard() {
                                 type="button"
                                 whileTap={{ scale: 0.9 }}
                                 onClick={() => setGroupLevel(dim, lv)}
-                                className={`size-10 rounded-xl text-base font-black transition ${
+                                className={`size-9 rounded-xl text-sm font-black transition ${
                                   active
-                                    ? "bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-md"
+                                    ? "bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-sm"
                                     : "bg-sky-50/80 text-sky-800 hover:bg-sky-100"
                                 }`}
                               >
@@ -778,7 +768,7 @@ export function AssessmentWizard() {
                   })}
                 </div>
 
-                <div className="flex flex-col items-center justify-center rounded-3xl border border-white/80 bg-sky-50/45 p-5 backdrop-blur-xl">
+                <div className="flex flex-col items-center justify-center rounded-2xl border border-white/80 bg-sky-50/45 p-4 backdrop-blur-xl">
                   <LiveRiasecHexagon scores={riasecGroupPct} />
                 </div>
               </div>
@@ -786,9 +776,9 @@ export function AssessmentWizard() {
           </div>
         )}
 
-        {/* ==================== STEP 2: BIG CLEAN LIQUID GLASS COGNITIVE ==================== */}
+        {/* ==================== STEP 2: LIQUID GLASS COGNITIVE ==================== */}
         {step === 2 && currentCog && (
-          <div className="relative mx-auto flex max-w-3xl items-center justify-center gap-3">
+          <div className="relative mx-auto flex max-w-2xl items-center justify-center gap-2.5">
             <motion.button
               type="button"
               whileHover={{ scale: 1.08 }}
@@ -796,9 +786,9 @@ export function AssessmentWizard() {
               disabled={cogIndex === 0}
               onClick={goToPrevCog}
               aria-label="Câu trước"
-              className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/60 text-sky-700 shadow-lg backdrop-blur-2xl disabled:opacity-30"
+              className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-md backdrop-blur-2xl disabled:opacity-30"
             >
-              <ChevronLeft className="size-6" />
+              <ChevronLeft className="size-5" />
             </motion.button>
 
             <AnimatePresence mode="wait" custom={cogDirection}>
@@ -819,36 +809,36 @@ export function AssessmentWizard() {
                     goToPrevCog()
                   }
                 }}
-                className="w-full rounded-[32px] border border-white/90 bg-white/60 p-6 sm:p-8 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_50px_rgba(14,165,233,0.14)] backdrop-blur-2xl"
+                className="w-full rounded-3xl border border-white/90 bg-white/65 p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl"
               >
-                <div className="mb-5 flex items-center justify-between">
-                  <span className="rounded-full border border-white/80 bg-white/80 px-4 py-1.5 text-sm font-black text-sky-700">
+                <div className="mb-4 flex items-center justify-between">
+                  <span className="rounded-full border border-white/80 bg-white/85 px-3.5 py-1 text-xs font-black text-sky-700">
                     {cogIndex + 1} / {cognitiveQuestions.length}
                   </span>
                 </div>
 
-                <h2 className="mb-7 text-2xl sm:text-3xl font-black leading-snug text-slate-900">
+                <h2 className="mb-5 text-xl sm:text-2xl font-black leading-snug text-slate-900">
                   {currentCog.subtitle}
                 </h2>
 
-                <div className="grid gap-3.5 sm:grid-cols-2">
+                <div className="grid gap-3 sm:grid-cols-2">
                   {currentCog.options.map((opt) => {
                     const isSelected = String(currentCogValue) === opt.option_key
                     return (
                       <motion.button
                         key={opt.option_key}
                         type="button"
-                        whileHover={{ y: -3, scale: 1.02 }}
-                        whileTap={{ scale: 0.96 }}
+                        whileHover={{ y: -2, scale: 1.01 }}
+                        whileTap={{ scale: 0.97 }}
                         onClick={() => handleSelectCognitive(opt.option_key)}
-                        className={`flex items-center gap-4 rounded-2xl border p-5 text-left backdrop-blur-xl transition-colors ${
+                        className={`flex items-center gap-3.5 rounded-2xl border p-4 text-left backdrop-blur-xl transition-colors ${
                           isSelected
-                            ? "border-sky-400 bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-[0_12px_28px_rgba(14,165,233,0.28)]"
-                            : "border-white/90 bg-white/75 text-slate-900 hover:border-sky-300 hover:bg-white"
+                            ? "border-sky-400 bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-[0_10px_24px_rgba(14,165,233,0.26)]"
+                            : "border-white/90 bg-white/80 text-slate-900 hover:border-sky-300 hover:bg-white"
                         }`}
                       >
                         <span
-                          className={`grid size-11 shrink-0 place-items-center rounded-xl text-base font-black ${
+                          className={`grid size-9 shrink-0 place-items-center rounded-xl text-sm font-black ${
                             isSelected
                               ? "bg-white text-sky-700"
                               : "bg-sky-100 text-sky-800"
@@ -856,7 +846,7 @@ export function AssessmentWizard() {
                         >
                           {opt.option_key}
                         </span>
-                        <span className="text-base sm:text-lg font-extrabold leading-snug">
+                        <span className="text-sm sm:text-base font-extrabold leading-snug">
                           {opt.title}
                         </span>
                       </motion.button>
@@ -873,31 +863,34 @@ export function AssessmentWizard() {
               disabled={cogIndex >= cognitiveQuestions.length - 1}
               onClick={goToNextCog}
               aria-label="Câu tiếp theo"
-              className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/60 text-sky-700 shadow-lg backdrop-blur-2xl disabled:opacity-30"
+              className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-md backdrop-blur-2xl disabled:opacity-30"
             >
-              <ChevronRight className="size-6" />
+              <ChevronRight className="size-5" />
             </motion.button>
           </div>
         )}
 
-        {/* ==================== STEP 3: ACADEMIC SCORES ==================== */}
+        {/* ==================== STEP 3: ACADEMIC SCORES (10 HIGH SCHOOL SUBJECTS) ==================== */}
         {step === 3 && (
-          <div className="rounded-[32px] border border-white/90 bg-white/60 p-6 sm:p-8 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_50px_rgba(14,165,233,0.14)] backdrop-blur-2xl">
+          <div className="rounded-3xl border border-white/90 bg-white/65 p-5 sm:p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl">
             <AcademicInputForm
               scores={scores}
               onChange={(subject, value) =>
-                setScores((prev) => ({ ...prev, [subject]: value }))
+                setScores((prev) => ({
+                  ...prev,
+                  [subject]: Math.min(10, Math.max(0, value)),
+                }))
               }
             />
           </div>
         )}
 
-        {/* Clean Bottom Footer Bar */}
-        <div className="mt-8 flex items-center justify-between gap-3">
+        {/* Clean Bottom Action Bar */}
+        <div className="mt-5 flex items-center justify-between gap-3">
           <Button
             variant="ghost"
             icon={ArrowLeft}
-            className="text-base px-5 py-3"
+            className="text-sm sm:text-base px-4 py-2.5"
             disabled={step === 1 && (step1Mode === "radar" || cardIndex === 0)}
             onClick={() => {
               if (step === 1 && step1Mode === "swipe" && cardIndex > 0) {
@@ -920,7 +913,7 @@ export function AssessmentWizard() {
             {step === 1 && (
               <Button
                 icon={ArrowRight}
-                className="text-base px-6 py-3"
+                className="text-sm sm:text-base px-5 py-2.5"
                 disabled={!allRiasecGroupsCovered}
                 onClick={() => {
                   const filled: Record<string, number> = {
@@ -947,7 +940,7 @@ export function AssessmentWizard() {
             {step === 2 && (
               <Button
                 icon={ArrowRight}
-                className="text-base px-6 py-3"
+                className="text-sm sm:text-base px-5 py-2.5"
                 disabled={totalCognitiveAnswered < cognitiveQuestions.length}
                 onClick={() => {
                   setStep(3)
@@ -962,8 +955,10 @@ export function AssessmentWizard() {
             {step === 3 && (
               <Button
                 icon={Check}
-                className="text-base px-6 py-3"
-                disabled={Object.values(scores).filter((v) => v > 0).length < 3}
+                className="text-sm sm:text-base px-5 py-2.5"
+                disabled={
+                  Object.values(scores).filter((v) => typeof v === "number").length < 3
+                }
                 onClick={handleCompleteAssessment}
               >
                 Xem kết quả
@@ -976,24 +971,28 @@ export function AssessmentWizard() {
   )
 }
 
-function LiquidGlassQuestionCard({
+function VerticalQuestionCard({
   item,
   index,
   total,
+  selectedValue,
   direction,
+  onRate,
   onNext,
   onPrev,
 }: {
   item: OnetMiniIpItem
   index: number
   total: number
+  selectedValue?: number
   direction: number
+  onRate: (value: number) => void
   onNext: () => void
   onPrev: () => void
 }) {
   const x = useMotionValue(0)
-  const rotate = useTransform(x, [-220, 220], [-6, 6])
-  const scaleDrag = useTransform(x, [-220, 0, 220], [0.97, 1, 0.97])
+  const rotate = useTransform(x, [-200, 200], [-4, 4])
+  const scaleDrag = useTransform(x, [-200, 0, 200], [0.98, 1, 0.98])
 
   return (
     <motion.div
@@ -1001,7 +1000,7 @@ function LiquidGlassQuestionCard({
       style={{ x, rotate, scale: scaleDrag }}
       drag="x"
       dragConstraints={{ left: 0, right: 0 }}
-      dragElastic={0.42}
+      dragElastic={0.38}
       onDragEnd={(_, info) => {
         // Swipe left -> Next question; Swipe right -> Previous question
         if (info.offset.x < -55 || info.velocity.x < -300) {
@@ -1012,9 +1011,9 @@ function LiquidGlassQuestionCard({
       }}
       initial={{
         opacity: 0,
-        x: direction >= 0 ? 72 : -72,
-        scale: 0.95,
-        filter: "blur(4px)",
+        x: direction >= 0 ? 56 : -56,
+        scale: 0.96,
+        filter: "blur(3px)",
       }}
       animate={{
         opacity: 1,
@@ -1024,9 +1023,9 @@ function LiquidGlassQuestionCard({
       }}
       exit={{
         opacity: 0,
-        x: direction >= 0 ? -72 : 72,
-        scale: 0.95,
-        filter: "blur(4px)",
+        x: direction >= 0 ? -56 : 56,
+        scale: 0.96,
+        filter: "blur(3px)",
       }}
       transition={{
         type: "spring",
@@ -1034,51 +1033,49 @@ function LiquidGlassQuestionCard({
         damping: 28,
         mass: 0.85,
       }}
-      className="relative cursor-grab active:cursor-grabbing select-none overflow-hidden rounded-[34px] border border-white/90 bg-white/55 px-6 py-10 sm:px-10 sm:py-12 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_24px_54px_rgba(14,165,233,0.14)] backdrop-blur-2xl"
+      className="relative flex flex-col cursor-grab active:cursor-grabbing select-none overflow-hidden rounded-3xl border border-white/90 bg-white/65 p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_48px_rgba(14,165,233,0.14)] backdrop-blur-2xl"
     >
       {/* Specular Top Reflection */}
-      <div className="pointer-events-none absolute inset-x-10 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
+      <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
 
-      {/* Minimal Top Index + Mobile Prev/Next Tap */}
-      <div className="mb-7 flex items-center justify-between">
-        <span className="rounded-full border border-white/80 bg-white/75 px-4 py-1.5 text-sm sm:text-base font-black text-sky-800 backdrop-blur-md">
-          {index + 1} / {total}
-        </span>
+      {/* 1. 16:9 Visual Illustration Frame for the Question */}
+      <QuestionIllustrationFrame item={item} index={index} total={total} />
 
-        <div className="flex items-center gap-1.5 sm:hidden">
-          <button
-            type="button"
-            disabled={index === 0}
-            onClick={(e) => {
-              e.stopPropagation()
-              onPrev()
-            }}
-            className="grid size-9 place-items-center rounded-full border border-white/80 bg-white/75 text-sky-700 disabled:opacity-30"
-          >
-            <ChevronLeft className="size-5" />
-          </button>
-          <button
-            type="button"
-            disabled={index >= total - 1}
-            onClick={(e) => {
-              e.stopPropagation()
-              onNext()
-            }}
-            className="grid size-9 place-items-center rounded-full border border-white/80 bg-white/75 text-sky-700 disabled:opacity-30"
-          >
-            <ChevronRight className="size-5" />
-          </button>
-        </div>
-      </div>
-
-      {/* Liquid Glass Hero Icon */}
-      <OnetItemVisualIcon iconKey={item.iconKey} />
-
-      {/* BIG CLEAR QUESTION (No quotation marks, larger font) */}
-      <div className="mt-8 text-center">
-        <h2 className="text-2xl sm:text-4xl font-black tracking-tight text-slate-900 leading-tight">
+      {/* 2. Question Content (Balanced Typography & Spacing) */}
+      <div className="my-5 text-center px-1">
+        <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 leading-snug">
           {item.titleVi}
         </h2>
+      </div>
+
+      {/* 3. Compact 5-Level Rating Emoticons inside the Vertical Card Bottom */}
+      <div className="grid grid-cols-5 gap-2 pt-3 border-t border-sky-100/80">
+        {ONET_REACTION_SCALE.map((btn) => {
+          const active = selectedValue === btn.value
+          return (
+            <motion.button
+              key={btn.value}
+              type="button"
+              whileHover={{ y: -2, scale: 1.04 }}
+              whileTap={{ scale: 0.94 }}
+              transition={{ type: "spring", stiffness: 400, damping: 22 }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onRate(btn.value)
+              }}
+              className={`flex flex-col items-center justify-center rounded-2xl border py-2.5 px-1.5 text-center transition-all duration-200 ${
+                active
+                  ? "border-sky-400 bg-gradient-to-b from-sky-500 to-cyan-500 text-white shadow-[0_8px_20px_rgba(14,165,233,0.3)] scale-[1.03]"
+                  : "border-white/90 bg-white/75 text-slate-700 shadow-xs hover:border-sky-300 hover:bg-white"
+              }`}
+            >
+              <span className="text-2xl leading-none">{btn.emoji}</span>
+              <span className="mt-1.5 text-[11px] sm:text-xs font-extrabold tracking-tight leading-tight">
+                {btn.label}
+              </span>
+            </motion.button>
+          )
+        })}
       </div>
     </motion.div>
   )

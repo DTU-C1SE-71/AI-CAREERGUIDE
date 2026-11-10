@@ -1,11 +1,12 @@
 export type RiasecDimension = "R" | "I" | "A" | "S" | "E" | "C";
 
-export interface OnetMiniIpItem {
+export interface Question {
   code: string; // R1..R5, I1..I5, A1..A5, S1..S5, E1..E5, C1..C5
   dimension: RiasecDimension;
   round: 1 | 2 | 3 | 4 | 5;
-  titleVi: string; // Concise 4-7 words for zero reading fatigue
-  titleEn: string; // Authentic O*NET Mini-IP (Rounds et al., 2016)
+  titleVi: string;
+  titleEn: string;
+  imageUrl: string;
   iconKey:
     | "hammer"
     | "wrench"
@@ -38,6 +39,8 @@ export interface OnetMiniIpItem {
     | "scan"
     | "mail";
 }
+
+export type OnetMiniIpItem = Question;
 
 export const RIASEC_META: Record<
   RiasecDimension,
@@ -86,9 +89,9 @@ export const ONET_REACTION_SCALE = [
 /**
  * Official O*NET Mini Interest Profiler (Mini-IP) 30-item set
  * Source: Rounds, J., Ming, C. W. J., Cao, M., Song, C., & Lewis, P. (2016)
- * Interleaved across 5 balanced rounds (R -> I -> A -> S -> E -> C) just like My Next Move.
+ * Complete with curated contextual visual illustrations (`imageUrl`).
  */
-export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
+export const ONET_MINI_IP_ITEMS: Question[] = [
   // Round 1
   {
     code: "R1",
@@ -96,6 +99,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 1,
     titleVi: "Đóng & lắp ráp đồ gỗ nội thất",
     titleEn: "Build kitchen cabinets",
+    imageUrl:
+      "https://images.unsplash.com/photo-1581783898377-1c85bf937427?auto=format&fit=crop&w=900&q=80",
     iconKey: "hammer",
   },
   {
@@ -104,6 +109,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 1,
     titleVi: "Nghiên cứu phát triển thuốc mới",
     titleEn: "Develop a new medicine",
+    imageUrl:
+      "https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=900&q=80",
     iconKey: "pill",
   },
   {
@@ -112,6 +119,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 1,
     titleVi: "Viết sách hoặc kịch bản sân khấu",
     titleEn: "Write books or plays",
+    imageUrl:
+      "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=900&q=80",
     iconKey: "book",
   },
   {
@@ -120,6 +129,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 1,
     titleVi: "Hỗ trợ người gặp vấn đề tâm lý",
     titleEn: "Help people with personal or emotional problems",
+    imageUrl:
+      "https://images.unsplash.com/photo-1573497620053-ea5300f94f21?auto=format&fit=crop&w=900&q=80",
     iconKey: "heart",
   },
   {
@@ -128,6 +139,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 1,
     titleVi: "Quản lý phòng ban doanh nghiệp lớn",
     titleEn: "Manage a department within a large company",
+    imageUrl:
+      "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=900&q=80",
     iconKey: "building",
   },
   {
@@ -136,6 +149,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 1,
     titleVi: "Cài phần mềm cho hệ thống mạng lớn",
     titleEn: "Install software across computers on a large network",
+    imageUrl:
+      "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=900&q=80",
     iconKey: "network",
   },
 
@@ -146,6 +161,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 2,
     titleVi: "Sửa chữa thiết bị điện gia dụng",
     titleEn: "Repair household appliances",
+    imageUrl:
+      "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=900&q=80",
     iconKey: "wrench",
   },
   {
@@ -154,6 +171,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 2,
     titleVi: "Nghiên cứu cách giảm ô nhiễm nước",
     titleEn: "Study ways to reduce water pollution",
+    imageUrl:
+      "https://images.unsplash.com/photo-1576086213369-97a306d36557?auto=format&fit=crop&w=900&q=80",
     iconKey: "droplets",
   },
   {
@@ -162,6 +181,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 2,
     titleVi: "Sáng tác hoặc phối khí âm nhạc",
     titleEn: "Compose or arrange music",
+    imageUrl:
+      "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=900&q=80",
     iconKey: "music",
   },
   {
@@ -170,6 +191,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 2,
     titleVi: "Tư vấn định hướng nghề nghiệp",
     titleEn: "Give career guidance to people",
+    imageUrl:
+      "https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=900&q=80",
     iconKey: "compass",
   },
   {
@@ -178,6 +201,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 2,
     titleVi: "Tự khởi nghiệp kinh doanh riêng",
     titleEn: "Start your own business",
+    imageUrl:
+      "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?auto=format&fit=crop&w=900&q=80",
     iconKey: "rocket",
   },
   {
@@ -186,6 +211,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 2,
     titleVi: "Tính toán & xử lý số liệu chính xác",
     titleEn: "Operate a calculator",
+    imageUrl:
+      "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=900&q=80",
     iconKey: "calculator",
   },
 
@@ -196,6 +223,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 3,
     titleVi: "Nuôi trồng & chăm sóc thủy sản",
     titleEn: "Raise fish in a fish hatchery",
+    imageUrl:
+      "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=900&q=80",
     iconKey: "fish",
   },
   {
@@ -204,6 +233,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 3,
     titleVi: "Thực hiện các thí nghiệm hóa học",
     titleEn: "Conduct chemical experiments",
+    imageUrl:
+      "https://images.unsplash.com/photo-1582719471384-894fbb16e074?auto=format&fit=crop&w=900&q=80",
     iconKey: "flask",
   },
   {
@@ -212,6 +243,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 3,
     titleVi: "Tạo kỹ xảo hình ảnh cho phim",
     titleEn: "Create special effects for movies",
+    imageUrl:
+      "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=900&q=80",
     iconKey: "film",
   },
   {
@@ -220,6 +253,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 3,
     titleVi: "Thực hiện trị liệu & phục hồi thể chất",
     titleEn: "Perform rehabilitation therapy",
+    imageUrl:
+      "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=900&q=80",
     iconKey: "activity",
   },
   {
@@ -228,6 +263,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 3,
     titleVi: "Đàm phán hợp đồng kinh doanh",
     titleEn: "Negotiate business contracts",
+    imageUrl:
+      "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=900&q=80",
     iconKey: "handshake",
   },
   {
@@ -236,6 +273,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 3,
     titleVi: "Quản lý hồ sơ xuất nhập hàng hóa",
     titleEn: "Keep shipping and receiving records",
+    imageUrl:
+      "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=900&q=80",
     iconKey: "clipboard",
   },
 
@@ -246,6 +285,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 4,
     titleVi: "Vận chuyển & giao nhận hàng hóa",
     titleEn: "Drive a truck to deliver packages to offices and homes",
+    imageUrl:
+      "https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=900&q=80",
     iconKey: "truck",
   },
   {
@@ -254,6 +295,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 4,
     titleVi: "Soi mẫu xét nghiệm bằng kính hiển vi",
     titleEn: "Examine blood samples using a microscope",
+    imageUrl:
+      "https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=900&q=80",
     iconKey: "microscope",
   },
   {
@@ -262,6 +305,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 4,
     titleVi: "Vẽ & thiết kế bối cảnh sân khấu",
     titleEn: "Paint sets for plays",
+    imageUrl:
+      "https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=900&q=80",
     iconKey: "palette",
   },
   {
@@ -270,6 +315,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 4,
     titleVi: "Tham gia tình nguyện tại tổ chức xã hội",
     titleEn: "Do volunteer work at a non-profit organization",
+    imageUrl:
+      "https://images.unsplash.com/photo-1559027615-cd4628902d4a?auto=format&fit=crop&w=900&q=80",
     iconKey: "handheart",
   },
   {
@@ -278,6 +325,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 4,
     titleVi: "Tiếp thị & quảng bá dòng sản phẩm mới",
     titleEn: "Market a new line of clothing",
+    imageUrl:
+      "https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=900&q=80",
     iconKey: "megaphone",
   },
   {
@@ -286,6 +335,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 4,
     titleVi: "Kiểm kê vật tư bằng thiết bị cầm tay",
     titleEn: "Inventory supplies using a hand-held computer",
+    imageUrl:
+      "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=900&q=80",
     iconKey: "scan",
   },
 
@@ -296,6 +347,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 5,
     titleVi: "Kiểm tra chất lượng linh kiện kỹ thuật",
     titleEn: "Test the quality of parts before shipment",
+    imageUrl:
+      "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=900&q=80",
     iconKey: "check",
   },
   {
@@ -304,6 +357,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 5,
     titleVi: "Xây dựng mô hình dự báo thời tiết",
     titleEn: "Develop a way to better predict the weather",
+    imageUrl:
+      "https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?auto=format&fit=crop&w=900&q=80",
     iconKey: "cloud",
   },
   {
@@ -312,6 +367,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 5,
     titleVi: "Viết kịch bản phim hoặc truyền hình",
     titleEn: "Write scripts for movies or television shows",
+    imageUrl:
+      "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=900&q=80",
     iconKey: "clapperboard",
   },
   {
@@ -320,6 +377,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 5,
     titleVi: "Giảng dạy một lớp học bậc THPT",
     titleEn: "Teach a high-school class",
+    imageUrl:
+      "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=900&q=80",
     iconKey: "graduation",
   },
   {
@@ -328,6 +387,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 5,
     titleVi: "Tư vấn & bán hàng tại trung tâm thương mại",
     titleEn: "Sell merchandise at a department store",
+    imageUrl:
+      "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=900&q=80",
     iconKey: "shopping",
   },
   {
@@ -336,6 +397,8 @@ export const ONET_MINI_IP_ITEMS: OnetMiniIpItem[] = [
     round: 5,
     titleVi: "Phân loại, sắp xếp & luân chuyển văn thư",
     titleEn: "Stamp, sort, and distribute mail for an organization",
+    imageUrl:
+      "https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=900&q=80",
     iconKey: "mail",
   },
 ];
