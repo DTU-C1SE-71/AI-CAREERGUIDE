@@ -4,17 +4,18 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  Compass,
   Gamepad2,
   Loader2,
+  PackagePlus,
   RotateCcw,
   Sparkles,
+  Star,
   Zap,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useNavigate } from "react-router"
 import { AcademicInputForm } from "../components/assessment/AcademicInputForm"
-import { RoleplaySceneVisual } from "../components/assessment/RoleplaySceneVisual"
+import { LootItemIcon } from "../components/assessment/RoleplaySceneVisual"
 import { Button } from "../components/common/Button"
 import { Card } from "../components/common/Card"
 import { PageContainer } from "../components/layout/PageContainer"
@@ -23,9 +24,10 @@ import {
   type CognitiveQuestionItem,
 } from "../data/cognitiveQuestions"
 import {
-  REACTION_CARDS,
-  ROLEPLAY_SCENES,
-  STATIONS_META,
+  LOOT_SITUATIONS,
+  RIASEC_GROUP_LABELS,
+  type LootItemCard,
+  type RiasecGroup,
 } from "../data/roleplayScenes"
 import { useAssessment } from "../hooks/useAssessment"
 import { apiRequest } from "../services/api"
@@ -60,18 +62,31 @@ interface ActiveQuestionsResponse {
   }>
 }
 
-const defaultRiasecFallback: QuestionItem[] = ROLEPLAY_SCENES.map(
-  (scene, idx) => ({
-    code: scene.code,
-    dimension: scene.group,
-    dimension_badge: scene.stationTitle,
-    domain_tag: scene.sceneBadge,
-    question_text: scene.actionTitle,
+const CANONICAL_30_CODES: string[] = [
+  "R1", "R2", "R3", "R4", "R5",
+  "I1", "I2", "I3", "I4", "I5",
+  "A1", "A2", "A3", "A4", "A5",
+  "S1", "S2", "S3", "S4", "S5",
+  "E1", "E2", "E3", "E4", "E5",
+  "C1", "C2", "C3", "C4", "C5",
+]
+
+const defaultRiasecFallback: QuestionItem[] = CANONICAL_30_CODES.map(
+  (code, idx) => ({
+    code,
+    dimension: code[0],
+    question_text: code,
     order_index: idx + 1,
   })
 )
 
-const RIASEC_ORDER = ["R", "I", "A", "S", "E", "C"] as const
+const RIASEC_ORDER: RiasecGroup[] = ["R", "I", "A", "S", "E", "C"]
+
+interface PickedItemEntry {
+  itemId: string
+  questionCode: string
+  boosted: boolean // true if double-clicked or explicitly boosted to 5 pts
+}
 
 export function AssessmentWizard() {
   const { assessment, update, reset, recordCompletedAttempt } = useAssessment()
@@ -99,13 +114,37 @@ export function AssessmentWizard() {
     CognitiveQuestionItem[]
   >(defaultCognitiveQuestions)
 
-  // Mini-Game state for Step 1 (Roleplay Odyssey)
-  const [quickMode18, setQuickMode18] = useState(false)
-  const [sceneIndex, setSceneIndex] = useState(0)
+  // Step 1: 10 Situations of Item Collection (Multi-select weighted 5 / 4 / 2)
+  const [situationIdx, setSituationIdx] = useState<number>(0) // 0..9
+  const [situationPicks, setSituationPicks] = useState<
+    Record<number, PickedItemEntry[]>
+  >(() => {
+    // Hydrate from existing assessment.answers if present
+    const initial: Record<number, PickedItemEntry[]> = {}
+    LOOT_SITUATIONS.forEach((sit, sIdx) => {
+      const picks: PickedItemEntry[] = []
+      sit.items.forEach((item) => {
+        const canonicalIdx = CANONICAL_30_CODES.indexOf(item.questionCode)
+        const val =
+          assessment.answers[item.questionCode] ??
+          assessment.answers[`1-${canonicalIdx}`]
+        if (typeof val === "number" && val >= 4 && picks.length < 3) {
+          picks.push({
+            itemId: item.id,
+            questionCode: item.questionCode,
+            boosted: val >= 5,
+          })
+        }
+      })
+      if (picks.length > 0) {
+        initial[sIdx] = picks
+      }
+    })
+    return initial
+  })
 
-  // Mini-Game state for Step 2 (Cognitive Quest 1..8)
+  // Step 2: Cognitive Quest (0..7)
   const [cogIndex, setCogIndex] = useState(0)
-
   const autoAdvanceTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -164,7 +203,7 @@ export function AssessmentWizard() {
           }
         }
       } catch {
-        // Fallback already in state
+        // Fallback already loaded
       } finally {
         if (mounted) setLoading(false)
       }
@@ -176,29 +215,140 @@ export function AssessmentWizard() {
     }
   }, [])
 
-  const resetAllAnswers = () => {
-    reset()
-    setStep(1)
-    setSceneIndex(0)
-    setCogIndex(0)
-  }
+  // Compute hidden scores from `situationPicks` and sync to `assessment.answers`
+  // Rules:
+  // - 1st picked item OR double-clicked (boosted) item = 5 points
+  // - 2nd & 3rd picked items = 4 points
+  // - Unselected (skipped) items in any active/visited situation = 2 points
+  const syncPicksToAnswers = useCallback(
+    (nextPicksMap: Record<number, PickedItemEntry[]>) => {
+      const codeScoresList: Record<string, number[]> = {}
 
-  // Active scenes list in Step 1 (30 full or 18 core)
-  const activeScenes = useMemo(() => {
-    return quickMode18
-      ? ROLEPLAY_SCENES.filter((s) => s.isCore18)
-      : ROLEPLAY_SCENES
-  }, [quickMode18])
+      LOOT_SITUATIONS.forEach((sit, sIdx) => {
+        const picks = nextPicksMap[sIdx]
+        if (!picks || picks.length === 0) return
 
-  const safeSceneIndex = Math.min(
-    Math.max(0, sceneIndex),
-    Math.max(0, activeScenes.length - 1)
+        sit.items.forEach((item) => {
+          const pickIdx = picks.findIndex((p) => p.itemId === item.id)
+          let pts = 2 // Default skipped item = 2 points
+          if (pickIdx === 0) {
+            pts = 5 // 1st selected item = 5 points
+          } else if (pickIdx > 0) {
+            pts = picks[pickIdx].boosted ? 5 : 4 // 2nd/3rd = 4 points (or 5 if double-clicked)
+          }
+          if (!codeScoresList[item.questionCode]) {
+            codeScoresList[item.questionCode] = []
+          }
+          codeScoresList[item.questionCode].push(pts)
+        })
+      })
+
+      const mergedAnswers: Record<string, number> = { ...assessment.answers }
+      Object.entries(codeScoresList).forEach(([code, arr]) => {
+        const avg = Math.round(arr.reduce((a, b) => a + b, 0) / arr.length)
+        const canonicalIdx = CANONICAL_30_CODES.indexOf(code)
+        mergedAnswers[code] = avg
+        if (canonicalIdx >= 0) {
+          mergedAnswers[`1-${canonicalIdx}`] = avg
+        }
+      })
+
+      update({ answers: mergedAnswers })
+    },
+    [assessment.answers, update]
   )
-  const currentScene = activeScenes[safeSceneIndex] || ROLEPLAY_SCENES[0]
 
-  // Count how many RIASEC & Cognitive items are answered
-  const riasecGroupCounts = useMemo(() => {
-    const counts: Record<string, number> = {
+  const currentSituation =
+    LOOT_SITUATIONS[situationIdx] || LOOT_SITUATIONS[0]
+  const currentPicks = situationPicks[situationIdx] || []
+
+  // Toggle selection on single click (up to 3 items per situation)
+  const handleItemClick = useCallback(
+    (item: LootItemCard) => {
+      setSituationPicks((prev) => {
+        const current = prev[situationIdx] ? [...prev[situationIdx]] : []
+        const existingIdx = current.findIndex((p) => p.itemId === item.id)
+
+        let updated: PickedItemEntry[]
+        if (existingIdx >= 0) {
+          // Clicking an already-selected card unselects it (back to 2 pts)
+          updated = current.filter((p) => p.itemId !== item.id)
+        } else {
+          // Selecting a new card (max 3 cards per situation)
+          const isFirst = current.length === 0
+          const newEntry: PickedItemEntry = {
+            itemId: item.id,
+            questionCode: item.questionCode,
+            boosted: isFirst, // 1st selected automatically gets 5 pts
+          }
+          if (current.length < 3) {
+            updated = [...current, newEntry]
+          } else {
+            // Replace the 3rd pick if already at 3 picks
+            updated = [current[0], current[1], newEntry]
+          }
+        }
+
+        const nextMap = { ...prev, [situationIdx]: updated }
+        syncPicksToAnswers(nextMap)
+        return nextMap
+      })
+    },
+    [situationIdx, syncPicksToAnswers]
+  )
+
+  // Double-click (or clicking ⭐ boost button) sets the item to 5 points (Rất thích)
+  const handleItemBoost5 = useCallback(
+    (item: LootItemCard, e?: React.MouseEvent) => {
+      if (e) e.stopPropagation()
+      setSituationPicks((prev) => {
+        const current = prev[situationIdx] ? [...prev[situationIdx]] : []
+        const existingIdx = current.findIndex((p) => p.itemId === item.id)
+
+        let updated: PickedItemEntry[]
+        if (existingIdx >= 0) {
+          updated = current.map((p, i) =>
+            i === existingIdx ? { ...p, boosted: true } : p
+          )
+        } else {
+          const newEntry: PickedItemEntry = {
+            itemId: item.id,
+            questionCode: item.questionCode,
+            boosted: true,
+          }
+          if (current.length < 3) {
+            updated = [...current, newEntry]
+          } else {
+            updated = [current[0], current[1], newEntry]
+          }
+        }
+
+        const nextMap = { ...prev, [situationIdx]: updated }
+        syncPicksToAnswers(nextMap)
+        return nextMap
+      })
+    },
+    [situationIdx, syncPicksToAnswers]
+  )
+
+  // Count how many situations have at least 1 item picked
+  const completedSituationsCount = useMemo(() => {
+    return LOOT_SITUATIONS.filter(
+      (_, idx) => (situationPicks[idx]?.length || 0) > 0
+    ).length
+  }, [situationPicks])
+
+  // Count how many of the 30 canonical codes have answers
+  const totalRiasecAnswered = useMemo(() => {
+    return CANONICAL_30_CODES.filter((code, idx) => {
+      const val = assessment.answers[code] ?? assessment.answers[`1-${idx}`]
+      return typeof val === "number" && val >= 1 && val <= 5
+    }).length
+  }, [assessment.answers])
+
+  // Live RIASEC scores by group for the top inventory bar
+  const riasecGroupScores = useMemo(() => {
+    const totals: Record<RiasecGroup, number> = {
       R: 0,
       I: 0,
       A: 0,
@@ -206,40 +356,15 @@ export function AssessmentWizard() {
       E: 0,
       C: 0,
     }
-    ROLEPLAY_SCENES.forEach((scene, idx) => {
-      const val =
-        assessment.answers[scene.code] ?? assessment.answers[`1-${idx}`]
-      if (typeof val === "number" && val >= 1 && val <= 5) {
-        counts[scene.group] = (counts[scene.group] || 0) + 1
+    CANONICAL_30_CODES.forEach((code, idx) => {
+      const g = code[0] as RiasecGroup
+      const val = assessment.answers[code] ?? assessment.answers[`1-${idx}`]
+      if (typeof val === "number" && val > 0) {
+        totals[g] += val * 4 // Max 5 items * 5 pts * 4 = 100%
       }
     })
-    return counts
+    return totals
   }, [assessment.answers])
-
-  // Live RIASEC energy % for the 6-station header
-  const riasecEnergy = useMemo(() => {
-    const energy: Record<string, number> = {
-      R: 0,
-      I: 0,
-      A: 0,
-      S: 0,
-      E: 0,
-      C: 0,
-    }
-    ROLEPLAY_SCENES.forEach((scene, idx) => {
-      const val =
-        assessment.answers[scene.code] ?? assessment.answers[`1-${idx}`]
-      if (typeof val === "number" && val >= 1 && val <= 5) {
-        energy[scene.group] += val * 4
-      }
-    })
-    return energy
-  }, [assessment.answers])
-
-  const totalRiasecAnswered = useMemo(
-    () => Object.values(riasecGroupCounts).reduce((a, b) => a + b, 0),
-    [riasecGroupCounts]
-  )
 
   const totalCognitiveAnswered = useMemo(() => {
     return cognitiveQuestions.filter((q, idx) => {
@@ -248,71 +373,11 @@ export function AssessmentWizard() {
     }).length
   }, [assessment.cognitive, cognitiveQuestions])
 
+  // Minimum 3 situations (= 18 questions across all 6 RIASEC groups) or 5+ situations (= all 30 questions)
   const allRiasecGroupsCovered = useMemo(() => {
-    return (
-      totalRiasecAnswered >= 18 &&
-      RIASEC_ORDER.every((dim) => (riasecGroupCounts[dim] || 0) >= 2)
-    )
-  }, [totalRiasecAnswered, riasecGroupCounts])
+    return totalRiasecAnswered >= 18 || completedSituationsCount >= 3
+  }, [totalRiasecAnswered, completedSituationsCount])
 
-  const totalXP = useMemo(() => {
-    return (
-      totalRiasecAnswered * 25 +
-      totalCognitiveAnswered * 40 +
-      (step === 3 ? 120 : 0)
-    )
-  }, [totalRiasecAnswered, totalCognitiveAnswered, step])
-
-  const canContinue = useMemo(() => {
-    if (step === 1) return allRiasecGroupsCovered
-    if (step === 2) return totalCognitiveAnswered >= cognitiveQuestions.length
-    if (step === 3) {
-      return Object.values(scores).filter((v) => v > 0).length >= 3
-    }
-    return false
-  }, [
-    step,
-    allRiasecGroupsCovered,
-    totalCognitiveAnswered,
-    cognitiveQuestions.length,
-    scores,
-  ])
-
-  // Select a reaction in Step 1 and auto-advance smoothly
-  const handleSelectReaction = useCallback(
-    (value: number) => {
-      const globalIdx = ROLEPLAY_SCENES.findIndex(
-        (s) => s.code === currentScene.code
-      )
-      const idxKey = globalIdx >= 0 ? globalIdx : safeSceneIndex
-
-      update({
-        answers: {
-          ...assessment.answers,
-          [currentScene.code]: value,
-          [`1-${idxKey}`]: value,
-        },
-      })
-
-      if (autoAdvanceTimer.current) {
-        window.clearTimeout(autoAdvanceTimer.current)
-      }
-      autoAdvanceTimer.current = window.setTimeout(() => {
-        if (safeSceneIndex < activeScenes.length - 1) {
-          setSceneIndex((prev) => Math.min(activeScenes.length - 1, prev + 1))
-        }
-      }, 220)
-    },
-    [
-      currentScene.code,
-      safeSceneIndex,
-      assessment.answers,
-      update,
-      activeScenes.length,
-    ]
-  )
-
-  // Select an option in Step 2 and auto-advance smoothly
   const currentCog = cognitiveQuestions[cogIndex] || cognitiveQuestions[0]
   const handleSelectCognitive = useCallback(
     (optionKey: string) => {
@@ -345,7 +410,7 @@ export function AssessmentWizard() {
     ]
   )
 
-  // Keyboard shortcuts (1-5 in Step 1, A-D or 1-4 in Step 2, Left/Right arrows)
+  // Keyboard shortcuts: 1-6 to toggle items in Step 1, Enter/ArrowRight to advance situation
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (
@@ -355,13 +420,17 @@ export function AssessmentWizard() {
         return
       }
       if (step === 1) {
-        if (["1", "2", "3", "4", "5"].includes(e.key)) {
+        const num = Number(e.key)
+        if (num >= 1 && num <= 6) {
           e.preventDefault()
-          handleSelectReaction(Number(e.key))
-        } else if (e.key === "ArrowRight") {
-          setSceneIndex((p) => Math.min(activeScenes.length - 1, p + 1))
+          const targetItem = currentSituation.items[num - 1]
+          if (targetItem) handleItemClick(targetItem)
+        } else if (e.key === "ArrowRight" || e.key === "Enter") {
+          if (situationIdx < LOOT_SITUATIONS.length - 1) {
+            setSituationIdx((p) => p + 1)
+          }
         } else if (e.key === "ArrowLeft") {
-          setSceneIndex((p) => Math.max(0, p - 1))
+          setSituationIdx((p) => Math.max(0, p - 1))
         }
       } else if (step === 2) {
         const keyMap: Record<string, string> = {
@@ -392,29 +461,48 @@ export function AssessmentWizard() {
     return () => window.removeEventListener("keydown", onKeyDown)
   }, [
     step,
-    handleSelectReaction,
+    currentSituation.items,
+    handleItemClick,
+    situationIdx,
     handleSelectCognitive,
-    activeScenes.length,
     cognitiveQuestions.length,
   ])
 
+  const resetAllAnswers = () => {
+    reset()
+    setSituationPicks({})
+    setSituationIdx(0)
+    setCogIndex(0)
+    setStep(1)
+  }
+
   const handleCompleteAssessment = () => {
+    // Ensure any unvisited question codes default to 2 pts so all 30 codes are complete
+    const finalAnswers: Record<string, number> = { ...assessment.answers }
+    CANONICAL_30_CODES.forEach((code, idx) => {
+      const val = finalAnswers[code] ?? finalAnswers[`1-${idx}`]
+      const safeVal = typeof val === "number" && val > 0 ? val : 2
+      finalAnswers[code] = safeVal
+      finalAnswers[`1-${idx}`] = safeVal
+    })
+
     const normalizedScores = Object.entries(scores).map(([subject, score]) => ({
       subject,
       score,
       zScore: (score - 7.1) / 1.2,
     }))
+
     recordCompletedAttempt({
       ...assessment,
+      answers: finalAnswers,
       step: 3,
       scores: normalizedScores,
       completed: true,
     })
 
-    // Send answers to backend in background
     const riasecMap: Record<string, number> = {}
     riasecQuestions.forEach((q, idx) => {
-      const val = assessment.answers[q.code] ?? assessment.answers[`1-${idx}`]
+      const val = finalAnswers[q.code] ?? finalAnswers[`1-${idx}`]
       if (val !== undefined && val !== null) riasecMap[q.code] = Number(val)
     })
     const cogMap: Record<string, string> = {}
@@ -451,22 +539,15 @@ export function AssessmentWizard() {
     navigate("/dashboard")
   }
 
-  const currentGlobalIndex = ROLEPLAY_SCENES.findIndex(
-    (s) => s.code === currentScene.code
-  )
-  const currentSceneValue =
-    assessment.answers[currentScene.code] ??
-    assessment.answers[`1-${currentGlobalIndex}`]
-
   const currentCogValue =
     assessment.cognitive[currentCog.code] ??
     assessment.cognitive[`2-${cogIndex}`]
 
   return (
     <section className="py-5 sm:py-7">
-      <PageContainer className="max-w-3xl">
+      <PageContainer className="max-w-4xl">
         {/* Top Game HUD Bar (Liquid Glass, Unified Sky/Cyan Palette) */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/80 bg-white/70 px-4 py-3 shadow-[0_8px_28px_rgba(14,165,233,0.08)] backdrop-blur-xl">
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/80 bg-white/75 px-4 py-3 shadow-[0_8px_28px_rgba(14,165,233,0.08)] backdrop-blur-xl">
           <div className="flex items-center gap-2.5">
             <span className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-sm">
               <Gamepad2 className="size-5" />
@@ -474,14 +555,14 @@ export function AssessmentWizard() {
             <div>
               <div className="flex items-center gap-2">
                 <h1 className="text-sm font-black tracking-tight text-slate-900">
-                  Hành Trình Khám Phá Tương Lai
+                  Thu Thập Vật Phẩm Định Hướng
                 </h1>
                 <span className="rounded-full bg-sky-100 px-2 py-0.5 text-[10px] font-black text-sky-700">
-                  {totalXP} XP
+                  ⚡ Tốc độ &lt; 2 phút
                 </span>
               </div>
               <p className="text-[11px] font-semibold text-slate-500">
-                Nhập vai tương tác · Mở khóa 435 ngành chuẩn Bộ GD&ĐT
+                10 Tình huống · Chọn 2–3 thẻ/chặng (Chọn đầu/Đúp = 5đ · Chọn thứ 2–3 = 4đ · Bỏ qua = 2đ)
               </p>
             </div>
           </div>
@@ -489,10 +570,14 @@ export function AssessmentWizard() {
           {/* 3-Quest Step Switcher */}
           <div className="flex items-center gap-1.5">
             {[
-              { id: 1, label: "1. Nhập vai", done: allRiasecGroupsCovered },
+              {
+                id: 1,
+                label: `1. Vật phẩm (${completedSituationsCount}/10)`,
+                done: allRiasecGroupsCovered,
+              },
               {
                 id: 2,
-                label: "2. Phản xạ",
+                label: `2. Phản xạ (${totalCognitiveAnswered}/8)`,
                 done: totalCognitiveAnswered >= cognitiveQuestions.length,
               },
               { id: 3, label: "3. Học lực", done: assessment.completed },
@@ -527,11 +612,11 @@ export function AssessmentWizard() {
                 </button>
               )
             })}
-            {(totalRiasecAnswered > 0 || totalCognitiveAnswered > 0) && (
+            {(completedSituationsCount > 0 || totalCognitiveAnswered > 0) && (
               <button
                 type="button"
                 onClick={resetAllAnswers}
-                title="Chơi lại từ đầu"
+                title="Làm mới túi vật phẩm"
                 className="ml-1 grid size-8 place-items-center rounded-xl border border-slate-200/80 bg-white/80 text-slate-500 transition hover:border-sky-300 hover:text-sky-700"
               >
                 <RotateCcw className="size-3.5" />
@@ -541,230 +626,240 @@ export function AssessmentWizard() {
         </div>
 
         {loading && step < 3 && (
-          <div className="mb-4 flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/70 p-3 text-slate-500 backdrop-blur-md">
+          <div className="mb-4 flex items-center justify-center gap-2 rounded-2xl border border-sky-100 bg-white/70 p-2.5 text-slate-500 backdrop-blur-md">
             <Loader2 className="size-4 animate-spin text-sky-600" />
             <span className="text-xs font-semibold">
-              Đang đồng bộ chặng hành trình...
+              Đang đồng bộ kho vật phẩm...
             </span>
           </div>
         )}
 
-        {/* ==================== STEP 1: ROLEPLAY ODYSSEY ==================== */}
+        {/* ==================== STEP 1: MECHANISM 3 - LOOT COLLECTION (10 SITUATIONS × 6 CARDS) ==================== */}
         {step === 1 && (
           <div className="space-y-4">
-            {/* 6-Station Odyssey Map Bar + Mode Toggle */}
-            <div className="rounded-2xl border border-white/80 bg-white/70 p-3 shadow-[0_8px_24px_rgba(14,165,233,0.06)] backdrop-blur-xl">
-              <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2 px-1">
-                <div className="flex items-center gap-2">
-                  <Compass className="size-4 text-sky-600" />
-                  <span className="text-xs font-black text-slate-800">
-                    Bản đồ 6 Trạm Trải Nghiệm ({totalRiasecAnswered}/
-                    {quickMode18 ? 18 : 30})
-                  </span>
-                </div>
+            {/* 10-Situation Progress Bar + Live 6-Axis Inventory Meter */}
+            <div className="rounded-2xl border border-white/85 bg-white/75 p-3.5 shadow-[0_8px_24px_rgba(14,165,233,0.06)] backdrop-blur-xl">
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                 <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQuickMode18(true)
-                      setSceneIndex(0)
-                    }}
-                    className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
-                      quickMode18
-                        ? "bg-sky-600 text-white"
-                        : "bg-sky-50 text-sky-700 hover:bg-sky-100"
-                    }`}
-                  >
-                    ⚡ Nhanh (18 cảnh)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQuickMode18(false)
-                      setSceneIndex(0)
-                    }}
-                    className={`rounded-lg px-2.5 py-1 text-[11px] font-extrabold transition ${
-                      !quickMode18
-                        ? "bg-sky-600 text-white"
-                        : "bg-sky-50 text-sky-700 hover:bg-sky-100"
-                    }`}
-                  >
-                    Đầy đủ (30 cảnh)
-                  </button>
+                  {LOOT_SITUATIONS.map((sit, idx) => {
+                    const count = situationPicks[idx]?.length || 0
+                    const isCurr = idx === situationIdx
+                    return (
+                      <button
+                        key={sit.situationIndex}
+                        type="button"
+                        onClick={() => setSituationIdx(idx)}
+                        className={`flex h-7 min-w-7 items-center justify-center rounded-lg px-2 text-xs font-black transition-all ${
+                          isCurr
+                            ? "bg-gradient-to-r from-sky-500 to-cyan-600 text-white shadow-sm scale-105"
+                            : count > 0
+                              ? "border border-sky-200 bg-sky-50 text-sky-700 hover:bg-sky-100"
+                              : "bg-slate-100/80 text-slate-500 hover:bg-slate-200/70"
+                        }`}
+                      >
+                        {idx + 1}
+                      </button>
+                    )
+                  })}
                 </div>
-              </div>
 
-              {/* 6 Interactive Station Pills */}
-              <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-6">
-                {STATIONS_META.map((station) => {
-                  const isCurrentStation = currentScene.group === station.group
-                  const count = riasecGroupCounts[station.group] || 0
-                  const target = quickMode18 ? 3 : 5
-                  const isDone = count >= target
-                  const firstSceneIdx = activeScenes.findIndex(
-                    (s) => s.group === station.group
-                  )
-
-                  return (
-                    <button
-                      key={station.group}
-                      type="button"
-                      onClick={() => {
-                        if (firstSceneIdx >= 0) setSceneIndex(firstSceneIdx)
-                      }}
-                      className={`group relative overflow-hidden rounded-xl border px-2.5 py-2 text-left transition ${
-                        isCurrentStation
-                          ? "border-sky-500 bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm"
-                          : isDone
-                            ? "border-sky-200 bg-sky-50/90 text-sky-900 hover:border-sky-400"
-                            : "border-slate-200/70 bg-white/80 text-slate-600 hover:border-sky-200"
-                      }`}
+                {/* Live 6-Group Mini Energy Pills */}
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {RIASEC_ORDER.map((g) => (
+                    <div
+                      key={g}
+                      className="flex items-center gap-1 rounded-lg border border-sky-100 bg-sky-50/70 px-2 py-1 text-[10px] font-black text-sky-800"
+                      title={RIASEC_GROUP_LABELS[g].role}
                     >
-                      <div className="flex items-center justify-between text-[10px] font-black">
-                        <span>TRẠM {station.group}</span>
-                        <span>
-                          {Math.min(count, target)}/{target}
-                        </span>
-                      </div>
-                      <p className="mt-0.5 truncate text-[11px] font-bold">
-                        {station.shortName}
-                      </p>
-                      <div className="mt-1.5 h-1 w-full overflow-hidden rounded-full bg-black/10">
+                      <span>{g}</span>
+                      <div className="h-1.5 w-8 overflow-hidden rounded-full bg-sky-200/70">
                         <div
-                          className={`h-full rounded-full transition-all ${
-                            isCurrentStation ? "bg-white" : "bg-sky-500"
-                          }`}
+                          className="h-full rounded-full bg-sky-600 transition-all duration-300"
                           style={{
-                            width: `${Math.min(
-                              100,
-                              riasecEnergy[station.group] || 0
-                            )}%`,
+                            width: `${Math.min(100, riasecGroupScores[g])}%`,
                           }}
                         />
                       </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Main Interactive Roleplay Scene Stage */}
-            <motion.div
-              key={currentScene.code}
-              initial={{ opacity: 0, y: 8, scale: 0.99 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              transition={{ duration: 0.2 }}
-              className="rounded-[26px] border border-white/85 bg-white/75 p-5 sm:p-6 shadow-[0_16px_40px_rgba(14,165,233,0.1)] backdrop-blur-2xl"
-            >
-              {/* Scene Progress Dots */}
-              <div className="mb-4 flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100/90 px-3 py-1 text-xs font-black text-sky-800">
-                  <Sparkles className="size-3.5 text-sky-600" />
-                  Cảnh {safeSceneIndex + 1}/{activeScenes.length} ·{" "}
-                  {currentScene.stationTitle}
-                </span>
-
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled={safeSceneIndex === 0}
-                    onClick={() => setSceneIndex((p) => Math.max(0, p - 1))}
-                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 transition hover:border-sky-300 disabled:opacity-40"
-                  >
-                    ← Trước
-                  </button>
-                  <button
-                    type="button"
-                    disabled={safeSceneIndex >= activeScenes.length - 1}
-                    onClick={() =>
-                      setSceneIndex((p) =>
-                        Math.min(activeScenes.length - 1, p + 1)
-                      )
-                    }
-                    className="rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-bold text-slate-600 transition hover:border-sky-300 disabled:opacity-40"
-                  >
-                    Tiếp →
-                  </button>
+                    </div>
+                  ))}
                 </div>
               </div>
 
-              {/* Hologram Scene Illustration */}
-              <RoleplaySceneVisual
-                visualType={currentScene.visualType}
-                group={currentScene.group}
-                sceneBadge={currentScene.sceneBadge}
-              />
+              {/* Situation Header Banner */}
+              <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-sky-900 via-sky-800 to-cyan-900 px-5 py-4 text-white">
+                <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-cyan-400/20 blur-2xl" />
+                <div className="relative z-10 flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <span className="inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-white/10 px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider text-cyan-200">
+                      <Sparkles className="size-3" />
+                      {currentSituation.badge}
+                    </span>
+                    <h2 className="mt-1.5 text-lg sm:text-xl font-black tracking-tight text-white">
+                      {currentSituation.title}
+                    </h2>
+                    <p className="mt-0.5 text-xs font-medium text-sky-200">
+                      {currentSituation.contextPrompt}
+                    </p>
+                  </div>
 
-              {/* Concise Action Scenario */}
-              <div className="my-5 text-center">
-                <h2 className="text-lg sm:text-xl font-black tracking-tight text-slate-900">
-                  “{currentScene.actionTitle}”
-                </h2>
-                <p className="mt-1 text-xs font-semibold text-slate-500">
-                  {currentScene.subHint}
-                </p>
+                  {/* Current Situation Bag Counter */}
+                  <div className="flex items-center gap-2 rounded-2xl border border-white/20 bg-white/10 px-3.5 py-2 backdrop-blur-md">
+                    <PackagePlus className="size-4 text-cyan-300" />
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-sky-200">
+                        Đã chọn
+                      </p>
+                      <p className="text-sm font-black text-white">
+                        {currentPicks.length} / 3 thẻ
+                      </p>
+                    </div>
+                  </div>
+                </div>
               </div>
+            </div>
 
-              {/* 5 Interactive Reaction Cards (Auto-Advances on Click) */}
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
-                {REACTION_CARDS.map((card) => {
-                  const selected = currentSceneValue === card.value
-                  return (
-                    <button
-                      key={card.value}
-                      type="button"
-                      onClick={() => handleSelectReaction(card.value)}
-                      className={`group relative flex flex-col items-center justify-center rounded-2xl border p-3 text-center transition-all duration-150 ${
-                        selected
-                          ? "border-sky-500 bg-gradient-to-b from-sky-500 to-cyan-600 text-white shadow-[0_10px_24px_rgba(14,165,233,0.3)] -translate-y-0.5"
-                          : "border-sky-100 bg-white/90 text-slate-800 hover:-translate-y-0.5 hover:border-sky-400 hover:bg-sky-50/70"
+            {/* 6 Interactive Loot / Action Cards (Multi-select Weighted) */}
+            <motion.div
+              key={currentSituation.situationIndex}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.18 }}
+              className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3"
+            >
+              {currentSituation.items.map((item, idx) => {
+                const pickIndex = currentPicks.findIndex(
+                  (p) => p.itemId === item.id
+                )
+                const isSelected = pickIndex >= 0
+                const isFivePoints =
+                  pickIndex === 0 ||
+                  (pickIndex > 0 && currentPicks[pickIndex]?.boosted)
+                const pointsEarned = isSelected ? (isFivePoints ? 5 : 4) : 2
+
+                const selectedRank = !isSelected
+                  ? "NONE"
+                  : isFivePoints
+                    ? "FIRST_OR_BOOST"
+                    : "SECOND_OR_THIRD"
+
+                return (
+                  <div
+                    key={item.id}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => handleItemClick(item)}
+                    onDoubleClick={(e) => handleItemBoost5(item, e)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault()
+                        handleItemClick(item)
+                      }
+                    }}
+                    className={`group relative flex cursor-pointer select-none flex-col justify-between rounded-[22px] border p-4 text-left transition-all duration-150 ${
+                      isFivePoints
+                        ? "border-sky-400 bg-gradient-to-br from-sky-600 via-sky-500 to-cyan-600 text-white shadow-[0_14px_30px_rgba(14,165,233,0.28)] -translate-y-0.5"
+                        : isSelected
+                          ? "border-sky-400 bg-sky-50/95 text-slate-900 shadow-[0_10px_24px_rgba(14,165,233,0.14)] -translate-y-0.5"
+                          : "border-white/85 bg-white/80 text-slate-800 shadow-[0_6px_20px_rgba(14,165,233,0.06)] backdrop-blur-xl hover:-translate-y-0.5 hover:border-sky-300 hover:bg-white"
+                    }`}
+                  >
+                    <div>
+                      {/* Card Top Row: Icon + Group Tag + Score Badge */}
+                      <div className="flex items-start justify-between gap-2">
+                        <LootItemIcon
+                          iconKey={item.iconKey}
+                          selectedRank={selectedRank}
+                        />
+
+                        <div className="flex flex-col items-end gap-1">
+                          <span
+                            className={`rounded-full px-2.5 py-0.5 text-[10px] font-black tracking-wide ${
+                              isFivePoints
+                                ? "bg-white text-sky-700 shadow-sm"
+                                : isSelected
+                                  ? "bg-sky-600 text-white"
+                                  : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {isFivePoints
+                              ? `⭐ Rất thích · +5đ`
+                              : isSelected
+                                ? `✓ Đã chọn #${pickIndex + 1} · +4đ`
+                                : `Phím ${idx + 1} · Mặc định 2đ`}
+                          </span>
+
+                          {/* One-tap 5pt Upgrade Button when selected at 4pts */}
+                          {isSelected && !isFivePoints && (
+                            <button
+                              type="button"
+                              onClick={(e) => handleItemBoost5(item, e)}
+                              className="inline-flex items-center gap-1 rounded-full border border-sky-300 bg-white px-2 py-0.5 text-[10px] font-extrabold text-sky-700 transition hover:bg-sky-600 hover:text-white"
+                              title="Bấm đúp hoặc nhấn vào đây để nâng lên 5 điểm"
+                            >
+                              <Star className="size-2.5 fill-current" />
+                              Nâng lên 5đ
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Item Title & Concise Action */}
+                      <div className="mt-3.5">
+                        <span
+                          className={`text-[10px] font-extrabold uppercase tracking-wider ${
+                            isFivePoints
+                              ? "text-cyan-100"
+                              : isSelected
+                                ? "text-sky-700"
+                                : "text-sky-600"
+                          }`}
+                        >
+                          {RIASEC_GROUP_LABELS[item.group].short} · Mã{" "}
+                          {item.questionCode}
+                        </span>
+                        <h3
+                          className={`mt-0.5 text-sm font-black leading-snug ${
+                            isFivePoints ? "text-white" : "text-slate-900"
+                          }`}
+                        >
+                          {item.itemName}
+                        </h3>
+                        <p
+                          className={`mt-1 text-xs leading-relaxed ${
+                            isFivePoints
+                              ? "text-sky-50"
+                              : isSelected
+                                ? "text-slate-600"
+                                : "text-slate-500"
+                          }`}
+                        >
+                          {item.actionDesc}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Bottom subtle status bar */}
+                    <div
+                      className={`mt-3 flex items-center justify-between border-t pt-2 text-[10px] font-bold ${
+                        isFivePoints
+                          ? "border-white/20 text-sky-100"
+                          : isSelected
+                            ? "border-sky-200/80 text-sky-700"
+                            : "border-slate-100 text-slate-400"
                       }`}
                     >
-                      <span className="text-xl">{card.emoji}</span>
-                      <span className="mt-1.5 text-xs font-black">
-                        {card.shortLabel}
+                      <span>
+                        {isFivePoints
+                          ? "Vật phẩm chủ lực (5/5 điểm)"
+                          : isSelected
+                            ? "Đúp chuột để nâng 5/5 điểm"
+                            : "Click để thu thập vật phẩm"}
                       </span>
-                      <span
-                        className={`mt-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                          selected
-                            ? "bg-white/20 text-white"
-                            : "bg-sky-50 text-sky-700"
-                        }`}
-                      >
-                        Phím {card.keyHint}
-                      </span>
-                    </button>
-                  )
-                })}
-              </div>
-
-              {/* Quick Scene Jump Bar */}
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-1.5 pt-2 border-t border-slate-200/60">
-                {activeScenes.map((s, idx) => {
-                  const gIdx = ROLEPLAY_SCENES.findIndex(
-                    (item) => item.code === s.code
-                  )
-                  const answered =
-                    assessment.answers[s.code] !== undefined ||
-                    assessment.answers[`1-${gIdx}`] !== undefined
-                  const isCurr = idx === safeSceneIndex
-                  return (
-                    <button
-                      key={s.code}
-                      type="button"
-                      onClick={() => setSceneIndex(idx)}
-                      title={`${s.code}: ${s.actionTitle}`}
-                      className={`h-2.5 rounded-full transition-all ${
-                        isCurr
-                          ? "w-6 bg-sky-600"
-                          : answered
-                            ? "w-2.5 bg-cyan-400 hover:bg-sky-500"
-                            : "w-2.5 bg-slate-200 hover:bg-slate-300"
-                      }`}
-                    />
-                  )
-                })}
-              </div>
+                      <span className="font-black">+{pointsEarned}đ</span>
+                    </div>
+                  </div>
+                )
+              })}
             </motion.div>
           </div>
         )}
@@ -778,7 +873,6 @@ export function AssessmentWizard() {
             transition={{ duration: 0.2 }}
             className="rounded-[26px] border border-white/85 bg-white/75 p-5 sm:p-6 shadow-[0_16px_40px_rgba(14,165,233,0.1)] backdrop-blur-2xl"
           >
-            {/* Header & 8-Challenge Progress */}
             <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
               <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-100 px-3 py-1 text-xs font-black text-sky-800">
                 <Zap className="size-3.5 text-sky-600" />
@@ -820,7 +914,6 @@ export function AssessmentWizard() {
               </h2>
             </div>
 
-            {/* 4 Interactive Choice Cards (A, B, C, D) */}
             <div className="grid gap-3 sm:grid-cols-2">
               {currentCog.options.map((opt) => {
                 const isSelected = String(currentCogValue) === opt.option_key
@@ -889,10 +982,10 @@ export function AssessmentWizard() {
           <Button
             variant="ghost"
             icon={ArrowLeft}
-            disabled={step === 1 && safeSceneIndex === 0}
+            disabled={step === 1 && situationIdx === 0}
             onClick={() => {
-              if (step === 1 && safeSceneIndex > 0) {
-                setSceneIndex((p) => Math.max(0, p - 1))
+              if (step === 1 && situationIdx > 0) {
+                setSituationIdx((p) => Math.max(0, p - 1))
                 return
               }
               if (step === 2 && cogIndex > 0) {
@@ -907,25 +1000,61 @@ export function AssessmentWizard() {
             Quay lại
           </Button>
 
-          <div className="flex items-center gap-2.5">
-            {step === 1 && !allRiasecGroupsCovered && (
-              <span className="text-xs font-bold text-slate-500">
-                Cần tối thiểu 18 cảnh ({totalRiasecAnswered}/18) để qua Chặng 2
-              </span>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {step === 1 && situationIdx < LOOT_SITUATIONS.length - 1 && (
+              <Button
+                variant={allRiasecGroupsCovered ? "secondary" : "primary"}
+                icon={ArrowRight}
+                onClick={() => {
+                  // If the user hasn't picked anything in this situation yet and clicks next,
+                  // record 2 points for all 6 items in this situation
+                  if ((situationPicks[situationIdx]?.length || 0) === 0) {
+                    const nextAnswers: Record<string, number> = {
+                      ...assessment.answers,
+                    }
+                    currentSituation.items.forEach((item) => {
+                      if (nextAnswers[item.questionCode] === undefined) {
+                        const cIdx = CANONICAL_30_CODES.indexOf(
+                          item.questionCode
+                        )
+                        nextAnswers[item.questionCode] = 2
+                        if (cIdx >= 0) nextAnswers[`1-${cIdx}`] = 2
+                      }
+                    })
+                    update({ answers: nextAnswers })
+                  }
+                  setSituationIdx((p) =>
+                    Math.min(LOOT_SITUATIONS.length - 1, p + 1)
+                  )
+                }}
+              >
+                Chặng tiếp ({situationIdx + 2}/10)
+              </Button>
             )}
 
-            {step === 1 && (
+            {step === 1 && allRiasecGroupsCovered && (
               <Button
                 icon={ArrowRight}
-                disabled={!allRiasecGroupsCovered}
                 onClick={() => {
+                  // Fill default 2 pts for any remaining unvisited codes
+                  const filledAnswers: Record<string, number> = {
+                    ...assessment.answers,
+                  }
+                  CANONICAL_30_CODES.forEach((code, idx) => {
+                    if (
+                      filledAnswers[code] === undefined &&
+                      filledAnswers[`1-${idx}`] === undefined
+                    ) {
+                      filledAnswers[code] = 2
+                      filledAnswers[`1-${idx}`] = 2
+                    }
+                  })
+                  update({ answers: filledAnswers, step: 2 })
                   setStep(2)
-                  update({ step: 2 })
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
               >
-                Qua Chặng 2: Phản Xạ ({totalRiasecAnswered}/
-                {quickMode18 ? 18 : 30})
+                Sang Bước 2: Phản Xạ ({completedSituationsCount}/10 chặng)
               </Button>
             )}
 
@@ -939,7 +1068,7 @@ export function AssessmentWizard() {
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
               >
-                Qua Chặng 3: Nạp Điểm ({totalCognitiveAnswered}/
+                Sang Bước 3: Điểm Học Tập ({totalCognitiveAnswered}/
                 {cognitiveQuestions.length})
               </Button>
             )}
@@ -947,7 +1076,7 @@ export function AssessmentWizard() {
             {step === 3 && (
               <Button
                 icon={Check}
-                disabled={!canContinue}
+                disabled={Object.values(scores).filter((v) => v > 0).length < 3}
                 onClick={handleCompleteAssessment}
               >
                 Mở Khóa Bản Đồ 435 Ngành
