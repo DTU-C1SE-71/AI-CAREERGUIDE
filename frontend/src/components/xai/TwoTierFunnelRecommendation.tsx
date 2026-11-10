@@ -114,12 +114,26 @@ export function TwoTierFunnelRecommendation({
                           {/* Title & Match % */}
                           <div className="flex items-start justify-between gap-2">
                             <div>
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-1.5">
                                 <span className="rounded-lg border border-white/80 bg-white/70 px-2 py-0.5 text-[10px] font-bold text-slate-600">
                                   Mã {major.code}
                                 </span>
-                                <FeasibilityBadge value={major.feasibility} />
+                                <FeasibilityBadge
+                                  value={major.feasibility}
+                                  label={major.feasibility_label}
+                                />
+                                {major.best_matching_block && major.best_block_score != null && (
+                                  <span className="rounded-lg border border-sky-200/80 bg-sky-50/80 px-2 py-0.5 text-[10px] font-extrabold text-sky-700">
+                                    {major.best_matching_block}: {major.best_block_score}đ
+                                    {major.benchmark_cutoff ? ` / ~${major.benchmark_cutoff}đ` : ""}
+                                  </span>
+                                )}
                               </div>
+                              {major.constraint_violations && major.constraint_violations.length > 0 && (
+                                <p className="mt-1 text-[11px] font-semibold text-slate-600">
+                                  {major.constraint_violations[0]}
+                                </p>
+                              )}
                               <h4 className="mt-1.5 text-base font-extrabold text-slate-900 transition-colors group-hover:text-sky-700 sm:text-lg">
                                 {major.name}
                               </h4>

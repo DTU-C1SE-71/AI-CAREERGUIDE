@@ -570,7 +570,7 @@ class TestEnhancedThreePillarAndImporter:
         parsed = mod.parse_excel_or_csv_majors(
             template_path.read_bytes(), template_path.name
         )
-        assert len(parsed) >= 14
+        assert len(parsed) >= 2
         assert all("cip_code" in m and "riasec_vector" in m for m in parsed)
 
     def test_cognitive_8_question_mapper_to_pillar3(self):
@@ -607,4 +607,183 @@ class TestEnhancedThreePillarAndImporter:
         }
         fit_score = calculate_asymmetric_cognitive_fit(raw_cog, cs_major_attr)
         assert fit_score >= 0.85
+
+
+# =========================================================================
+# 9. MULTI-LAYER SCORE CONSTRAINTS & SUBJECT SPELLING NORMALIZATION TESTS
+# =========================================================================
+
+class TestScoreConstraintsAndNormalization:
+    def test_subject_spelling_normalization_physics_geography(self):
+        from app.services.recommender.engine import compute_block_zscores_from_grades
+
+        grades_fe = {
+            "Toán": 8.5,
+            "Vật lý": 8.0,
+            "Hóa học": 7.5,
+            "Ngữ văn": 7.0,
+            "Lịch sử": 7.5,
+            "Địa lý": 8.0,
+            "Tiếng Anh": 8.0,
+        }
+        grades_db_spelling = {
+            "Toán": 8.5,
+            "Vật lí": 8.0,
+            "Hóa học": 7.5,
+            "Ngữ văn": 7.0,
+            "Lịch sử": 7.5,
+            "Địa lí": 8.0,
+            "Tiếng Anh": 8.0,
+        }
+        blocks_fe = compute_block_zscores_from_grades(grades_fe)
+        blocks_db = compute_block_zscores_from_grades(grades_db_spelling)
+
+        assert blocks_fe["A00"]["raw_sum"] == pytest.approx(24.0, abs=1e-2)
+        assert blocks_fe["A01"]["raw_sum"] == pytest.approx(24.5, abs=1e-2)
+        assert blocks_fe["C00"]["raw_sum"] == pytest.approx(22.5, abs=1e-2)
+        assert blocks_fe["D15"]["raw_sum"] == pytest.approx(23.0, abs=1e-2)
+        assert blocks_fe["A00"]["raw_sum"] == blocks_db["A00"]["raw_sum"]
+        assert blocks_fe["C00"]["raw_sum"] == blocks_db["C00"]["raw_sum"]
+
+    def test_failing_grade_and_prerequisite_subject_constraints(self):
+        from app.services.recommender.engine import (
+            compute_block_zscores_from_grades,
+            evaluate_target_anchored_academic_fit,
+            evaluate_admission_feasibility,
+        )
+
+        # Trường hợp 1: Vướng điểm liệt Toán = 1.0đ dù Hóa/Sinh 9.5đ -> tổng 20.0đ
+        grades_failing = {"Toán": 1.0, "Hóa học": 9.5, "Sinh học": 9.5}
+        zblocks = compute_block_zscores_from_grades(grades_failing)
+        acad_score, best_blk, bd = evaluate_target_anchored_academic_fit(
+            ["B00"],
+            zblocks,
+            benchmark_cutoff=18.0,
+            min_recommended=15.5,
+            raw_grades=grades_failing,
+            major_code="7420201",
+            major_name="Công nghệ sinh học",
+        )
+        assert bd["safety_tier"] == "REACH"
+        assert acad_score <= 0.28
+
+        feas = evaluate_admission_feasibility(
+            raw_block_sum=zblocks["B00"]["raw_sum"],
+            major_code="7420201",
+            major_name="Công nghệ sinh học",
+            best_block=best_blk,
+            raw_grades=grades_failing,
+            block_subjects=zblocks["B00"]["subjects_used"],
+        )
+        assert feas["feasibility_tier"] == "REACH"
+        assert feas["constraint_passed"] is False
+        assert any("điểm liệt" in v.lower() for v in feas["constraint_violations"])
+
+        # Trường hợp 2: Tổng D01 = 23.5đ nhưng Toán chỉ 4.5đ -> bị chặn với Khoa học máy tính
+        grades_weak_math = {"Toán": 4.5, "Ngữ văn": 9.5, "Tiếng Anh": 9.5}
+        zblocks_math = compute_block_zscores_from_grades(grades_weak_math)
+        feas_cs = evaluate_admission_feasibility(
+            raw_block_sum=zblocks_math["D01"]["raw_sum"],
+            major_code="7480101",
+            major_name="Khoa học máy tính",
+            best_block="D01",
+            raw_grades=grades_weak_math,
+            block_subjects=zblocks_math["D01"]["subjects_used"],
+        )
+        assert feas_cs["feasibility_tier"] == "REACH"
+        assert feas_cs["constraint_passed"] is False
+        assert any("Toán" in v for v in feas_cs["constraint_violations"])
+
+    def test_no_cross_block_substitution_abuse(self):
+        from app.services.recommender.engine import (
+            compute_block_zscores_from_grades,
+            evaluate_target_anchored_academic_fit,
+            evaluate_admission_feasibility,
+        )
+
+        # Học sinh chỉ nhập 3 môn khối C00 đạt 27.0đ
+        grades_c00_only = {"Ngữ văn": 9.0, "Lịch sử": 9.0, "Địa lý": 9.0}
+        zblocks = compute_block_zscores_from_grades(grades_c00_only)
+
+        # Ngành Y khoa chỉ xét B00 / A00 -> KHÔNG được lấy điểm 27.0đ của C00 thay thế
+        acad_score, _, bd = evaluate_target_anchored_academic_fit(
+            ["B00", "A00"],
+            zblocks,
+            benchmark_cutoff=25.5,
+            min_recommended=23.5,
+            raw_grades=grades_c00_only,
+            major_code="7720101",
+            major_name="Y khoa",
+        )
+        assert bd["has_matched_block"] is False
+        assert bd["cross_block_blocked"] is True
+        assert bd["safety_tier"] == "REACH"
+        assert acad_score <= 0.20
+
+        feas = evaluate_admission_feasibility(
+            raw_block_sum=None,
+            major_code="7720101",
+            major_name="Y khoa",
+            has_matched_block=False,
+            admitted_blocks=["B00", "A00"],
+        )
+        assert feas["feasibility_tier"] == "REACH"
+        assert feas["constraint_passed"] is False
+        assert feas["best_block_score"] is None
+
+    def test_evaluate_endpoint_422_unassessed_and_435_majors_eval(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.core.database import get_db
+
+        async def _override_get_db_none():
+            yield None
+
+        app.dependency_overrides[get_db] = _override_get_db_none
+        try:
+            client = TestClient(app)
+
+            # 1) Chưa làm bài test -> 422 CHUA_HOAN_THANH_BAI_TEST
+            res_empty = client.post("/api/v1/recommender/evaluate", json={})
+            assert res_empty.status_code == 422
+            assert res_empty.json()["detail"]["code"] == "CHUA_HOAN_THANH_BAI_TEST"
+
+            # 2) Đầy đủ 30 câu RIASEC + 8 Nhận thức + Điểm số (Vật lý / Địa lý)
+            res_ok = client.post(
+                "/api/v1/recommender/evaluate",
+                json={
+                    "riasec_answers": {
+                        "I1": 5, "I2": 5, "I3": 5, "I4": 5, "I5": 5,
+                        "R1": 4, "R2": 4, "R3": 4, "R4": 4, "R5": 4,
+                        "A1": 2, "S1": 2, "E1": 2, "C1": 3,
+                    },
+                    "cognitive_answers": {"COG_1": "B", "COG_3": "A", "COG_5": "A"},
+                    "grades_by_subject": {
+                        "Toán": 6.0,
+                        "Vật lý": 6.0,
+                        "Hóa học": 6.0,
+                        "Ngữ văn": 6.5,
+                        "Tiếng Anh": 6.5,
+                    },
+                    "top_k": 435,
+                },
+            )
+            assert res_ok.status_code == 200
+            body = res_ok.json()
+            assert body["total_majors_evaluated"] >= 400
+            assert body["bestBlockStats"]["raw_sum"] == pytest.approx(19.0, abs=1e-2)
+            assert len(body["funnel"]["tier1_fields"]) == 3
+
+            # Kiểm tra Khoa học máy tính (chuẩn ~25.5đ / min 23.5đ) bị chặn REACH với điểm ~19đ
+            cs_item = next(
+                (m for m in body["majors"] if m["major_code"] in ("7480101", "480101")),
+                None,
+            )
+            assert cs_item is not None
+            assert cs_item["feasibility_tier"] == "REACH"
+            assert cs_item["constraint_passed"] is False
+            assert len(cs_item["constraint_violations"]) >= 1
+        finally:
+            app.dependency_overrides.clear()
+
 

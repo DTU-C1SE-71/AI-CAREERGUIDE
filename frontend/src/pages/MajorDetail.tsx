@@ -23,6 +23,7 @@ import { apiRequest } from "../services/api"
 import { majors as fallbackMajors } from "../services/mockData"
 import { readStorage, writeStorage } from "../services/storage"
 import type { Major } from "../types/major"
+import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
 
 interface TaxonomyMajorDetail {
   major_code: string
@@ -127,16 +128,29 @@ export function MajorDetail() {
       (assessment.scores || []).map((s) => [s.subject, s.score]),
     )
 
-    // 1. Fetch Major Taxonomy & Recommender data
+    const evalPayload = buildEvaluateProfilePayload(assessment, 435)
+    const hasUserAssessment =
+      Boolean(evalPayload.riasec_answers) ||
+      Boolean(evalPayload.grades_by_subject)
+
+    // 1. Fetch Major Taxonomy & Deterministic 435-major Constraint Evaluation
     Promise.all([
-      apiRequest<Major[] | null>("/recommender/majors?top_k=435", null),
+      hasUserAssessment
+        ? apiRequest<{ majors?: Major[] } | null>("/recommender/evaluate", null, {
+            method: "POST",
+            body: JSON.stringify(evalPayload),
+          })
+        : apiRequest<Major[] | null>("/recommender/majors?top_k=435", null),
       apiRequest<TaxonomyMajorDetail | null>(
         `/taxonomy/majors/${codeToLookup}`,
         null,
       ),
     ])
-      .then(([recList, taxonomyInfo]) => {
+      .then(([evalOrList, taxonomyInfo]) => {
         if (!mounted) return
+        const recList = Array.isArray(evalOrList)
+          ? evalOrList
+          : evalOrList?.majors
         if (recList && Array.isArray(recList)) {
           const found = recList.find(
             (m) => m.id === id || m.code === id || m.code === codeToLookup,
@@ -315,11 +329,25 @@ export function MajorDetail() {
                     {major.category}
                   </span>
                 )}
-                <FeasibilityBadge value={major.feasibility} />
+                <FeasibilityBadge
+                  value={major.feasibility}
+                  label={major.feasibility_label}
+                />
+                {major.best_matching_block && major.best_block_score != null && (
+                  <span className="rounded-full border border-sky-200 bg-sky-50/90 px-2.5 py-0.5 text-[11px] font-extrabold text-sky-700">
+                    {major.best_matching_block}: {major.best_block_score}đ
+                    {major.benchmark_cutoff ? ` / ~${major.benchmark_cutoff}đ` : ""}
+                  </span>
+                )}
                 {loading && (
                   <Loader2 size={14} className="animate-spin text-sky-600" />
                 )}
               </div>
+              {major.constraint_violations && major.constraint_violations.length > 0 && (
+                <div className="mt-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/85 px-3.5 py-2 text-xs font-semibold text-slate-700">
+                  {major.constraint_violations.join(" · ")}
+                </div>
+              )}
               <h1 className="mt-3 text-3xl font-black text-slate-900 sm:text-4xl">
                 {major.name}
               </h1>
