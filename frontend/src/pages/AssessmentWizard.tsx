@@ -924,15 +924,11 @@ export function AssessmentWizard() {
                               <h3 className="text-sm md:text-base font-semibold leading-snug text-slate-800">
                                 {opt.label}
                               </h3>
-                              <span
-                                className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold transition-colors ${
-                                  isSelected
-                                    ? "bg-sky-500/15 text-sky-700"
-                                    : "text-slate-400 group-hover:text-sky-600"
-                                }`}
-                              >
-                                {opt.option_key}
-                              </span>
+                              {isSelected && (
+                                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sky-500 text-white">
+                                  <Check className="size-3 stroke-[2.5]" />
+                                </span>
+                              )}
                             </div>
                             <p className="mt-1 text-xs leading-relaxed text-slate-500">
                               {opt.description}
