@@ -1,0 +1,82 @@
+import {
+  Binary,
+  BookOpen,
+  Brain,
+  Building2,
+  Calculator,
+  CalendarCheck,
+  Clapperboard,
+  Compass,
+  Cpu,
+  Crown,
+  FileSpreadsheet,
+  Flame,
+  Hand,
+  Headphones,
+  Heart,
+  HeartHandshake,
+  Landmark,
+  Lightbulb,
+  ListChecks,
+  MessageCircle,
+  MessagesSquare,
+  Palette,
+  PenTool,
+  Rocket,
+  Scale,
+  ShieldAlert,
+  Sparkles,
+  Sprout,
+  Terminal,
+  TrendingUp,
+  Users,
+  Wrench,
+  type LucideIcon,
+} from "lucide-react"
+import type { CognitiveIconName } from "../../data/cognitiveQuestions"
+
+const COGNITIVE_ICON_MAP: Record<CognitiveIconName, LucideIcon> = {
+  Clapperboard,
+  BookOpen,
+  Wrench,
+  MessagesSquare,
+  Headphones,
+  Building2,
+  Compass,
+  Landmark,
+  Calculator,
+  Lightbulb,
+  Heart,
+  Scale,
+  Cpu,
+  FileSpreadsheet,
+  Users,
+  Sprout,
+  Binary,
+  MessageCircle,
+  Palette,
+  Hand,
+  ShieldAlert,
+  Flame,
+  Brain,
+  CalendarCheck,
+  Rocket,
+  TrendingUp,
+  HeartHandshake,
+  Sparkles,
+  Terminal,
+  Crown,
+  PenTool,
+  ListChecks,
+}
+
+export function CognitiveOptionIcon({
+  name,
+  className = "size-5",
+}: {
+  name: CognitiveIconName
+  className?: string
+}) {
+  const Icon = COGNITIVE_ICON_MAP[name] ?? Sparkles
+  return <Icon className={className} />
+}

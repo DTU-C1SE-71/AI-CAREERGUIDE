@@ -18,6 +18,7 @@ import {
   HIGH_SCHOOL_SUBJECTS,
   type SubjectGrade,
 } from "../components/assessment/AcademicInputForm"
+import { CognitiveOptionIcon } from "../components/assessment/CognitiveOptionIcon"
 import {
   LiveRiasecHexagon,
   QuestionIllustrationFrame,
@@ -172,6 +173,12 @@ export function AssessmentWizard() {
             const parsedCogs: CognitiveQuestionItem[] =
               data.cognitive_questions.map((q) => {
                 const fb = fallbackMap.get(q.code)
+                const fbOptMap = new Map(
+                  (fb?.options || []).map((opt) => [
+                    opt.option_key.toUpperCase(),
+                    opt,
+                  ])
+                )
                 const title =
                   fb?.title ||
                   q.dimension_badge ||
@@ -184,12 +191,18 @@ export function AssessmentWizard() {
                     : q.question_text || "")
                 const options =
                   q.options && q.options.length > 0
-                    ? q.options.map((opt) => ({
-                        option_key: opt.option_key,
-                        trait_code: opt.trait_code,
-                        title: opt.title,
-                        description: opt.description,
-                      }))
+                    ? q.options.map((opt) => {
+                        const fbOpt = fbOptMap.get(opt.option_key.toUpperCase())
+                        return {
+                          option_key: opt.option_key,
+                          trait_code:
+                            opt.trait_code || fbOpt?.trait_code || "",
+                          label: fbOpt?.label || opt.title,
+                          description:
+                            fbOpt?.description || opt.description || "",
+                          icon: fbOpt?.icon || "Sparkles",
+                        }
+                      })
                     : fb?.options || []
 
                 return {
@@ -776,97 +789,174 @@ export function AssessmentWizard() {
           </div>
         )}
 
-        {/* ==================== STEP 2: LIQUID GLASS COGNITIVE ==================== */}
+        {/* ==================== STEP 2: RELATABLE COGNITIVE SCENARIO CARDS ==================== */}
         {step === 2 && currentCog && (
-          <div className="relative mx-auto flex max-w-2xl items-center justify-center gap-2.5">
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.92 }}
-              disabled={cogIndex === 0}
-              onClick={goToPrevCog}
-              aria-label="Câu trước"
-              className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-md backdrop-blur-2xl disabled:opacity-30"
-            >
-              <ChevronLeft className="size-5" />
-            </motion.button>
+          <div className="space-y-4">
+            {/* Compact Step 2 Progress Track */}
+            <div className="mx-auto flex max-w-xl items-center gap-3 px-1">
+              <div className="h-2 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
+                <motion.div
+                  animate={{
+                    width: `${Math.round(
+                      (totalCognitiveAnswered /
+                        Math.max(1, cognitiveQuestions.length)) *
+                        100
+                    )}%`,
+                  }}
+                  transition={{ type: "spring", stiffness: 260, damping: 24 }}
+                  className="h-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-cyan-500"
+                />
+              </div>
+              <span className="text-xs font-black text-sky-900 sm:text-sm">
+                {totalCognitiveAnswered}/{cognitiveQuestions.length}
+              </span>
+            </div>
 
-            <AnimatePresence mode="wait" custom={cogDirection}>
-              <motion.div
-                key={currentCog.code}
-                custom={cogDirection}
-                initial={{ opacity: 0, x: cogDirection * 48, scale: 0.97 }}
-                animate={{ opacity: 1, x: 0, scale: 1 }}
-                exit={{ opacity: 0, x: cogDirection * -48, scale: 0.97 }}
-                transition={{ type: "spring", stiffness: 320, damping: 28 }}
-                drag="x"
-                dragConstraints={{ left: 0, right: 0 }}
-                dragElastic={0.35}
-                onDragEnd={(_, info) => {
-                  if (info.offset.x < -55 || info.velocity.x < -300) {
-                    goToNextCog()
-                  } else if (info.offset.x > 55 || info.velocity.x > 300) {
-                    goToPrevCog()
-                  }
-                }}
-                className="w-full rounded-3xl border border-white/90 bg-white/65 p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl"
+            <div className="relative mx-auto flex max-w-2xl items-center justify-center gap-2.5">
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.92 }}
+                disabled={cogIndex === 0}
+                onClick={goToPrevCog}
+                aria-label="Câu trước"
+                className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-md backdrop-blur-2xl disabled:opacity-30"
               >
-                <div className="mb-4 flex items-center justify-between">
-                  <span className="rounded-full border border-white/80 bg-white/85 px-3.5 py-1 text-xs font-black text-sky-700">
-                    {cogIndex + 1} / {cognitiveQuestions.length}
-                  </span>
-                </div>
+                <ChevronLeft className="size-5" />
+              </motion.button>
 
-                <h2 className="mb-5 text-xl sm:text-2xl font-black leading-snug text-slate-900">
-                  {currentCog.subtitle}
-                </h2>
+              <AnimatePresence mode="wait" custom={cogDirection}>
+                <motion.div
+                  key={currentCog.code}
+                  custom={cogDirection}
+                  initial={{ opacity: 0, x: cogDirection * 48, scale: 0.97 }}
+                  animate={{ opacity: 1, x: 0, scale: 1 }}
+                  exit={{ opacity: 0, x: cogDirection * -48, scale: 0.97 }}
+                  transition={{ type: "spring", stiffness: 320, damping: 28 }}
+                  drag="x"
+                  dragConstraints={{ left: 0, right: 0 }}
+                  dragElastic={0.35}
+                  onDragEnd={(_, info) => {
+                    if (info.offset.x < -55 || info.velocity.x < -300) {
+                      goToNextCog()
+                    } else if (info.offset.x > 55 || info.velocity.x > 300) {
+                      goToPrevCog()
+                    }
+                  }}
+                  className="w-full max-w-xl mx-auto rounded-3xl border border-white/90 bg-white/70 p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl"
+                >
+                  {/* Top Header Pills + Mobile Nav */}
+                  <div className="mb-4 flex items-center justify-between gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full border border-sky-200/80 bg-white/90 px-3 py-1 text-xs font-black text-sky-700 shadow-2xs">
+                        {cogIndex + 1} / {cognitiveQuestions.length}
+                      </span>
+                      {currentCog.dimension_badge && (
+                        <span className="rounded-full border border-sky-100 bg-sky-50/90 px-3 py-1 text-xs font-bold text-sky-800">
+                          {currentCog.dimension_badge}
+                        </span>
+                      )}
+                    </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  {currentCog.options.map((opt) => {
-                    const isSelected = String(currentCogValue) === opt.option_key
-                    return (
-                      <motion.button
-                        key={opt.option_key}
+                    <div className="flex items-center gap-1 sm:hidden">
+                      <button
                         type="button"
-                        whileHover={{ y: -2, scale: 1.01 }}
-                        whileTap={{ scale: 0.97 }}
-                        onClick={() => handleSelectCognitive(opt.option_key)}
-                        className={`flex items-center gap-3.5 rounded-2xl border p-4 text-left backdrop-blur-xl transition-colors ${
-                          isSelected
-                            ? "border-sky-400 bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-[0_10px_24px_rgba(14,165,233,0.26)]"
-                            : "border-white/90 bg-white/80 text-slate-900 hover:border-sky-300 hover:bg-white"
-                        }`}
+                        disabled={cogIndex === 0}
+                        onClick={goToPrevCog}
+                        aria-label="Câu trước"
+                        className="grid size-8 place-items-center rounded-full border border-white/80 bg-white/80 text-sky-700 disabled:opacity-30"
                       >
-                        <span
-                          className={`grid size-9 shrink-0 place-items-center rounded-xl text-sm font-black ${
+                        <ChevronLeft className="size-4" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={cogIndex >= cognitiveQuestions.length - 1}
+                        onClick={goToNextCog}
+                        aria-label="Câu tiếp theo"
+                        className="grid size-8 place-items-center rounded-full border border-white/80 bg-white/80 text-sky-700 disabled:opacity-30"
+                      >
+                        <ChevronRight className="size-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Relatable Scenario Question */}
+                  <h2 className="mb-5 text-lg sm:text-xl font-extrabold leading-snug text-slate-900">
+                    {currentCog.subtitle}
+                  </h2>
+
+                  {/* 4 Two-Tier Context Cards (Icon + Label + Description + Subtle Option Key) */}
+                  <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                    {currentCog.options.map((opt) => {
+                      const isSelected =
+                        String(currentCogValue) === opt.option_key
+                      return (
+                        <motion.button
+                          key={opt.option_key}
+                          type="button"
+                          whileHover={{ y: -2, scale: 1.01 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleSelectCognitive(opt.option_key)
+                          }}
+                          className={`group relative flex items-start gap-3.5 rounded-2xl border p-4 text-left backdrop-blur-xl transition-all cursor-pointer ${
                             isSelected
-                              ? "bg-white text-sky-700"
-                              : "bg-sky-100 text-sky-800"
+                              ? "border-sky-500 bg-sky-50/80 ring-2 ring-sky-500/20 shadow-sm"
+                              : "border-slate-200/80 bg-white/85 hover:border-sky-300 hover:bg-sky-50/40"
                           }`}
                         >
-                          {opt.option_key}
-                        </span>
-                        <span className="text-sm sm:text-base font-extrabold leading-snug">
-                          {opt.title}
-                        </span>
-                      </motion.button>
-                    )
-                  })}
-                </div>
-              </motion.div>
-            </AnimatePresence>
+                          <span
+                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                              isSelected
+                                ? "bg-sky-500 text-white shadow-xs"
+                                : "bg-slate-100 text-slate-600 group-hover:bg-sky-100 group-hover:text-sky-600"
+                            }`}
+                          >
+                            <CognitiveOptionIcon
+                              name={opt.icon}
+                              className="size-5 stroke-[2]"
+                            />
+                          </span>
 
-            <motion.button
-              type="button"
-              whileHover={{ scale: 1.08 }}
-              whileTap={{ scale: 0.92 }}
-              disabled={cogIndex >= cognitiveQuestions.length - 1}
-              onClick={goToNextCog}
-              aria-label="Câu tiếp theo"
-              className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-md backdrop-blur-2xl disabled:opacity-30"
-            >
-              <ChevronRight className="size-5" />
-            </motion.button>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <h3 className="text-sm md:text-base font-semibold leading-snug text-slate-800">
+                                {opt.label}
+                              </h3>
+                              <span
+                                className={`shrink-0 rounded-md px-1.5 py-0.5 text-[11px] font-bold transition-colors ${
+                                  isSelected
+                                    ? "bg-sky-500/15 text-sky-700"
+                                    : "text-slate-400 group-hover:text-sky-600"
+                                }`}
+                              >
+                                {opt.option_key}
+                              </span>
+                            </div>
+                            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                              {opt.description}
+                            </p>
+                          </div>
+                        </motion.button>
+                      )
+                    })}
+                  </div>
+                </motion.div>
+              </AnimatePresence>
+
+              <motion.button
+                type="button"
+                whileHover={{ scale: 1.08 }}
+                whileTap={{ scale: 0.92 }}
+                disabled={cogIndex >= cognitiveQuestions.length - 1}
+                onClick={goToNextCog}
+                aria-label="Câu tiếp theo"
+                className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-md backdrop-blur-2xl disabled:opacity-30"
+              >
+                <ChevronRight className="size-5" />
+              </motion.button>
+            </div>
           </div>
         )}
 
