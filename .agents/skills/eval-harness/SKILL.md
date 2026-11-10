@@ -1,3 +1,8 @@
+---
+name: eval-harness
+description: "Formal evaluation framework for AI development sessions implementing eval-driven development (EDD) principles, capability evals, and regression tracking."
+---
+
 # Eval Harness Skill
 
 A formal evaluation framework for Claude Code sessions, implementing eval-driven development (EDD) principles.
