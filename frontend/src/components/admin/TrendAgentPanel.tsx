@@ -96,11 +96,34 @@ function formatRunTime(iso?: string | null): string {
   }
 }
 
+const DEFAULT_TREND_QUERY_2026 =
+  "dự báo nhu cầu nhân lực thị trường lao động Việt Nam 2026 ngành mũi nhọn AI bán dẫn y tế kinh tế xanh"
+
+const TREND_QUERY_PRESETS: Array<{ label: string; query: string }> = [
+  {
+    label: "Toàn cảnh Nhân lực 2026",
+    query: DEFAULT_TREND_QUERY_2026,
+  },
+  {
+    label: "AI, Bán dẫn & An ninh mạng 2026",
+    query:
+      "xu hướng tuyển dụng Việt Nam 2026 trí tuệ nhân tạo AI thiết kế vi mạch bán dẫn an ninh mạng khoa học dữ liệu",
+  },
+  {
+    label: "Fintech, Thương mại & Logistics 2026",
+    query:
+      "nhu cầu nhân lực 2026 Fintech tài chính số thương mại điện tử logistics chuỗi cung ứng kinh tế số Việt Nam",
+  },
+  {
+    label: "Y tế, Kỹ thuật Xanh & Giáo dục 2026",
+    query:
+      "thiếu hụt nhân lực 2026 y khoa điều dưỡng robot tự động hóa năng lượng tái tạo ESG giáo dục STEM Việt Nam",
+  },
+]
+
 export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
   const [statusData, setStatusData] = useState<TrendAgentStatusPayload | null>(null)
-  const [focusQuery, setFocusQuery] = useState(
-    "ngành nghề xu hướng khát nhân lực Việt Nam",
-  )
+  const [focusQuery, setFocusQuery] = useState(DEFAULT_TREND_QUERY_2026)
   const [running, setRunning] = useState(false)
   const [savingToDb, setSavingToDb] = useState(false)
   const [clearing, setClearing] = useState(false)
@@ -114,7 +137,9 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
       if (!r.ok) return
       const res: TrendAgentStatusPayload = await r.json()
       setStatusData(res)
-      if (res.focus_query) setFocusQuery(res.focus_query)
+      if (res.focus_query && /202[6-9]/.test(res.focus_query)) {
+        setFocusQuery(res.focus_query)
+      }
       if ((res.total_trending_marked || 0) > 0) setExpanded(true)
     } catch {
       // ignore initial load error
@@ -140,7 +165,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
           ...getAdminAuthHeader(),
         },
         body: JSON.stringify({
-          focus_query: focusQuery.trim() || "ngành nghề xu hướng khát nhân lực Việt Nam",
+          focus_query: focusQuery.trim() || DEFAULT_TREND_QUERY_2026,
           auto_save: false,
         }),
       })
@@ -398,19 +423,23 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
                       ? `Lưu CSDL: ${formatRunTime(statusData.saved_at)}`
                       : `Quét lúc: ${formatRunTime(statusData?.last_run_at)}`
                   } (${statusData?.articles_scanned || 0} tin) · Nguồn đề xuất: CSDL`
-                : "Agent tìm tin tức thị trường lao động, phân hạng theo thang đo vĩ mô toàn thị trường phủ 100% nhóm ngành. Admin bấm Lưu vào CSDL để lưu cố định (1 tháng – 1 năm mới cần chạy lại)."}
+                : "Agent tìm tin tức thị trường lao động năm 2026, phân hạng theo thang đo vĩ mô toàn thị trường phủ 100% nhóm ngành (tối thiểu 3 ngành/nhóm; nhóm xu hướng cao 4–6 ngành). Admin bấm Lưu vào CSDL để lưu cố định."}
             </p>
           </div>
         </div>
+      </div>
 
+      {/* Wide Search Prompt Bar + Preset 2026 Chips */}
+      <div className="mt-3 space-y-2 rounded-2xl border border-sky-100 bg-sky-50/50 p-3">
         <div className="flex flex-wrap items-center gap-2">
-          <div className="relative">
+          <div className="relative min-w-[280px] flex-1">
             <Globe size={14} className="absolute left-3 top-2.5 text-sky-500" />
             <input
               value={focusQuery}
               onChange={(e) => setFocusQuery(e.target.value)}
-              placeholder="Từ khóa xu hướng..."
-              className="h-9 w-64 rounded-xl border border-slate-200 bg-white/90 pl-8 pr-3 text-xs font-semibold text-slate-800 outline-none focus:border-sky-400"
+              placeholder="Nhập từ khóa xu hướng thị trường lao động 2026..."
+              title={focusQuery}
+              className="h-9 w-full rounded-xl border border-slate-200 bg-white pl-8 pr-3 text-xs font-semibold text-slate-800 outline-none focus:border-sky-400 focus:ring-2 focus:ring-sky-100"
             />
           </div>
 
@@ -418,9 +447,9 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
             onClick={handleRunAgent}
             loading={running}
             icon={Radar}
-            className="!min-h-9 !px-4 !text-xs"
+            className="!min-h-9 !px-4 !text-xs shrink-0"
           >
-            {running ? "Đang tìm trên mạng..." : "Chạy Agent Tìm Xu Hướng"}
+            {running ? "Đang quét 6 truy vấn 2026..." : "Chạy Agent Tìm Xu Hướng 2026"}
           </Button>
 
           {isDraft && totalMarked > 0 && (
@@ -429,7 +458,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
                 type="button"
                 disabled={savingToDb}
                 onClick={handleSaveToDb}
-                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-xs font-extrabold text-white shadow-xs transition hover:bg-emerald-700 disabled:opacity-50 cursor-pointer"
+                className="inline-flex h-9 items-center gap-1.5 rounded-xl bg-emerald-600 px-3.5 text-xs font-extrabold text-white shadow-xs transition hover:bg-emerald-700 disabled:opacity-50 cursor-pointer shrink-0"
               >
                 {savingToDb ? (
                   <Loader2 size={14} className="animate-spin" />
@@ -443,7 +472,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
                 disabled={savingToDb}
                 onClick={handleDiscardDraft}
                 title="Hủy bản nháp và khôi phục dữ liệu CSDL hiện tại"
-                className="inline-flex h-9 items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 cursor-pointer"
+                className="inline-flex h-9 items-center gap-1 rounded-xl border border-amber-300 bg-amber-50 px-3 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:opacity-50 cursor-pointer shrink-0"
               >
                 <RotateCcw size={13} />
                 Hủy nháp
@@ -456,7 +485,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
               <button
                 type="button"
                 onClick={() => setExpanded((v) => !v)}
-                className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-white/85 px-3 text-xs font-bold text-slate-700 hover:bg-white cursor-pointer"
+                className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-white px-3 text-xs font-bold text-slate-700 hover:bg-slate-50 cursor-pointer shrink-0"
               >
                 {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
                 {expanded ? "Thu gọn" : `Xem ${totalMarked} ngành`}
@@ -467,13 +496,37 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
                   disabled={clearing}
                   onClick={handleClearTrends}
                   title="Xóa toàn bộ đánh dấu xu hướng trong CSDL"
-                  className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-white/85 px-2.5 text-xs font-bold text-slate-500 hover:border-rose-200 hover:text-rose-600 disabled:opacity-50 cursor-pointer"
+                  className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-500 hover:border-rose-200 hover:text-rose-600 disabled:opacity-50 cursor-pointer shrink-0"
                 >
                   <Trash2 size={13} />
                 </button>
               )}
             </>
           )}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-1.5 text-[10px]">
+          <span className="font-extrabold text-slate-500">Mẫu tìm kiếm 2026:</span>
+          {TREND_QUERY_PRESETS.map((preset) => {
+            const active = focusQuery.trim() === preset.query.trim()
+            return (
+              <button
+                key={preset.label}
+                type="button"
+                onClick={() => setFocusQuery(preset.query)}
+                className={`rounded-lg border px-2 py-0.5 font-bold transition cursor-pointer ${
+                  active
+                    ? "border-sky-500 bg-sky-600 text-white"
+                    : "border-sky-200 bg-white text-sky-700 hover:bg-sky-50"
+                }`}
+              >
+                {preset.label}
+              </button>
+            )
+          })}
+          <span className="ml-auto font-semibold text-slate-400">
+            Tự mở rộng 6 truy vấn báo chí + Tavily (65 nguồn tin)
+          </span>
         </div>
       </div>
 
