@@ -504,7 +504,7 @@ export function AssessmentWizard() {
     setStep(1)
   }
 
-  const handleCompleteAssessment = async () => {
+  const handleCompleteAssessment = async (skipAspiration = false) => {
     const finalAnswers: Record<string, number> = { ...assessment.answers }
     CANONICAL_30_CODES.forEach((code, idx) => {
       const val = finalAnswers[code] ?? finalAnswers[`1-${idx}`]
@@ -524,12 +524,22 @@ export function AssessmentWizard() {
       }
     )
 
+    const effectiveAspiration = skipAspiration
+      ? {
+          dreamJob: "",
+          desiredField: "",
+          workValues: [],
+          preferredEnvironment: "",
+          scoreStrategy: "FLEXIBLE_PATHWAY" as const,
+        }
+      : aspiration
+
     recordCompletedAttempt({
       ...assessment,
       answers: finalAnswers,
       step: 4,
       scores: normalizedScores,
-      aspiration,
+      aspiration: skipAspiration ? undefined : effectiveAspiration,
       completed: true,
     })
 
@@ -546,11 +556,11 @@ export function AssessmentWizard() {
     })
 
     const aspirationPayload = {
-      dream_job: aspiration.dreamJob || "",
-      desired_field: aspiration.desiredField || "",
-      work_values: aspiration.workValues || [],
-      preferred_environment: aspiration.preferredEnvironment || "",
-      score_strategy: aspiration.scoreStrategy || "FLEXIBLE_PATHWAY",
+      dream_job: effectiveAspiration.dreamJob || "",
+      desired_field: effectiveAspiration.desiredField || "",
+      work_values: effectiveAspiration.workValues || [],
+      preferred_environment: effectiveAspiration.preferredEnvironment || "",
+      score_strategy: effectiveAspiration.scoreStrategy || "FLEXIBLE_PATHWAY",
     }
 
     // Đồng bộ kết quả đánh giá, nguyện vọng nghề nghiệp và điểm học lực xuống Backend trước khi mở Dashboard
@@ -1034,6 +1044,7 @@ export function AssessmentWizard() {
                 update({ aspiration: nextAspiration })
               }
               topHollandPreview={topHollandPreview}
+              onSkip={() => handleCompleteAssessment(true)}
             />
           </div>
         )}
@@ -1124,13 +1135,24 @@ export function AssessmentWizard() {
             )}
 
             {step === 4 && (
-              <Button
-                icon={Check}
-                className="text-sm sm:text-base px-5 py-2.5"
-                onClick={handleCompleteAssessment}
-              >
-                Phân tích & Xem kết quả
-              </Button>
+              <div className="flex flex-wrap items-center justify-end gap-2.5 sm:gap-3">
+                <Button
+                  variant="secondary"
+                  className="px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-slate-300"
+                  onClick={() => handleCompleteAssessment(true)}
+                >
+                  Bỏ qua & Xem kết quả
+                </Button>
+                <Button
+                  icon={Check}
+                  className="px-5 py-2.5 text-xs sm:text-sm font-extrabold"
+                  onClick={() => handleCompleteAssessment(false)}
+                >
+                  {aspiration.dreamJob?.trim()
+                    ? "Phân tích & Xem kết quả"
+                    : "Xem kết quả phân tích"}
+                </Button>
+              </div>
             )}
           </div>
         </div>

@@ -44,6 +44,15 @@ Bổ sung các cụm nghề đa dạng vào `CAREER_SYNONYM_CLUSTERS` trong `asp
 ### 2.3 Bảo vệ kết luận LLM chống ảo giác (Safe LLM Verdict)
 - Thêm hàm `_is_safe_llm_verdict(text, ...)` trong `aspiration_agent.py` để kiểm tra đầu ra từ mô hình AI, ngăn chặn LLM tự sinh các con số điểm số ảo hoặc bịa đặt dữ liệu học bạ không có trong ngữ cảnh.
 
+### 2.4 Bổ sung tính năng Bỏ qua Nguyện vọng & Tối ưu giao diện tinh gọn (Clean Minimalist UI)
+- **Cho phép bỏ qua nguyện vọng (Skip flow):**
+  - Học sinh có thể chọn **"Bỏ qua bước này"** ngay tại banner phía trên hoặc nút **"Bỏ qua & Xem kết quả"** ở thanh điều hướng cuối trang.
+  - Khi bấm bỏ qua, hệ thống không bắt buộc nhập liệu, tự động đồng bộ hồ sơ đánh giá và chuyển ngay sang Dashboard để xem kết quả phân tích theo RIASEC, Học lực và Tư duy.
+- **Tối ưu hiển thị chỉ những gì cần thiết:**
+  - Tập trung 100% vào ô nhập nghề mơ ước kèm icon tìm kiếm, nút xóa chọn nhanh và 8 chip gợi ý phổ biến.
+  - Các mục phụ như "Giá trị công việc" (Mục 2) và "Chiến lược đối chiếu điểm chuẩn" (Mục 3) được thu gọn trong Accordion `Tùy chỉnh thêm giá trị & chiến lược điểm số (Không bắt buộc)`, mặc định đóng để giao diện thoáng đãng, không gây choáng ngợp cho học sinh.
+  - Tự động hiển thị huy hiệu *"Đã tùy chỉnh"* nếu học sinh đã từng chọn các mục nâng cao này.
+
 ---
 
 ## 3. Kiến trúc hệ thống & Danh mục tệp (Files in Play)
