@@ -21,6 +21,7 @@ import { type ChangeEvent, type DragEvent, useEffect, useMemo, useRef, useState 
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import * as XLSX from "xlsx"
+import { MajorsCatalogPanel } from "../components/admin/MajorsCatalogPanel"
 import { TrendAgentPanel } from "../components/admin/TrendAgentPanel"
 import { Badge } from "../components/common/Badge"
 import { Button } from "../components/common/Button"
@@ -241,6 +242,7 @@ export function AdminHITLDashboard() {
   const [parseTimeMs, setParseTimeMs] = useState<number | null>(null)
   const [previewSearch, setPreviewSearch] = useState("")
   const [previewPage, setPreviewPage] = useState(1)
+  const [catalogRefreshKey, setCatalogRefreshKey] = useState(0)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const showToast = (msg: string, error = false) => {
@@ -509,6 +511,9 @@ export function AdminHITLDashboard() {
       } else {
         setDbHealth((prev) => ({ ...prev, majors_count: totalImported }))
       }
+
+      // Danh mục ngành vừa thay đổi -> buộc bảng xem dữ liệu tải lại
+      setCatalogRefreshKey((key) => key + 1)
 
       showToast(
         `Đã lưu ${totalImported} ngành vào CSDL! (Thêm mới: ${data.inserted ?? 0}, Cập nhật: ${data.updated ?? 0}${deactivatedNote})`,
@@ -874,6 +879,9 @@ export function AdminHITLDashboard() {
             </div>
           )}
         </div>
+
+        {/* Danh mục ngành đào tạo đang hoạt động trong CSDL */}
+        <MajorsCatalogPanel refreshKey={catalogRefreshKey} onNotify={showToast} />
 
         {/* Minimal HITL Review */}
         <div className="glass-card overflow-hidden rounded-3xl">
