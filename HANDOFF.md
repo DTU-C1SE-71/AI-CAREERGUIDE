@@ -15,7 +15,7 @@ Maintain and continue advancing **AI CareerGuide** — a deterministic + AI-assi
 
 ## 2. Current State
 
-### Working & Verified (as of commit `5a2dcc5` + local verification run 2026-11-11)
+### Working & Verified (as of commit `ed39bc3` + admin catalog panel, verification run 2026-11-11)
 - **Automated Test Suites (all green after final edit):**
   - `pytest backend/tests -q` (`ENVIRONMENT=test`): **88 passed** (`16.44s`).
   - `py -3 backend/scripts/test_backend_core.py` (`ENVIRONMENT=test`): **10/10 PASSED**.
@@ -27,7 +27,7 @@ Maintain and continue advancing **AI CareerGuide** — a deterministic + AI-assi
 - **Database State (`GET http://localhost:8000/api/health/db` & `/api/v1/taxonomy/majors?limit=1000`):**
   - PostgreSQL `majors` table holds **exactly 435 active TT74 majors** (`WHERE is_active = true`; 8 stale TT09 codes are soft-deactivated with `is_active = false`).
 - **Git Remotes & Branches:**
-  - Default `origin`: `https://github.com/DTU-C1SE-71/AI-CAREERGUIDE.git` (`develop` = `5a2dcc5`, `main` = `526d119`).
+  - Default `origin`: `https://github.com/DTU-C1SE-71/AI-CAREERGUIDE.git` (`main` = `526d119`; `develop` = latest handoff/feature commit).
   - Secondary remote `ntanduy`: `https://github.com/ntanduy25/ai-careerguide_2.git` (legacy remote renamed away from `origin`).
 - **Trend Hunter Agent (2026 Macro-Level + >= 3/Group + Save-to-DB Flow):**
   - `POST /api/v1/taxonomy/trend-agent/run` (`ADMIN` JWT required): default `auto_save=False`, returns `status="draft_ready"`, `pending_save=True`, **66–86 trending majors** across **23/23 MOET TT74 categories** (see small-category note below).
@@ -41,6 +41,10 @@ Maintain and continue advancing **AI CareerGuide** — a deterministic + AI-assi
 - **Student flow E2E (fresh accounts, live API):**
   - Standard profile: register/login → 30 RIASEC + 8 cognitive → submit assessment → 10-subject grades → `POST /recommender/recommend` (0.35 s) → dashboard overview. **13/13 checks passed**: weights locked `0.45/0.35/0.20`, 435 majors evaluated, trend markers byte-identical to DB, no web search triggered (registry mtime unchanged).
   - Low-grade profile (`raw_sum = 15.2`): **88 TARGET + 347 REACH** across the catalog; with `top_k=120` the response is exactly 88 TARGET followed by 32 REACH. **11/11 checks passed**.
+- **Admin catalog viewer (`MajorsCatalogPanel.tsx`, new):**
+  - Rendered in `AdminHITLDashboard.tsx` above *Kiểm duyệt HITL*, collapsed by default, with `refreshKey` bumped after a successful `confirmImportToDb`.
+  - Reads the existing public `GET /api/v1/taxonomy/majors?limit=1000` (active majors only) and filters/paginates client-side: search by code/name/category/degree, category dropdown, trend filter (`Tất cả` / `Có xu hướng` / `Không xu hướng`), 50 rows per page, expandable detail row (description, career list, outlook, trend reason + sources), tier distribution footer.
+  - Live API contract verified: **435** active majors, **24** distinct `category` values, **81** trending (`TIER_1: 20 / TIER_2: 45 / TIER_3: 16`), and all 435 rows carry `blocks`, `careers`, `description`, `outlook`.
 
 ### Recommender Ordering Semantics (verified — do not "fix" these in tests)
 - `service.py:492-502` sorts by `(is_TARGET, is_substituted, score + trend_boost, trend_priority, score, trend?, academic, riasec)` descending. Consequences that look like bugs but are intentional:
@@ -49,7 +53,7 @@ Maintain and continue advancing **AI CareerGuide** — a deterministic + AI-assi
   3. Assertions must therefore compare `score + rank_boost` **only within non-substituted items of the same tier**, with a `1e-6` tolerance for ties. Comparing raw `overall_score` across the whole list produces false inversions (e.g. ranks 4–6 tied at `0.7459` before rank 7 at `0.8167`).
 
 ### Operational Notes (current, after 2026-11-11 local run)
-- **Working tree is clean** except this `HANDOFF.md`: no source edits were required for the trend re-run or the E2E verification. `backend/app/db/seeds/moet_taxonomy_active.json` was discarded back to its committed state after the DB save (the runtime `_trend` payload lives in PostgreSQL + the gitignored `trending_majors_registry.json`), and the temporary `trending_majors_registry.test.json` artifact was deleted.
+- **Working tree:** only the admin catalog panel feature touches source files (`MajorsCatalogPanel.tsx` new, `AdminHITLDashboard.tsx` wiring). `backend/app/db/seeds/moet_taxonomy_active.json` was discarded back to its committed state after the DB save (the runtime `_trend` payload lives in PostgreSQL + the gitignored `trending_majors_registry.json`), and the temporary `trending_majors_registry.test.json` artifact was deleted.
 - **Local test accounts** created during E2E remain in the dev database only (`student.e2e.*`, `student.reach.*`, password `StudentTest@2026`); they are not part of the release artifact.
 - **Tavily is unconfigured** in the current container (`TAVILY_API_KEY=your_tavily_api_key_here`), so the trend agent falls back to RSS/Bing and caps at 65 articles. The 81-major result above was produced in that mode; setting a real key may widen coverage.
 
@@ -73,7 +77,8 @@ Maintain and continue advancing **AI CareerGuide** — a deterministic + AI-assi
 | `backend/app/services/recommender/service.py` | `calculate_3pillar_recommendations`: reads saved DB `_trend` priority boosts inside same feasibility tier (`TARGET` strictly before `REACH`, baseline `overall_score >= 0.45`) |
 | `backend/tests/test_scoring_and_gap_engine.py` | Main test suite covering scoring constraints, aspiration agent, `TestTrendHunterAgent` (23-category & `>= 3/group` assertions), and `TestExcelBulkImportPersistence` |
 | `frontend/src/components/admin/TrendAgentPanel.tsx` | Admin Trend Hunter UI: full-width 2026 search bar, 4 `TREND_QUERY_PRESETS`, Draft preview banner, local draft tier adjustment, **Lưu vào CSDL** (`handleSaveToDb`) & **Hủy nháp** (`handleDiscardDraft`), `[Nhóm ngành] / [Ngành đại diện] / [Cấp độ vĩ mô]` table |
-| `frontend/src/pages/AdminHITLDashboard.tsx` | Excel/CSV import + HITL governance UI (`confirmImportToDb` validates `persisted_to_db`, reports `deactivated`, and refreshes `/health/db`) |
+| `frontend/src/components/admin/MajorsCatalogPanel.tsx` | Admin read-only catalog viewer: loads `GET /api/v1/taxonomy/majors?limit=1000`, client-side search/category/trend filters, 50-row pagination, expandable detail row (`description`, `careers`, `outlook`, `trend_reason` + sources), tier distribution summary; collapsed by default, `refreshKey` reload after Excel import |
+| `frontend/src/pages/AdminHITLDashboard.tsx` | Excel/CSV import + HITL governance UI (`confirmImportToDb` validates `persisted_to_db`, reports `deactivated`, refreshes `/health/db`, and bumps `catalogRefreshKey`); hosts `TrendAgentPanel` and `MajorsCatalogPanel` |
 
 ---
 
@@ -115,8 +120,8 @@ Maintain and continue advancing **AI CareerGuide** — a deterministic + AI-assi
 
 ## 5. Next Steps
 
-1. **Optional UI smoke pass:** hard-refresh (`Ctrl+Shift+R`) the Admin trend panel to confirm the saved 2026 run hydrates correctly (81 majors, `Phủ 23/23 nhóm ngành`, `THÚ Y = 1`, `DỊCH VỤ XÃ HỘI = 2`), and open the student dashboard once to see `TrendBadge` markers matching the new tiers. Web search must not fire from either page.
-2. **Release:** open a PR from `develop` to `main` (`526d119`) on `https://github.com/DTU-C1SE-71/AI-CAREERGUIDE.git`. Backend test suites, core verification script and frontend build are green as of this handoff.
+1. **Optional UI smoke pass:** hard-refresh (`Ctrl+Shift+R`) the Admin page to confirm (a) the trend panel hydrates the saved 2026 run (81 majors, `Phủ 23/23 nhóm ngành`, `THÚ Y = 1`, `DỊCH VỤ XÃ HỘI = 2`), (b) the new **Danh mục ngành đào tạo trong hệ thống** panel expands to 435 rows / 24 groups / 81 trending with working search, filters, pagination and row detail, and (c) the student dashboard shows `TrendBadge` markers matching the new tiers. Web search must not fire from either page.
+2. **Release:** open a PR from `develop` to `main` (`526d119`) on `https://github.com/DTU-C1SE-71/AI-CAREERGUIDE.git` (use the compare URL manually — `gh` CLI is not installed). Backend test suites, core verification script and frontend build are green as of this handoff. GitHub currently reports **2 high Dependabot vulnerabilities** on the default branch; review before/after merge.
 3. **Housekeeping (deferred, optional):** delete the dev-only `student.e2e.*` / `student.reach.*` accounts if a pristine seed user count is needed. Note `backend/tests/test_scoring_and_gap_engine.py:1317` was re-checked this session and already has no trailing whitespace — the earlier note was stale.
 
 ---
