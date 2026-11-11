@@ -53,6 +53,19 @@ Bổ sung các cụm nghề đa dạng vào `CAREER_SYNONYM_CLUSTERS` trong `asp
   - Các mục phụ như "Giá trị công việc" (Mục 2) và "Chiến lược đối chiếu điểm chuẩn" (Mục 3) được thu gọn trong Accordion `Tùy chỉnh thêm giá trị & chiến lược điểm số (Không bắt buộc)`, mặc định đóng để giao diện thoáng đãng, không gây choáng ngợp cho học sinh.
   - Tự động hiển thị huy hiệu *"Đã tùy chỉnh"* nếu học sinh đã từng chọn các mục nâng cao này.
 
+### 2.5 Dọn dẹp Repo Git & Loại bỏ Remote thừa / Script rác
+- **Xóa 5 script probe/test tạm thời không còn dùng:**
+  - `script_check_live.py`: script thăm dò kết nối LLM tạm thời ở root.
+  - `script_probe_live.py`: script kiểm tra timeout probe tạm thời ở root.
+  - `script_test_probe.py`: script test endpoint probe ở root.
+  - `backend/check_db_status.py`: script test raw connection DB độc lập ở backend.
+  - `backend/scripts/inspect_db.py`: script đọc SQLite `careerguide.db` cũ (hệ thống hiện dùng PostgreSQL).
+- **Gỡ bỏ remote sai lệch (`ntanduy`):**
+  - Đã xóa remote `ntanduy` khỏi cấu hình git cục bộ.
+  - Chỉ giữ lại duy nhất remote chính thức của tổ chức: `origin` = `https://github.com/DTU-C1SE-71/AI-CAREERGUIDE.git`.
+- **Cập nhật `.gitignore`:**
+  - Bổ sung quy tắc bỏ qua `script_*.py`, `check_*.py`, `scratch/` để chống commit nhầm các file test ad-hoc trong tương lai.
+
 ---
 
 ## 3. Kiến trúc hệ thống & Danh mục tệp (Files in Play)
