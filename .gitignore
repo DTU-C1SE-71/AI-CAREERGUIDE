@@ -87,3 +87,8 @@ Thumbs.db
 trending_majors_registry*.json
 ~$*.docx
 ~$*.xlsx
+
+# Ad-hoc probe & scratch test scripts
+script_*.py
+check_*.py
+scratch/
