@@ -253,11 +253,23 @@ async def calculate_3pillar_recommendations(
             if m_dict.get("major_code") not in existing_codes:
                 majors.append(_MajorSeedAdapter(m_dict, idx))
 
+    from app.services.taxonomy.trend_agent import (
+        load_trending_registry_map,
+        get_major_trend_info,
+        get_trend_rank_boost,
+    )
+    trend_map = load_trending_registry_map()
+
     scored_items: List[MajorRecommendationItem] = []
     has_any_grades = bool(norm_raw_grades or student_zscores)
 
     for major in majors:
         seed_fallback = seed_by_code.get(major.major_code, {})
+        trend_info = get_major_trend_info(
+            major.major_code,
+            trend_map=trend_map,
+            cognitive_attributes=getattr(major, "cognitive_attributes", None),
+        )
         bm_override = getattr(major, "benchmark_cutoff", None) or seed_fallback.get("benchmark_cutoff")
         min_override = getattr(major, "min_recommended", None) or seed_fallback.get("min_recommended")
 
@@ -378,6 +390,10 @@ async def calculate_3pillar_recommendations(
             disp_sum = feasibility["best_block_score"] if feasibility["best_block_score"] is not None else raw_block_sum
             top_factors.insert(0, f"Đạt ngưỡng tuyển sinh: Khối {best_block or 'xét tuyển'} ({disp_sum}đ) phù hợp mức chuẩn (~{feasibility['benchmark_cutoff']}đ).")
 
+        if trend_info["is_trending"]:
+            reason_snip = f" — {trend_info['trend_reason']}" if trend_info.get("trend_reason") else ""
+            top_factors.insert(1, f"{trend_info['trend_label']}{reason_snip}")
+
         scored_items.append(MajorRecommendationItem(
             rank=0,
             major_id=major.id,
@@ -395,7 +411,8 @@ async def calculate_3pillar_recommendations(
                 "score_academic": score_academic,
                 "score_preference": score_pref,
                 "admitted_blocks_evaluated": block_breakdown,
-                "feasibility": feasibility
+                "feasibility": feasibility,
+                "trend_priority_boost": get_trend_rank_boost(trend_info["trend_tier"], overall_score),
             },
             top_supporting_factors=top_factors,
             competency_gaps=overall_gaps[:5],
@@ -412,7 +429,13 @@ async def calculate_3pillar_recommendations(
             constraint_violations=feasibility["constraint_violations"],
             admission_advice=feasibility["admission_advice"],
             academic_tier=feasibility["academic_tier"],
-            academic_tier_label=feasibility["academic_tier_label"]
+            academic_tier_label=feasibility["academic_tier_label"],
+            is_trending=trend_info["is_trending"],
+            trend_tier=trend_info["trend_tier"],
+            trend_priority=trend_info["trend_priority"],
+            trend_label=trend_info["trend_label"],
+            trend_reason=trend_info["trend_reason"],
+            trend_sources=trend_info["trend_sources"],
         ))
 
     # =========================================================================
@@ -463,12 +486,15 @@ async def calculate_3pillar_recommendations(
             best_sub.admission_advice = sub_msg
             best_sub.top_supporting_factors.insert(0, sub_msg)
 
-    # Luôn ưu tiên sắp xếp các ngành ĐẠT ràng buộc (TARGET) trước các ngành bị chặn (REACH)
+    # Luôn ưu tiên sắp xếp các ngành ĐẠT ràng buộc (TARGET) trước các ngành bị chặn (REACH),
+    # đồng thời ưu tiên các ngành Xu hướng theo bậc (Bậc 1 > Bậc 2 > Bậc 3 > Thường)
     final_pool = eligible_targets if len(eligible_targets) >= payload.top_k else scored_items
     final_pool.sort(
         key=lambda item: (
             1 if item.feasibility_tier == "TARGET" else 0,
             1 if item.major_code in substituted_codes else 0,
+            round(item.overall_score + get_trend_rank_boost(item.trend_tier, item.overall_score), 6),
+            item.trend_priority,
             item.overall_score,
             item.score_academic,
             item.score_riasec
@@ -551,6 +577,8 @@ def build_two_tier_funnel_payload(
     Ưu tiên đưa các ngành ĐẠT ràng buộc điểm (TARGET) lên trước trong từng lĩnh vực.
     """
     from collections import defaultdict
+    from app.services.taxonomy.trend_agent import get_trend_rank_boost
+
     groups: Dict[str, List[MajorRecommendationItem]] = defaultdict(list)
     for item in recommendations:
         cat = item.category or "Khác"
@@ -560,25 +588,48 @@ def build_two_tier_funnel_payload(
     for cat_name, items in groups.items():
         sorted_items = sorted(
             items,
-            key=lambda m: (1 if m.feasibility_tier == "TARGET" else 0, m.overall_score, m.score_riasec),
+            key=lambda m: (
+                1 if m.feasibility_tier == "TARGET" else 0,
+                round(m.overall_score + get_trend_rank_boost(m.trend_tier, m.overall_score), 6),
+                m.trend_priority,
+                m.overall_score,
+                m.score_riasec,
+            ),
             reverse=True,
         )
         sample_top = sorted_items[:majors_per_field]
         target_cnt = sum(1 for m in items if m.feasibility_tier == "TARGET")
         avg_score = sum(m.overall_score for m in sample_top) / len(sample_top)
+        max_trend_boost = max(
+            (
+                get_trend_rank_boost(m.trend_tier, m.overall_score)
+                for m in sample_top
+                if m.feasibility_tier == "TARGET"
+            ),
+            default=0.0,
+        )
+        max_trend_pri = max(
+            (m.trend_priority for m in sample_top if m.feasibility_tier == "TARGET"),
+            default=0,
+        )
         tier1_fields.append({
             "field_name": cat_name.title() if cat_name.isupper() else cat_name,
             "raw_category": cat_name,
             "icon": _resolve_field_icon(cat_name),
             "match": int(round(avg_score * 100)),
+            "rank_score": avg_score + (max_trend_boost * 0.45),
+            "max_trend_priority": max_trend_pri,
             "majors_count": len(items),
             "eligible_count": target_cnt,
             "has_eligible": target_cnt > 0,
             "majors": sample_top,
         })
 
-    # Ưu tiên các lĩnh vực có ngành đạt chuẩn trước, sau đó sắp xếp theo % phù hợp giảm dần
-    tier1_fields.sort(key=lambda f: (1 if f["has_eligible"] else 0, f["match"]), reverse=True)
+    # Ưu tiên các lĩnh vực có ngành đạt chuẩn trước, sau đó xét % phù hợp + ưu tiên ngành xu hướng
+    tier1_fields.sort(
+        key=lambda f: (1 if f["has_eligible"] else 0, round(f["rank_score"], 4), f["max_trend_priority"], f["match"]),
+        reverse=True,
+    )
     selected_tier1 = tier1_fields[:top_fields]
 
     return {
@@ -618,18 +669,22 @@ async def evaluate_dashboard_profile_bundle(
     inline = inline_profile or {}
     student_riasec = inline.get("riasec_scores") or _riasec_vector_from_answers(inline.get("riasec_answers"))
     norm_raw_grades = normalize_grades_dict(inline.get("grades_by_subject"))
+    aspiration_data = inline.get("aspiration")
 
-    if db is not None and (not student_riasec or not norm_raw_grades):
+    if db is not None and (not student_riasec or not norm_raw_grades or not aspiration_data):
         try:
-            if not student_riasec:
+            if not student_riasec or not aspiration_data:
                 a_res = await db.execute(
                     select(StudentAssessment)
                     .where(StudentAssessment.user_id == user_id)
                     .order_by(StudentAssessment.assessed_at.desc())
                 )
                 assess_row = a_res.scalars().first()
-                if assess_row and assess_row.riasec_scores:
-                    student_riasec = assess_row.riasec_scores
+                if assess_row:
+                    if not student_riasec and assess_row.riasec_scores:
+                        student_riasec = assess_row.riasec_scores
+                    if not aspiration_data and isinstance(assess_row.raw_responses, dict):
+                        aspiration_data = assess_row.raw_responses.get("aspiration")
             if not norm_raw_grades:
                 g_res = await db.execute(
                     select(StudentGrade)
@@ -642,14 +697,25 @@ async def evaluate_dashboard_profile_bundle(
         except Exception:
             pass
 
+    effective_riasec = student_riasec or {"R": 0.5, "I": 0.5, "A": 0.5, "S": 0.5, "E": 0.5, "C": 0.5}
     student_zscores = compute_block_zscores_from_grades(norm_raw_grades) if norm_raw_grades else {}
     riasec_data, best_block_stats = build_radar_and_block_summary(
-        student_riasec or {"R": 0.5, "I": 0.5, "A": 0.5, "S": 0.5, "E": 0.5, "C": 0.5},
+        effective_riasec,
         student_zscores,
         norm_raw_grades,
     )
 
     funnel_payload = build_two_tier_funnel_payload(rec_resp.recommendations)
+
+    # Thực thi AI Agent Phân tích Nguyện vọng & Đối chiếu Trắc nghiệm 3 Trụ cột
+    from app.services.recommender.aspiration_agent import analyze_career_aspiration
+    aspiration_analysis = await analyze_career_aspiration(
+        aspiration_data=aspiration_data,
+        student_riasec=effective_riasec,
+        best_block_stats=best_block_stats,
+        all_ranked_majors=rec_resp.recommendations,
+        enable_llm=True,
+    )
 
     return {
         "has_assessment": True,
@@ -660,4 +726,5 @@ async def evaluate_dashboard_profile_bundle(
         "bestBlockStats": best_block_stats,
         "majors": rec_resp.recommendations[:top_k],
         "funnel": funnel_payload,
+        "aspirationAnalysis": aspiration_analysis,
     }

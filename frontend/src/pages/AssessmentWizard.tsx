@@ -18,6 +18,7 @@ import {
   HIGH_SCHOOL_SUBJECTS,
   type SubjectGrade,
 } from "../components/assessment/AcademicInputForm"
+import { CareerAspirationStep } from "../components/assessment/CareerAspirationStep"
 import { CognitiveOptionIcon } from "../components/assessment/CognitiveOptionIcon"
 import {
   LiveRiasecHexagon,
@@ -38,6 +39,7 @@ import {
 } from "../data/onetMiniIpQuestions"
 import { useAssessment } from "../hooks/useAssessment"
 import { apiRequest } from "../services/api"
+import type { CareerAspirationInput } from "../types/assessment"
 
 export interface QuestionItem {
   code: string
@@ -358,6 +360,24 @@ export function AssessmentWizard() {
     [riasecGroupCounts]
   )
 
+  const topHollandPreview = useMemo(() => {
+    return [...RIASEC_ORDER]
+      .sort((a, b) => (riasecGroupPct[b] || 0) - (riasecGroupPct[a] || 0))
+      .slice(0, 3)
+      .join(" · ")
+  }, [riasecGroupPct])
+
+  const aspiration: CareerAspirationInput = useMemo(
+    () =>
+      assessment.aspiration || {
+        dreamJob: "",
+        desiredField: "",
+        workValues: [],
+        scoreStrategy: "FLEXIBLE_PATHWAY",
+      },
+    [assessment.aspiration]
+  )
+
   const allRiasecGroupsCovered = useMemo(() => {
     return (
       totalRiasecAnswered >= 18 &&
@@ -507,8 +527,9 @@ export function AssessmentWizard() {
     recordCompletedAttempt({
       ...assessment,
       answers: finalAnswers,
-      step: 3,
+      step: 4,
       scores: normalizedScores,
+      aspiration,
       completed: true,
     })
 
@@ -524,13 +545,22 @@ export function AssessmentWizard() {
       if (val) cogMap[q.code] = String(val)
     })
 
-    // Đồng bộ kết quả đánh giá và điểm học lực xuống Backend trước khi mở Dashboard
+    const aspirationPayload = {
+      dream_job: aspiration.dreamJob || "",
+      desired_field: aspiration.desiredField || "",
+      work_values: aspiration.workValues || [],
+      preferred_environment: aspiration.preferredEnvironment || "",
+      score_strategy: aspiration.scoreStrategy || "FLEXIBLE_PATHWAY",
+    }
+
+    // Đồng bộ kết quả đánh giá, nguyện vọng nghề nghiệp và điểm học lực xuống Backend trước khi mở Dashboard
     const pendingSyncs: Array<Promise<unknown>> = [
       apiRequest("/assessment/submit", null, {
         method: "POST",
         body: JSON.stringify({
           riasec_answers: riasecMap,
           cognitive_answers: cogMap,
+          aspiration: aspirationPayload,
         }),
       }),
     ]
@@ -587,8 +617,8 @@ export function AssessmentWizard() {
       <PageContainer className="relative z-10 max-w-2xl">
         {/* Top Liquid Glass Step Bar */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
-          {/* 3 Main Steps */}
-          <div className="flex items-center gap-1.5">
+          {/* 4 Main Steps */}
+          <div className="flex flex-wrap items-center gap-1.5">
             {[
               { id: 1, label: "1. Sở thích", done: allRiasecGroupsCovered },
               {
@@ -596,7 +626,21 @@ export function AssessmentWizard() {
                 label: "2. Tư duy",
                 done: totalCognitiveAnswered >= cognitiveQuestions.length,
               },
-              { id: 3, label: "3. Điểm số", done: assessment.completed },
+              {
+                id: 3,
+                label: "3. Điểm số",
+                done:
+                  (Object.values(scores).filter((v) => typeof v === "number")
+                    .length >= 3 &&
+                    step > 3) ||
+                  assessment.completed,
+              },
+              {
+                id: 4,
+                label: "4. Nguyện vọng",
+                done:
+                  Boolean(aspiration.dreamJob?.trim()) || assessment.completed,
+              },
             ].map((s) => {
               const active = step === s.id
               return (
@@ -981,6 +1025,19 @@ export function AssessmentWizard() {
           </div>
         )}
 
+        {/* ==================== STEP 4: CAREER ASPIRATION & AI AGENT CROSS-CHECK ==================== */}
+        {step === 4 && (
+          <div className="rounded-3xl border border-white/90 bg-white/65 p-5 sm:p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl">
+            <CareerAspirationStep
+              value={aspiration}
+              onChange={(nextAspiration) =>
+                update({ aspiration: nextAspiration })
+              }
+              topHollandPreview={topHollandPreview}
+            />
+          </div>
+        )}
+
         {/* Clean Bottom Action Bar */}
         <div className="mt-5 flex items-center justify-between gap-3">
           <Button
@@ -1050,14 +1107,29 @@ export function AssessmentWizard() {
 
             {step === 3 && (
               <Button
-                icon={Check}
+                icon={ArrowRight}
                 className="text-sm sm:text-base px-5 py-2.5"
                 disabled={
-                  Object.values(scores).filter((v) => typeof v === "number").length < 3
+                  Object.values(scores).filter((v) => typeof v === "number")
+                    .length < 3
                 }
+                onClick={() => {
+                  setStep(4)
+                  update({ step: 4 })
+                  window.scrollTo({ top: 0, behavior: "smooth" })
+                }}
+              >
+                Tiếp tục: Nguyện vọng
+              </Button>
+            )}
+
+            {step === 4 && (
+              <Button
+                icon={Check}
+                className="text-sm sm:text-base px-5 py-2.5"
                 onClick={handleCompleteAssessment}
               >
-                Xem kết quả
+                Phân tích & Xem kết quả
               </Button>
             )}
           </div>

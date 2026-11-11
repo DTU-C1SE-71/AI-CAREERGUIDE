@@ -787,3 +787,317 @@ class TestScoreConstraintsAndNormalization:
             app.dependency_overrides.clear()
 
 
+# =========================================================================
+# 10. AI CAREER ASPIRATION & PSYCHOMETRIC ALIGNMENT AGENT TESTS
+# =========================================================================
+
+class TestCareerAspirationAgent:
+    def test_aspiration_aligned_and_eligible(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.core.database import get_db
+
+        async def _override_get_db_none():
+            yield None
+
+        app.dependency_overrides[get_db] = _override_get_db_none
+        try:
+            client = TestClient(app)
+            res = client.post(
+                "/api/v1/recommender/evaluate",
+                json={
+                    "riasec_answers": {
+                        "I1": 5, "I2": 5, "I3": 5, "I4": 5, "I5": 5,
+                        "R1": 4, "R2": 4, "R3": 4, "R4": 4, "R5": 4,
+                        "C1": 4, "C2": 4, "A1": 1, "S1": 2, "E1": 2,
+                    },
+                    "cognitive_answers": {"COG_1": "B", "COG_3": "A", "COG_5": "A"},
+                    "grades_by_subject": {
+                        "Toán": 9.0,
+                        "Vật lý": 8.6,
+                        "Hóa học": 8.2,
+                        "Tiếng Anh": 8.5,
+                        "Ngữ văn": 7.5,
+                    },
+                    "aspiration": {
+                        "dream_job": "Kỹ sư Trí tuệ nhân tạo & Lập trình phần mềm",
+                        "desired_field": "Máy tính và công nghệ thông tin",
+                        "work_values": ["TECH_INNOVATION"],
+                        "score_strategy": "FLEXIBLE_PATHWAY",
+                    },
+                    "top_k": 435,
+                },
+            )
+            assert res.status_code == 200
+            asp = res.json()["aspirationAnalysis"]
+            assert asp["has_aspiration"] is True
+            assert asp["alignment_status"] == "ALIGNED_AND_ELIGIBLE"
+            assert asp["dream_majors"][0]["feasibility_tier"] == "TARGET"
+            assert any(
+                k in asp["dream_majors"][0]["major_name"].lower()
+                for k in ("trí tuệ", "phần mềm", "khoa học máy tính", "công nghệ thông tin")
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_aspiration_passion_match_with_score_gap_substitutes_safe_major(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.core.database import get_db
+
+        async def _override_get_db_none():
+            yield None
+
+        app.dependency_overrides[get_db] = _override_get_db_none
+        try:
+            client = TestClient(app)
+            res = client.post(
+                "/api/v1/recommender/analyze-aspiration",
+                json={
+                    "riasec_answers": {
+                        "I1": 5, "I2": 5, "I3": 5, "I4": 5, "I5": 5,
+                        "S1": 4, "S2": 4, "S3": 4, "R1": 4, "R2": 4,
+                        "A1": 1, "E1": 2, "C1": 3,
+                    },
+                    "cognitive_answers": {"COG_1": "B", "COG_3": "A", "COG_7": "C"},
+                    "grades_by_subject": {
+                        "Toán": 6.4,
+                        "Hóa học": 6.2,
+                        "Sinh học": 6.4,
+                        "Ngữ văn": 6.5,
+                        "Tiếng Anh": 6.5,
+                    },
+                    "aspiration": {
+                        "dream_job": "Bác sĩ Y khoa",
+                        "work_values": ["SOCIAL_IMPACT"],
+                        "score_strategy": "FLEXIBLE_PATHWAY",
+                    },
+                    "top_k": 435,
+                },
+            )
+            assert res.status_code == 200
+            asp = res.json()
+            assert asp["alignment_status"] == "PASSION_MATCH_SCORE_GAP"
+            assert asp["dream_majors"][0]["feasibility_tier"] == "REACH"
+            assert len(asp["recommended_substitutes"]) >= 1
+            assert asp["recommended_substitutes"][0]["feasibility_tier"] == "TARGET"
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_aspiration_trait_divergence_and_zero_pii_sanitization(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.core.database import get_db
+
+        async def _override_get_db_none():
+            yield None
+
+        app.dependency_overrides[get_db] = _override_get_db_none
+        try:
+            client = TestClient(app)
+            # Học sinh nổi trội Nghệ thuật (A) - Xã hội (S) (I/R thấp) nhưng nhập muốn làm Kỹ sư Vi mạch
+            res = client.post(
+                "/api/v1/recommender/analyze-aspiration",
+                json={
+                    "riasec_answers": {
+                        "A1": 5, "A2": 5, "A3": 5, "A4": 5, "A5": 5,
+                        "S1": 5, "S2": 5, "S3": 5, "S4": 5, "S5": 5,
+                        "E1": 4, "E2": 4, "I1": 1, "I2": 1, "R1": 1, "R2": 1, "C1": 2,
+                    },
+                    "cognitive_answers": {"COG_1": "D", "COG_3": "B", "COG_5": "B"},
+                    "grades_by_subject": {
+                        "Toán": 7.5,
+                        "Vật lý": 7.0,
+                        "Ngữ văn": 8.8,
+                        "Tiếng Anh": 8.6,
+                    },
+                    "aspiration": {
+                        "dream_job": "Em tên là Nguyễn Văn A sdt 0912345678 muốn làm Kỹ sư thiết kế vi mạch",
+                        "score_strategy": "FLEXIBLE_PATHWAY",
+                    },
+                    "top_k": 435,
+                },
+            )
+            assert res.status_code == 200
+            asp = res.json()
+            # Kiểm tra Zero-PII: tên và số điện thoại đã bị khử
+            assert "0912345678" not in asp["dream_job"]
+            assert "[REDACTED_PHONE]" in asp["dream_job"]
+            assert asp["alignment_status"] == "TRAIT_DIVERGENCE"
+            assert len(asp["bridge_majors"]) >= 1
+            assert asp["bridge_majors"][0]["feasibility_tier"] == "TARGET"
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_aspiration_exploratory_when_no_dream_job_entered(self):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.core.database import get_db
+
+        async def _override_get_db_none():
+            yield None
+
+        app.dependency_overrides[get_db] = _override_get_db_none
+        try:
+            client = TestClient(app)
+            res = client.post(
+                "/api/v1/recommender/analyze-aspiration",
+                json={
+                    "riasec_answers": {"E1": 5, "E2": 5, "S1": 4, "C1": 4, "I1": 3, "R1": 2, "A1": 3},
+                    "grades_by_subject": {"Toán": 8.0, "Ngữ văn": 7.8, "Tiếng Anh": 8.2},
+                    "aspiration": {"dream_job": ""},
+                    "top_k": 435,
+                },
+            )
+            assert res.status_code == 200
+            asp = res.json()
+            assert asp["alignment_status"] == "EXPLORATORY_DISCOVERY"
+            assert len(asp["dream_majors"]) >= 1
+        finally:
+            app.dependency_overrides.clear()
+
+
+# =========================================================================
+# 11. AI TREND HUNTER AGENT & MULTI-TIER PRIORITIZATION TESTS
+# =========================================================================
+
+class TestTrendHunterAgent:
+    def test_trend_agent_manual_admin_guard_classification_and_recommender_boost(self, monkeypatch):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.core.database import get_db
+        from app.core.security import create_access_token
+        from app.services.taxonomy import trend_agent
+
+        async def _override_get_db_none():
+            yield None
+
+        mock_articles = [
+            {
+                "title": "Thị trường Việt Nam khát nhân lực Trí tuệ nhân tạo AI và Thiết kế vi mạch bán dẫn 2026",
+                "url": "https://vnexpress.net/ai-vi-mach-xu-huong-2026",
+                "source": "VnExpress",
+                "published_at": "2026-11-10",
+                "snippet": "Các doanh nghiệp công nghệ săn đón kỹ sư trí tuệ nhân tạo, khoa học dữ liệu và vi mạch bán dẫn.",
+            },
+            {
+                "title": "Top ngành tăng trưởng mạnh: An toàn thông tin, Fintech, Logistics và Thương mại điện tử",
+                "url": "https://vietnamnet.vn/top-nganh-tang-truong-2026",
+                "source": "VietNamNet",
+                "published_at": "2026-11-10",
+                "snippet": "Nhu cầu an ninh mạng, công nghệ tài chính, chuỗi cung ứng logistics và kỹ thuật phần mềm tăng cao.",
+            },
+            {
+                "title": "Xu hướng tuyển dụng ổn định cho Điều dưỡng, Tâm lý học và Năng lượng tái tạo",
+                "url": "https://tuoitre.vn/tuyen-dung-y-te-tam-ly-2026",
+                "source": "Tuổi Trẻ",
+                "published_at": "2026-11-10",
+                "snippet": "Nhu cầu chăm sóc sức khỏe, tham vấn tâm lý học đường và chuyển dịch năng lượng xanh.",
+            },
+        ]
+
+        async def _mock_online_search(focus_query: str = ""):
+            return mock_articles
+
+        monkeypatch.setattr(trend_agent, "search_trending_majors_online", _mock_online_search)
+
+        app.dependency_overrides[get_db] = _override_get_db_none
+        admin_token = create_access_token("00000000-0000-0000-0000-000000000099", role="ADMIN")
+        student_token = create_access_token("00000000-0000-0000-0000-000000000002", role="STUDENT")
+
+        try:
+            client = TestClient(app)
+
+            # Đảm bảo sạch sẽ trước khi test
+            clear_res = client.delete(
+                "/api/v1/taxonomy/trend-agent/clear",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            assert clear_res.status_code == 200
+
+            # 1) Trước khi Admin bấm nút: không có ngành xu hướng nào tự chạy
+            status_before = client.get("/api/v1/taxonomy/trend-agent/status")
+            assert status_before.status_code == 200
+            assert status_before.json()["has_run"] is False
+            assert status_before.json()["total_trending_marked"] == 0
+
+            # 2) Guardrail: Không có token (401) hoặc Student token (403) bị chặn tuyệt đối
+            unauth_res = client.post("/api/v1/taxonomy/trend-agent/run", json={})
+            assert unauth_res.status_code == 401
+
+            student_res = client.post(
+                "/api/v1/taxonomy/trend-agent/run",
+                json={},
+                headers={"Authorization": f"Bearer {student_token}"},
+            )
+            assert student_res.status_code == 403
+
+            # Đánh giá xếp hạng gốc trước khi có đánh dấu xu hướng
+            eval_payload = {
+                "riasec_answers": {
+                    "I1": 5, "I2": 5, "I3": 5, "I4": 5, "I5": 5,
+                    "R1": 4, "R2": 4, "R3": 4, "R4": 4, "R5": 4,
+                    "C1": 4, "C2": 4, "A1": 2, "S1": 2, "E1": 3,
+                },
+                "cognitive_answers": {"COG_1": "B", "COG_3": "A", "COG_5": "A"},
+                "grades_by_subject": {
+                    "Toán": 8.8,
+                    "Vật lý": 8.6,
+                    "Hóa học": 8.4,
+                    "Tiếng Anh": 8.5,
+                    "Ngữ văn": 7.8,
+                },
+                "top_k": 435,
+            }
+            rec_before = client.post("/api/v1/recommender/evaluate", json=eval_payload).json()["majors"]
+            assert all(m.get("is_trending") is False for m in rec_before[:10])
+
+            # 3) Admin bấm nút chạy Trend Hunter Agent
+            run_res = client.post(
+                "/api/v1/taxonomy/trend-agent/run",
+                json={"focus_query": "ngành xu hướng AI bán dẫn logistics Việt Nam"},
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            assert run_res.status_code == 200
+            run_body = run_res.json()
+            assert run_body["status"] == "success"
+            assert run_body["articles_scanned"] == 3
+            assert run_body["total_trending_marked"] >= 6
+            assert run_body["tier_counts"]["TIER_1"] >= 1
+            assert run_body["tier_counts"]["TIER_2"] >= 1
+
+            # 4) Kiểm tra dữ liệu ngành đã được đánh dấu trực tiếp trong Taxonomy API
+            first_trend_code = run_body["trending_majors"][0]["major_code"]
+            major_detail = client.get(f"/api/v1/taxonomy/majors/{first_trend_code}")
+            assert major_detail.status_code == 200
+            m_data = major_detail.json()
+            assert m_data["is_trending"] is True
+            assert m_data["trend_tier"] in ("TIER_1", "TIER_2", "TIER_3")
+            assert m_data["trend_priority"] >= 1
+
+            # 5) Kiểm tra Recommender ưu tiên các ngành Xu hướng Bậc 1 lên đầu mà vẫn giữ nguyên TARGET trước REACH
+            rec_after = client.post("/api/v1/recommender/evaluate", json=eval_payload).json()["majors"]
+            top5_codes = [m["major_code"] for m in rec_after[:5]]
+            assert any(m.get("is_trending") for m in rec_after[:5])
+            assert any(m.get("trend_tier") == "TIER_1" for m in rec_after[:5])
+            assert all(m["feasibility_tier"] == "TARGET" for m in rec_after[:5])
+
+            # 6) Admin chỉnh bậc ưu tiên thủ công qua PATCH & dọn dẹp sạch test registry
+            patch_res = client.patch(
+                f"/api/v1/taxonomy/trend-agent/majors/{first_trend_code}",
+                json={"trend_tier": "TIER_1", "trend_reason": "Ưu tiên cấp quốc gia"},
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            assert patch_res.status_code == 200
+            assert patch_res.json()["trending_majors"][0]["trend_tier"] == "TIER_1"
+
+            client.delete(
+                "/api/v1/taxonomy/trend-agent/clear",
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+        finally:
+            app.dependency_overrides.clear()
+
+
+
+

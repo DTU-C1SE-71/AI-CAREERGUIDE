@@ -47,6 +47,7 @@ async def evaluate_majors_with_constraints(
         "cognitive_preferences": payload.cognitive_preferences,
         "cognitive_answers": payload.cognitive_answers,
         "grades_by_subject": payload.grades_by_subject,
+        "aspiration": payload.aspiration,
     }
     return await service.evaluate_dashboard_profile_bundle(
         db=db,
@@ -58,6 +59,38 @@ async def evaluate_majors_with_constraints(
         persist_history=False,
         user_name=current_user.full_name if current_user else None,
     )
+
+
+@router.post("/analyze-aspiration", status_code=status.HTTP_200_OK)
+async def analyze_aspiration_endpoint(
+    payload: EvaluateProfileRequest,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Endpoint chuyên biệt của AI Agent Phân tích Nguyện vọng & Đối chiếu Kết quả Trắc nghiệm.
+    Cho phép cập nhật hoặc phân tích lại nguyện vọng nghề nghiệp ngay trên Dashboard / Trắc nghiệm.
+    """
+    target_user_id = current_user.id if current_user else uuid.UUID("00000000-0000-0000-0000-000000000001")
+    inline_profile = {
+        "riasec_scores": payload.riasec_scores,
+        "riasec_answers": payload.riasec_answers,
+        "cognitive_preferences": payload.cognitive_preferences,
+        "cognitive_answers": payload.cognitive_answers,
+        "grades_by_subject": payload.grades_by_subject,
+        "aspiration": payload.aspiration,
+    }
+    bundle = await service.evaluate_dashboard_profile_bundle(
+        db=db,
+        user_id=target_user_id,
+        top_k=payload.top_k,
+        custom_weights=payload.custom_weights,
+        inline_profile=inline_profile,
+        raise_if_unassessed=True,
+        persist_history=False,
+        user_name=current_user.full_name if current_user else None,
+    )
+    return bundle.get("aspirationAnalysis")
 
 
 @router.get("/dashboard/overview")

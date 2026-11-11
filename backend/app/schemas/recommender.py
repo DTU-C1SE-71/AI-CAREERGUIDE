@@ -60,6 +60,14 @@ class MajorRecommendationItem(BaseModel):
     academic_tier: Optional[str] = Field(default="STANDARD_COMPETITION")
     academic_tier_label: Optional[str] = Field(default="Vừa sức / Tiêu chuẩn")
 
+    # Đánh dấu Ngành Xu Hướng theo 3 Bậc Ưu tiên (tìm kiếm bởi Admin Trend Agent)
+    is_trending: bool = Field(default=False)
+    trend_tier: Optional[str] = Field(default=None, description="TIER_1 | TIER_2 | TIER_3")
+    trend_priority: int = Field(default=0, description="3=Bậc 1, 2=Bậc 2, 1=Bậc 3, 0=Thường")
+    trend_label: Optional[str] = Field(default=None)
+    trend_reason: Optional[str] = Field(default=None)
+    trend_sources: List[Dict[str, str]] = Field(default_factory=list)
+
     # Tương thích ngược với DTO Frontend
     id: Optional[str] = None
     code: Optional[str] = None
@@ -109,6 +117,10 @@ class EvaluateProfileRequest(BaseModel):
     cognitive_preferences: Optional[Dict[str, Any]] = None
     cognitive_answers: Optional[Dict[str, Any]] = None
     grades_by_subject: Optional[Dict[str, float]] = None
+    aspiration: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Nguyện vọng nghề nghiệp tương lai của học sinh (dream_job, desired_field, work_values, preferred_environment, score_strategy)"
+    )
     custom_weights: Optional[Dict[str, float]] = None
     top_k: int = Field(default=15, ge=1, le=500)
 

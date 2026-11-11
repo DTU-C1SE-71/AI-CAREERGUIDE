@@ -4,14 +4,17 @@ from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.dependencies import require_admin_actor
 from app.schemas.taxonomy import (
     MajorItemResponse,
     MajorResponse,
     SubjectBlockResponse,
     CareerResponse,
     SkillResponse,
+    TrendAgentRunRequest,
+    TrendTierUpdateRequest,
 )
-from app.services.taxonomy import service
+from app.services.taxonomy import service, trend_agent
 from app.services.taxonomy.tt74_reference import (
     auto_enrich_major_record,
     parse_excel_or_csv_majors,
@@ -243,3 +246,56 @@ async def publish_majors_to_db(
         "total": len(enriched_list),
         "persisted_to_db": persisted_to_db
     }
+
+
+@router.get("/trend-agent/status", status_code=status.HTTP_200_OK)
+async def get_trend_agent_status():
+    """
+    Trả về trạng thái danh sách ngành xu hướng đã được Admin đánh dấu.
+    Chỉ đọc dữ liệu đã lưu — TUYỆT ĐỐI không tự động chạy tìm kiếm web.
+    """
+    return trend_agent.get_trending_status()
+
+
+@router.post("/trend-agent/run", status_code=status.HTTP_200_OK)
+async def trigger_trend_discovery_agent(
+    payload: TrendAgentRunRequest = TrendAgentRunRequest(),
+    admin_actor: dict = Depends(require_admin_actor),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    KÍCH HOẠT THỦ CÔNG BỞI ADMIN:
+    Chạy AI Trend Hunter Agent tìm kiếm các ngành xu hướng trên mạng Internet,
+    phân thành 3 bậc ưu tiên (TIER_1 > TIER_2 > TIER_3) và đánh dấu vào dữ liệu ngành.
+    GUARDRAIL: Chỉ Quản trị viên (ADMIN) bấm nút chạy mới thực thi tìm kiếm.
+    """
+    return await trend_agent.run_trend_discovery_agent(
+        db=db,
+        focus_query=payload.focus_query,
+        triggered_by=str(admin_actor.get("email") or "admin"),
+    )
+
+
+@router.patch("/trend-agent/majors/{major_code}", status_code=status.HTTP_200_OK)
+async def update_major_trend_tier(
+    major_code: str,
+    payload: TrendTierUpdateRequest,
+    admin_actor: dict = Depends(require_admin_actor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cho phép Admin tinh chỉnh bậc ưu tiên xu hướng cho một ngành cụ thể."""
+    return await trend_agent.update_single_major_trend_tier(
+        db=db,
+        major_code=major_code,
+        trend_tier=payload.trend_tier,
+        trend_reason=payload.trend_reason,
+    )
+
+
+@router.delete("/trend-agent/clear", status_code=status.HTTP_200_OK)
+async def clear_all_trend_markers(
+    admin_actor: dict = Depends(require_admin_actor),
+    db: AsyncSession = Depends(get_db),
+):
+    """Admin xóa toàn bộ đánh dấu xu hướng trên dữ liệu ngành."""
+    return await trend_agent.clear_trending_markers(db=db)

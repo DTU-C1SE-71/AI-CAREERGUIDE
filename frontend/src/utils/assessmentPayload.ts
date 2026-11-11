@@ -4,7 +4,10 @@ import type { AssessmentState } from "../types/assessment"
  * Chuẩn hóa dữ liệu bài làm từ AssessmentContext thành payload gửi cho Backend `/recommender/evaluate`.
  */
 export function buildEvaluateProfilePayload(
-  assessment: Pick<AssessmentState, "answers" | "cognitive" | "scores">,
+  assessment: Pick<
+    AssessmentState,
+    "answers" | "cognitive" | "scores" | "aspiration"
+  >,
   topK = 435,
 ) {
   const riasecAnswers: Record<string, number> = {}
@@ -25,12 +28,25 @@ export function buildEvaluateProfilePayload(
     }
   })
 
+  const asp = assessment.aspiration
+  const aspirationPayload = asp
+    ? {
+        dream_job: asp.dreamJob || "",
+        desired_field: asp.desiredField || "",
+        work_values: asp.workValues || [],
+        preferred_environment: asp.preferredEnvironment || "",
+        score_strategy: asp.scoreStrategy || "FLEXIBLE_PATHWAY",
+      }
+    : undefined
+
   return {
-    riasec_answers: Object.keys(riasecAnswers).length > 0 ? riasecAnswers : undefined,
+    riasec_answers:
+      Object.keys(riasecAnswers).length > 0 ? riasecAnswers : undefined,
     cognitive_answers:
       Object.keys(cognitiveAnswers).length > 0 ? cognitiveAnswers : undefined,
     grades_by_subject:
       Object.keys(gradesBySubject).length > 0 ? gradesBySubject : undefined,
+    aspiration: aspirationPayload,
     top_k: topK,
   }
 }
