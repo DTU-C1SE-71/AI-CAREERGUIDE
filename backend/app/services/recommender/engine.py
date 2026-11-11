@@ -683,12 +683,17 @@ def evaluate_admission_feasibility(
     block_subjects: Optional[List[str]] = None,
     benchmark_override: Optional[float] = None,
     min_recommended_override: Optional[float] = None,
+    has_academic_data: bool = True,
 ) -> Dict[str, Any]:
     """
-    Đánh giá toàn diện tính khả thi (TARGET / REACH) dựa trên 3 tầng ràng buộc:
+    Đánh giá toàn diện tính khả thi (TARGET / REACH / UNKNOWN) dựa trên 3 tầng ràng buộc:
     1) Không dùng điểm chéo khối xét tuyển (chỉ chấp nhận khối trong admitted_blocks).
     2) Chặn điểm liệt (<= 1.0đ) và ngưỡng tối thiểu từng môn tiên quyết theo nhóm ngành.
     3) Đối chiếu tổng điểm khối hợp lệ với ngưỡng tối thiểu (min_recommended) và điểm chuẩn tham chiếu.
+
+    QUY TẮC CHỐNG BỊA ĐIỂM: nếu học sinh chưa nhập bất kỳ điểm học lực nào
+    (has_academic_data=False) thì TUYỆT ĐỐI không suy ra điểm khối, không kết luận
+    TARGET/REACH — trả về tier UNKNOWN để giao diện hiển thị "chưa đủ dữ liệu".
     """
     bm = classify_major_academic_benchmark(
         major_code,
@@ -701,6 +706,27 @@ def evaluate_admission_feasibility(
     min_rec = bm["min_recommended"]
 
     violations: List[str] = []
+
+    if not has_academic_data:
+        return {
+            "feasibility_tier": "UNKNOWN",
+            "feasibility_label": "Chưa có điểm học lực",
+            "benchmark_cutoff": cutoff,
+            "min_recommended": min_rec,
+            "best_block_score": None,
+            "score_gap": None,
+            "constraint_passed": False,
+            "constraint_violations": [
+                "Chưa nhập điểm học lực nên hệ thống không thể xác nhận ngành này đạt hay thiếu điểm chuẩn."
+            ],
+            "admission_advice": (
+                f"Ngành này có điểm chuẩn tham chiếu ~{cutoff}đ. "
+                "Hãy nhập điểm các môn học để nhận kết luận TARGET/REACH thay vì phỏng đoán."
+            ),
+            "academic_tier": bm["tier"],
+            "academic_tier_label": bm["tier_label"],
+            "has_academic_data": False,
+        }
 
     if not has_matched_block:
         blocks_str = ", ".join(admitted_blocks) if admitted_blocks else "chuyên ngành"
@@ -719,6 +745,7 @@ def evaluate_admission_feasibility(
             "admission_advice": violations[0],
             "academic_tier": bm["tier"],
             "academic_tier_label": bm["tier_label"],
+            "has_academic_data": True,
         }
 
     block_sum = round(float(raw_block_sum if raw_block_sum is not None else 0.0), 2)
@@ -774,6 +801,7 @@ def evaluate_admission_feasibility(
         "admission_advice": advice,
         "academic_tier": bm["tier"],
         "academic_tier_label": bm["tier_label"],
+        "has_academic_data": True,
     }
 
 

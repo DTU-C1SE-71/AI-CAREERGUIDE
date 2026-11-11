@@ -48,7 +48,7 @@ CAREER_SYNONYM_CLUSTERS: List[Dict[str, Any]] = [
         "keywords": [
             "ai", "tri tue nhan tao", "machine learning", "data", "du lieu", "khoa hoc may tinh",
             "lap trinh", "phan mem", "software", "coder", "developer", "it", "cong nghe thong tin",
-            "an toan thong tin", "cyber", "hacker", "fullstack", "web", "app", "game",
+            "an ninh mang", "an toan thong tin", "cyber", "hacker", "fullstack", "web", "app", "game",
         ],
         "major_codes": ["7480107", "7480101", "7480103", "7480201", "7480104", "7480202", "7480108", "7460108"],
         "dominant_riasec": ["I", "R", "C"],
@@ -121,10 +121,72 @@ CAREER_SYNONYM_CLUSTERS: List[Dict[str, Any]] = [
         "keywords": [
             "luat", "luat su", "phap luat", "phap che", "tham phan", "kiem sat", "ngoai giao",
             "quan he quoc te", "bien phien dich", "ngon ngu anh", "ngon ngu trung", "ngon ngu han",
-            "ngon ngu nhat", "du lich", "khach san", "huong dan vien",
+            "ngon ngu nhat",
         ],
         "major_codes": ["7380101", "7380107", "7310206", "7220201", "7220204", "7810103", "7810201"],
         "dominant_riasec": ["E", "S", "A"],
+    },
+    {
+        "cluster_id": "PERFORMING_ARTS_MUSIC",
+        "label": "Thanh nhạc, Âm nhạc, Sân khấu - Điện ảnh & Nghệ thuật biểu diễn",
+        "keywords": [
+            "ca si", "am nhac", "thanh nhac", "nhac si", "nhac cong", "ban nhac", "nhac rap",
+            "dien vien", "dien xuat", "san khau", "khieu vu", "ballet", "dien anh", "truyen hinh",
+            "nghe si", "nguoi mau", "idol",
+        ],
+        "major_codes": ["7210205", "7210201", "7210207", "7210210", "7210222", "7210242", "7210302", "7210332"],
+        "dominant_riasec": ["A", "E", "S"],
+    },
+    {
+        "cluster_id": "CULINARY_HOSPITALITY_TOURISM",
+        "label": "Đầu bếp, Quản trị Nhà hàng - Khách sạn, Du lịch & Dịch vụ",
+        "keywords": [
+            "dau bep", "nau an", "nau nuong", "am thuc", "bep", "nha hang", "khach san",
+            "du lich", "huong dan vien", "le tan", "barista", "quan cafe", "resort", "tiep vien hang khong",
+        ],
+        "major_codes": ["7810202", "7810201", "7810101"],
+        "dominant_riasec": ["S", "E", "R"],
+    },
+    {
+        "cluster_id": "AVIATION_TRANSPORT",
+        "label": "Hàng không, Phi công, Khai thác Vận tải & Quản lý Hoạt động bay",
+        "keywords": [
+            "phi cong", "hang khong", "may bay", "khong luu", "quan ly bay",
+            "khai thac van tai", "phi hanh",
+        ],
+        "major_codes": ["7520120", "7840102", "7840101"],
+        "dominant_riasec": ["R", "I", "C"],
+    },
+    {
+        "cluster_id": "SPORTS_PHYSICAL_EDU",
+        "label": "Thể dục thể thao, Huấn luyện viên & Y sinh Thể thao",
+        "keywords": [
+            "the thao", "van dong vien", "huan luyen vien", "bong da", "cau long", "bong ro",
+            "boi loi", "vo thuat", "giao duc the chat", "the hinh", "gym",
+        ],
+        "major_codes": ["7810301", "7810302", "7720607", "7729001"],
+        "dominant_riasec": ["R", "S", "E"],
+    },
+    {
+        "cluster_id": "MEDIA_CREATOR",
+        "label": "Sáng tạo Nội dung số, YouTuber/TikToker & Truyền thông Mạng xã hội",
+        "keywords": [
+            "youtuber", "streamer", "tiktoker", "tiktok", "kol", "koc", "blogger",
+            "podcast", "livestream", "sang tao noi dung", "content creator", "mxh",
+        ],
+        "major_codes": ["7320104", "7320105", "7320106", "7320107"],
+        "dominant_riasec": ["A", "E", "S"],
+    },
+    {
+        "cluster_id": "SECURITY_DEFENSE",
+        "label": "Công an, Quân đội, An ninh & Trinh sát",
+        "keywords": [
+            "cong an", "canh sat", "an ninh", "bo doi", "quan doi", "quan su", "trinh sat",
+            "phong chong toi pham",
+        ],
+        "blocked_keywords": ["an ninh mang", "an toan thong tin", "cyber"],
+        "major_codes": ["7860107", "7860112", "7860114", "7860101", "7860102", "7860218"],
+        "dominant_riasec": ["R", "E", "C"],
     },
 ]
 
@@ -160,6 +222,10 @@ def _match_aspiration_to_majors(
     # 1. Kiểm tra khớp với các cụm từ đồng nghĩa nghề nghiệp
     matched_cluster_codes: List[str] = []
     for cluster in CAREER_SYNONYM_CLUSTERS:
+        # Từ khóa chặn (blocked_keywords): nếu câu nguyện vọng chứa cụm này thì KHÔNG tính cụm nghề hiện tại.
+        # Ví dụ: "an ninh mạng" phải về nhóm CNTT, không được rơi vào nhóm Công an - Quân đội.
+        if any(bk in combined_query for bk in (cluster.get("blocked_keywords") or [])):
+            continue
         for kw in cluster["keywords"]:
             # Dùng ranh giới từ cho từ khóa ngắn (như 'ai', 'it', 'pr') để tránh khớp nhầm
             if len(kw) <= 3:
@@ -238,7 +304,10 @@ def _match_aspiration_to_majors(
                     if any(d in desired_value_dims for d in top_major_dims):
                         value_bonus = 0.25
 
-            if score_strategy == "REALISTIC_SAFE":
+            # UNKNOWN = chưa có điểm học lực -> không thưởng/phạt theo tầng khả thi (tránh xếp hạng ảo)
+            if item.feasibility_tier in (None, "UNKNOWN"):
+                tier_bonus = 0.0
+            elif score_strategy == "REALISTIC_SAFE":
                 tier_bonus = 0.85 if item.feasibility_tier == "TARGET" else -0.45
             elif score_strategy == "CHALLENGE_TOP":
                 tier_bonus = 0.35 if item.feasibility_tier == "REACH" else 0.15
@@ -246,13 +315,17 @@ def _match_aspiration_to_majors(
                 tier_bonus = 0.30 if item.feasibility_tier == "TARGET" else 0.0
 
             composite_rank = relevance + (item.overall_score * 1.2) + tier_bonus + value_bonus
-            scored_candidates.append((composite_rank, item))
+            scored_candidates.append((composite_rank, relevance, item))
 
-    scored_candidates.sort(key=lambda pair: pair[0], reverse=True)
+    # Anchor-first: ngành có độ liên quan NỘI DUNG cao nhất phải đứng đầu danh sách "Ước mơ".
+    # (Trước đây xếp theo composite nên "Bác sĩ" có thể bị "Điều dưỡng" chiếm vị trí ước mơ.)
+    scored_candidates.sort(key=lambda tri: (tri[0], tri[1]), reverse=True)
+    anchor = max(scored_candidates, key=lambda tri: tri[1]) if scored_candidates else None
 
     unique_results: List[MajorRecommendationItem] = []
     seen_codes = set()
-    for _, item in scored_candidates:
+    ordered = ([anchor] if anchor else []) + scored_candidates
+    for _, _, item in ordered:
         if item.major_code not in seen_codes:
             seen_codes.add(item.major_code)
             unique_results.append(item)
@@ -289,6 +362,37 @@ def _serialize_major_brief(item: MajorRecommendationItem, role_tag: str = "DREAM
     }
 
 
+_UNSAFE_ASSERTION_PATTERN = re.compile(
+    r"(chắc chắn đỗ|chac chan do|cam kết trúng tuyển|cam ket trung tuyen|bao đậu|bao dau|"
+    r"đỗ 100%|do 100%|100% đỗ|100% do|trúng tuyển tuyệt đối|trung tuyen tuyet doi)",
+    re.IGNORECASE,
+)
+
+_NUMBER_PATTERN = re.compile(r"\d+(?:[.,]\d+)?")
+
+
+def _is_safe_llm_verdict(text: str, allowed_numbers: set) -> bool:
+    """
+    Chốt chặn chống ảo giác của LLM:
+    1) Không được chứa lời hứa tuyệt đối về việc trúng tuyển.
+    2) Không được bịa con số mới (mọi số xuất hiện phải nằm trong dữ liệu tất định đã truyền vào).
+    """
+    if not text or len(text) < 25:
+        return False
+    if _UNSAFE_ASSERTION_PATTERN.search(text):
+        return False
+    for raw in _NUMBER_PATTERN.findall(text):
+        normalized = raw.replace(",", ".")
+        try:
+            value = float(normalized)
+        except ValueError:
+            continue
+        candidates = {normalized, f"{value:g}", str(int(value)) if value == int(value) else normalized}
+        if not (candidates & allowed_numbers):
+            return False
+    return True
+
+
 async def _try_llm_aspiration_synthesis(
     sanitized_dream: str,
     alignment_status: str,
@@ -297,6 +401,7 @@ async def _try_llm_aspiration_synthesis(
     primary_dream: Optional[MajorRecommendationItem],
     substitute_major: Optional[MajorRecommendationItem],
     bridge_major: Optional[MajorRecommendationItem],
+    allowed_numbers: Optional[set] = None,
 ) -> Optional[str]:
     """
     Gọi LLM (với timeout ngắn 3.5 giây & Zero-PII) để viết lời khuyên cá nhân hóa ngắn gọn.
@@ -342,7 +447,8 @@ async def _try_llm_aspiration_synthesis(
             f"Kết quả đối chiếu ngành mơ ước: {dream_info} (Trạng thái: {alignment_status}). {sub_info} {bridge_info}\n"
             f"Hãy viết đúng 2-3 câu ngắn gọn, súc tích (tối đa 75 từ) nhận xét sự tương thích giữa ước muốn của học sinh "
             f"và kết quả bài test, đồng thời khuyên học sinh nên chọn ngành nào. Tuyệt đối không nhắc học phí hay địa lý, "
-            f"giữ nguyên các con số điểm từ dữ liệu."
+            f"CHỈ được dùng đúng các con số đã xuất hiện trong dữ liệu trên (không tự tạo số mới, không tự tính lại), "
+            f"và KHÔNG được cam kết/kết luận chắc chắn học sinh sẽ trúng tuyển."
         )
 
         async def _call() -> str:
@@ -370,7 +476,10 @@ async def _try_llm_aspiration_synthesis(
                     pass
 
         text = await asyncio.wait_for(_call(), timeout=8.0)
-        return text if len(text) >= 25 else None
+        if not _is_safe_llm_verdict(text, allowed_numbers or set()):
+            logger.debug("Aspiration Agent loại nhận xét LLM có số liệu lạ hoặc cam kết tuyệt đối.")
+            return None
+        return text
     except Exception as exc:
         logger.debug("Aspiration Agent dùng chế độ giải thích tất định (LLM skip: %s)", exc)
         return None
@@ -420,6 +529,14 @@ async def analyze_career_aspiration(
     block_sum = (best_block_stats or {}).get("raw_sum")
     best_block_str = f"{block_name} ({block_sum}đ)" if block_sum is not None else block_name
 
+    # Cờ chống bịa điểm: chỉ coi là có dữ liệu học lực khi thực sự có khối được xếp TARGET/REACH
+    # (khi chưa nhập điểm, mọi ngành đều UNKNOWN nên cờ này = False).
+    has_academic_data = (best_block_stats or {}).get("has_academic_data")
+    if has_academic_data is None:
+        has_academic_data = any(
+            m.feasibility_tier in ("TARGET", "REACH") for m in all_ranked_majors
+        )
+
     if seed_by_code is None:
         from app.services.taxonomy.service import load_seed_majors
         seed_list = load_seed_majors()
@@ -443,18 +560,34 @@ async def analyze_career_aspiration(
         top_picks = eligible_targets[:3] if eligible_targets else all_ranked_majors[:3]
         takeaways = [
             f"Thiên hướng nổi trội từ bài test: **{top_holland_str}** (dẫn đầu là nhóm **{primary_dim_label}** - {int(round(sorted_riasec[0][1] * 100))}%).",
-            f"Tổ hợp học lực mạnh nhất hiện tại: **{best_block_str}** — ưu tiên các ngành có ngưỡng điểm chuẩn vừa sức (`TARGET`).",
         ]
+        if has_academic_data:
+            takeaways.append(
+                f"Tổ hợp học lực mạnh nhất hiện tại: **{best_block_str}** — ưu tiên các ngành có ngưỡng điểm chuẩn vừa sức (`TARGET`)."
+            )
+        else:
+            takeaways.append(
+                "Chưa có điểm học lực nên Agent **chỉ xếp hạng theo thiên hướng/sở thích**, chưa kết luận ngành nào đạt điểm chuẩn. Hãy nhập điểm môn học để nhận phân tầng `TARGET`/`REACH`."
+            )
         if top_test_major:
             takeaways.append(
                 f"Đề xuất dẫn đầu từ 435 ngành TT74: **{top_test_major.major_name}** (Mã `{top_test_major.major_code}`, độ khớp **{int(round(top_test_major.overall_score * 100))}%**)."
             )
-        verdict = (
-            f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**) và tổ hợp **{best_block_str}**, "
-            f"AI Agent đề xuất bạn tập trung vào nhóm ngành **{top_test_major.category if top_test_major else 'Mũi nhọn'}** "
-            f"với ngành tiêu biểu là **{top_test_major.major_name if top_test_major else 'Công nghệ thông tin'}**. "
-            f"Bạn có thể nhập thêm nghề nghiệp mơ ước cụ thể để Agent đối chiếu chuyên sâu."
-        )
+        if has_academic_data:
+            verdict = (
+                f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**) và tổ hợp **{best_block_str}**, "
+                f"AI Agent đề xuất bạn tập trung vào nhóm ngành **{top_test_major.category if top_test_major else 'Mũi nhọn'}** "
+                f"với ngành tiêu biểu là **{top_test_major.major_name if top_test_major else 'Công nghệ thông tin'}**. "
+                f"Bạn có thể nhập thêm nghề nghiệp mơ ước cụ thể để Agent đối chiếu chuyên sâu."
+            )
+        else:
+            verdict = (
+                f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**), AI Agent đề xuất bạn khám phá nhóm ngành "
+                f"**{top_test_major.category if top_test_major else 'Mũi nhọn'}** với ngành tiêu biểu là "
+                f"**{top_test_major.major_name if top_test_major else 'Công nghệ thông tin'}**. "
+                f"Lưu ý: bạn chưa nhập điểm học lực, nên đây là gợi ý theo thiên hướng chứ chưa phải kết luận về khả năng trúng tuyển. "
+                f"Hãy nhập điểm và nghề nghiệp mơ ước để Agent đối chiếu chính xác hơn."
+            )
         return {
             "has_aspiration": bool(sanitized_dream or sanitized_field or work_values),
             "dream_job": sanitized_dream or "Khám phá theo năng lực trắc nghiệm",
@@ -473,12 +606,51 @@ async def analyze_career_aspiration(
             "agent_verdict": verdict,
             "key_takeaways": takeaways,
             "is_llm_enriched": False,
+            "has_academic_data": has_academic_data,
+            "score_basis": "ACADEMIC_AND_RIASEC" if has_academic_data else "RIASEC_ONLY",
         }
 
     primary_dream = dream_majors[0]
     primary_is_target = (primary_dream.feasibility_tier == "TARGET")
     eligible_dreams = [m for m in dream_majors if m.feasibility_tier == "TARGET"]
     blocked_dreams = [m for m in dream_majors if m.feasibility_tier == "REACH"]
+
+    # Chưa nhập điểm học lực: chỉ đối chiếu thiên hướng, KHÔNG kết luận đủ/thiếu điểm chuẩn.
+    if not has_academic_data:
+        alignment_score = int(round(primary_dream.score_riasec * 100))
+        related = dream_majors[:2]
+        takeaways = [
+            f"Nguyện vọng **\"{sanitized_dream}\"** tương ứng với **{primary_dream.major_name}** (Mã `{primary_dream.major_code}`) — độ khớp sở thích **{int(round(primary_dream.score_riasec * 100))}%** với mã Holland **{top_holland_str}**.",
+            "Bạn **chưa nhập điểm học lực**, nên Agent không thể xác nhận ngành này đạt hay thiếu điểm chuẩn (chưa có `TARGET`/`REACH`).",
+            f"Ngành này có điểm chuẩn tham chiếu khoảng **{primary_dream.benchmark_cutoff}đ** — hãy nhập điểm các môn để nhận kết luận khả thi chính xác.",
+        ]
+        verdict = (
+            f"Ước muốn trở thành **{sanitized_dream}** của bạn khớp **{int(round(primary_dream.score_riasec * 100))}%** "
+            f"với thiên hướng sở thích đo được (**{top_holland_str}**), và ngành gần nhất là "
+            f"**{primary_dream.major_name}** (Mã `{primary_dream.major_code}`). "
+            f"Tuy nhiên bạn chưa nhập điểm học lực, nên Agent dừng ở mức đối chiếu thiên hướng và không đưa ra kết luận trúng tuyển."
+        )
+        return {
+            "has_aspiration": True,
+            "dream_job": sanitized_dream,
+            "desired_field": sanitized_field,
+            "work_values": work_values,
+            "preferred_environment": preferred_env,
+            "score_strategy": score_strategy,
+            "alignment_status": "NEED_ACADEMIC_DATA",
+            "alignment_label": "Khớp Thiên hướng · Chưa đủ điểm để xác nhận khả thi",
+            "alignment_score": alignment_score,
+            "holland_code": top_holland_str,
+            "best_block_summary": best_block_str,
+            "dream_majors": [_serialize_major_brief(m, "DREAM") for m in related],
+            "recommended_substitutes": [],
+            "bridge_majors": [],
+            "agent_verdict": verdict,
+            "key_takeaways": takeaways,
+            "is_llm_enriched": False,
+            "has_academic_data": False,
+            "score_basis": "RIASEC_ONLY",
+        }
 
     def _get_major_top2_dims(item: MajorRecommendationItem) -> List[str]:
         code_str = str(item.major_code).strip()
@@ -554,7 +726,8 @@ async def analyze_career_aspiration(
     bridge_majors: List[MajorRecommendationItem] = [m for _, m in bridge_scored[:2]]
 
     # Phân loại 3 kịch bản đối chiếu giữa Nguyện vọng và Kết quả bài test
-    best_dream_item = primary_dream if not primary_is_target else eligible_dreams[0]
+    # Luôn neo vào ngành "anchor" (liên quan nội dung cao nhất tới nghề mơ ước), không hoán đổi sang ngành khác.
+    best_dream_item = primary_dream
     best_dream_top2 = _get_major_top2_dims(best_dream_item)
     dream_top1_in_student_top3 = (
         bool(best_dream_top2) and any(d in top3_dims for d in best_dream_top2[:1])
