@@ -140,6 +140,8 @@ class LLMStatusResponse(BaseModel):
     is_key_configured: bool
     masked_key: Optional[str] = None
     embedding_model: str
+    max_tokens: int = 128000
+    context_window: int = 272000
 
 class LLMConfigUpdateRequest(BaseModel):
     api_key: Optional[str] = None
