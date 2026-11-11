@@ -84,5 +84,6 @@ Thumbs.db
 
 # Agent progress & Office temporary lock files
 /PROGRESS.md
+trending_majors_registry*.json
 ~$*.docx
 ~$*.xlsx

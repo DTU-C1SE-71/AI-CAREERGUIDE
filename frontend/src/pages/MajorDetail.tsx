@@ -17,20 +17,29 @@ import { PageContainer } from "../components/layout/PageContainer"
 import { ExplanationBox } from "../components/xai/ExplanationBox"
 import { FeasibilityBadge } from "../components/xai/FeasibilityBadge"
 import { GapAnalysisCard } from "../components/xai/GapAnalysisCard"
+import { TrendBadge } from "../components/xai/TrendBadge"
 import { MOET_435_MAJORS } from "../data/moetMajors435"
 import { useAssessment } from "../hooks/useAssessment"
 import { apiRequest } from "../services/api"
 import { majors as fallbackMajors } from "../services/mockData"
 import { readStorage, writeStorage } from "../services/storage"
 import type { Major } from "../types/major"
+import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
 
 interface TaxonomyMajorDetail {
   major_code: string
-  name_vi: string
+  name_vi?: string
+  name?: string
   category?: string
   description?: string
   subject_blocks?: string[]
-  careers?: Array<{ title_vi: string; description?: string }>
+  careers?: Array<{ title_vi: string; description?: string } | string>
+  is_trending?: boolean
+  trend_tier?: "TIER_1" | "TIER_2" | "TIER_3" | null
+  trend_priority?: number
+  trend_label?: string | null
+  trend_reason?: string | null
+  trend_sources?: Array<{ title: string; url: string; source?: string }>
 }
 
 interface AIExplanationApiPayload {
@@ -127,16 +136,29 @@ export function MajorDetail() {
       (assessment.scores || []).map((s) => [s.subject, s.score]),
     )
 
-    // 1. Fetch Major Taxonomy & Recommender data
+    const evalPayload = buildEvaluateProfilePayload(assessment, 435)
+    const hasUserAssessment =
+      Boolean(evalPayload.riasec_answers) ||
+      Boolean(evalPayload.grades_by_subject)
+
+    // 1. Fetch Major Taxonomy & Deterministic 435-major Constraint Evaluation
     Promise.all([
-      apiRequest<Major[] | null>("/recommender/majors?top_k=435", null),
+      hasUserAssessment
+        ? apiRequest<{ majors?: Major[] } | null>("/recommender/evaluate", null, {
+            method: "POST",
+            body: JSON.stringify(evalPayload),
+          })
+        : apiRequest<Major[] | null>("/recommender/majors?top_k=435", null),
       apiRequest<TaxonomyMajorDetail | null>(
         `/taxonomy/majors/${codeToLookup}`,
         null,
       ),
     ])
-      .then(([recList, taxonomyInfo]) => {
+      .then(([evalOrList, taxonomyInfo]) => {
         if (!mounted) return
+        const recList = Array.isArray(evalOrList)
+          ? evalOrList
+          : evalOrList?.majors
         if (recList && Array.isArray(recList)) {
           const found = recList.find(
             (m) => m.id === id || m.code === id || m.code === codeToLookup,
@@ -151,8 +173,14 @@ export function MajorDetail() {
             ...prev,
             id: taxonomyInfo.major_code,
             code: taxonomyInfo.major_code,
-            name: taxonomyInfo.name_vi || prev.name,
+            name: taxonomyInfo.name_vi || taxonomyInfo.name || prev.name,
             category: taxonomyInfo.category || prev.category,
+            is_trending: taxonomyInfo.is_trending ?? prev.is_trending,
+            trend_tier: taxonomyInfo.trend_tier ?? prev.trend_tier,
+            trend_priority: taxonomyInfo.trend_priority ?? prev.trend_priority,
+            trend_label: taxonomyInfo.trend_label ?? prev.trend_label,
+            trend_reason: taxonomyInfo.trend_reason ?? prev.trend_reason,
+            trend_sources: taxonomyInfo.trend_sources ?? prev.trend_sources,
             university:
               prev.university ||
               `${taxonomyInfo.category || "Khối ngành chuẩn Bộ GD&ĐT"} · Khối ${(taxonomyInfo.subject_blocks || ["A00", "A01", "D01"]).join(", ")}`,
@@ -265,7 +293,9 @@ export function MajorDetail() {
 
   const careerText =
     taxDetail?.careers && taxDetail.careers.length > 0
-      ? taxDetail.careers.map((c) => c.title_vi).join(", ")
+      ? taxDetail.careers
+          .map((c) => (typeof c === "string" ? c : c.title_vi))
+          .join(", ")
       : "Kỹ sư chuyên môn, Chuyên viên phân tích, R&D, Quản lý dự án."
 
   const blockText =
@@ -315,11 +345,36 @@ export function MajorDetail() {
                     {major.category}
                   </span>
                 )}
-                <FeasibilityBadge value={major.feasibility} />
+                <FeasibilityBadge
+                  value={major.feasibility}
+                  label={major.feasibility_label}
+                />
+                <TrendBadge
+                  tier={major.trend_tier}
+                  isTrending={major.is_trending}
+                  reason={major.trend_reason}
+                />
+                {major.best_matching_block && major.best_block_score != null && (
+                  <span className="rounded-full border border-sky-200 bg-sky-50/90 px-2.5 py-0.5 text-[11px] font-extrabold text-sky-700">
+                    {major.best_matching_block}: {major.best_block_score}đ
+                    {major.benchmark_cutoff ? ` / ~${major.benchmark_cutoff}đ` : ""}
+                  </span>
+                )}
                 {loading && (
                   <Loader2 size={14} className="animate-spin text-sky-600" />
                 )}
               </div>
+              {major.constraint_violations && major.constraint_violations.length > 0 && (
+                <div className="mt-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/85 px-3.5 py-2 text-xs font-semibold text-slate-700">
+                  {major.constraint_violations.join(" · ")}
+                </div>
+              )}
+              {major.is_trending && major.trend_reason && (
+                <div className="mt-2.5 rounded-2xl border border-sky-200/85 bg-sky-50/80 px-3.5 py-2 text-xs font-semibold text-sky-900">
+                  <span className="font-extrabold">{major.trend_label || "Ngành xu hướng"}:</span>{" "}
+                  {major.trend_reason}
+                </div>
+              )}
               <h1 className="mt-3 text-3xl font-black text-slate-900 sm:text-4xl">
                 {major.name}
               </h1>

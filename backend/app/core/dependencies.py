@@ -88,3 +88,55 @@ def require_role(allowed_roles: list[UserRole]) -> Callable:
 require_admin = require_role([UserRole.ADMIN])
 require_student = require_role([UserRole.STUDENT])
 require_any_authenticated = require_role([UserRole.STUDENT, UserRole.ADMIN])
+
+
+async def require_admin_actor(
+    token: Optional[str] = Depends(oauth2_scheme_optional),
+    db: Optional[AsyncSession] = Depends(get_db),
+) -> dict:
+    """
+    Xác thực quyền Quản trị viên (ADMIN) bằng chữ ký JWT HS256 hợp lệ.
+    Hỗ trợ cả Admin lưu trong DB và Admin mặc định ký bởi identity service;
+    từ chối tuyệt đối tài khoản Student (403) hoặc chưa đăng nhập / token giả (401).
+    """
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Vui lòng đăng nhập bằng tài khoản Quản trị viên (ADMIN) để thực hiện thao tác này.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    payload = decode_access_token(token)
+    if not payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Phiên đăng nhập quản trị không hợp lệ hoặc đã hết hạn.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    role_claim = str(payload.get("role") or "").upper()
+    if role_claim != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Chỉ tài khoản Quản trị viên (ADMIN) mới được phép chạy thao tác này.",
+        )
+
+    user_id_str = payload.get("sub")
+    admin_email = "admin@careerguide.vn"
+    if db is not None and user_id_str:
+        try:
+            uid = uuid.UUID(str(user_id_str))
+            result = await db.execute(select(User).where(User.id == uid))
+            user_row = result.scalar_one_or_none()
+            if user_row is not None:
+                if not user_row.is_active or user_row.role != UserRole.ADMIN:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="Tài khoản quản trị đã bị khóa hoặc không đủ quyền.",
+                    )
+                admin_email = user_row.email
+        except HTTPException:
+            raise
+        except Exception:
+            pass
+
+    return {"user_id": user_id_str, "role": "ADMIN", "email": admin_email}

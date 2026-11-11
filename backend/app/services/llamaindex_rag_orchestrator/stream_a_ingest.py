@@ -118,6 +118,7 @@ def extract_with_ai_vision_model(pdf_bytes: bytes, max_pages: int = 2) -> List[D
     import base64
     from openai import OpenAI
     from app.core.config import settings
+    from app.core.llm_client import resolve_model_token_limits_sync
 
     if not pdf_bytes or not pdf_bytes.startswith(b"%PDF"):
         return []
@@ -147,8 +148,10 @@ def extract_with_ai_vision_model(pdf_bytes: bytes, max_pages: int = 2) -> List[D
                 "Chỉ trả về JSON thuần túy, không có văn bản giải thích."
             )
 
+            vision_model = getattr(settings, "VISION_LLM_MODEL", "qwen/qwen3-vl-plus:free")
+            token_limits = resolve_model_token_limits_sync(api_key=api_key, base_url=base_url, model=vision_model)
             resp = client.chat.completions.create(
-                model=getattr(settings, "VISION_LLM_MODEL", "qwen/qwen3-vl-plus:free"),
+                model=vision_model,
                 messages=[
                     {
                         "role": "user",
@@ -161,9 +164,9 @@ def extract_with_ai_vision_model(pdf_bytes: bytes, max_pages: int = 2) -> List[D
                         ]
                     }
                 ],
-                max_tokens=1500,
+                max_tokens=token_limits["max_output_tokens"],
                 temperature=0.1,
-                timeout=25
+                timeout=getattr(settings, "LLM_TIMEOUT_SECONDS", 120.0)
             )
 
             txt = resp.choices[0].message.content or ""

@@ -84,19 +84,263 @@ def calculate_z_score_and_cdf(
     return round(z, 4), round(cdf, 4)
 
 
+def normalize_subject_name(name: str) -> str:
+    """
+    Chuẩn hóa tên môn học THPT về dạng thống nhất để khớp chính xác giữa Frontend và Database
+    (vd: 'Vật lí' <-> 'Vật lý', 'Địa lí' <-> 'Địa lý', 'Văn' -> 'Ngữ văn').
+    """
+    raw = " ".join(str(name or "").strip().split())
+    if not raw:
+        return ""
+    low = raw.lower()
+    canonical_aliases = {
+        "toán": "Toán",
+        "toán học": "Toán",
+        "ngữ văn": "Ngữ văn",
+        "văn": "Ngữ văn",
+        "tiếng anh": "Tiếng Anh",
+        "anh": "Tiếng Anh",
+        "anh văn": "Tiếng Anh",
+        "ngoại ngữ": "Tiếng Anh",
+        "vật lý": "Vật lý",
+        "vật lí": "Vật lý",
+        "lý": "Vật lý",
+        "lí": "Vật lý",
+        "hóa học": "Hóa học",
+        "hoá học": "Hóa học",
+        "hóa": "Hóa học",
+        "hoá": "Hóa học",
+        "sinh học": "Sinh học",
+        "sinh": "Sinh học",
+        "lịch sử": "Lịch sử",
+        "sử": "Lịch sử",
+        "địa lý": "Địa lý",
+        "địa lí": "Địa lý",
+        "địa": "Địa lý",
+        "gdkt & pháp luật": "GDKT & Pháp luật",
+        "gdkt&pl": "GDKT & Pháp luật",
+        "gdcd": "GDKT & Pháp luật",
+        "giáo dục công dân": "GDKT & Pháp luật",
+        "tin học / công nghệ": "Tin học / Công nghệ",
+        "tin học": "Tin học / Công nghệ",
+        "công nghệ": "Tin học / Công nghệ",
+    }
+    return canonical_aliases.get(low, raw)
+
+
+def normalize_grades_dict(grades: Optional[Dict[str, Any]]) -> Dict[str, float]:
+    """Chuẩn hóa từ điển điểm môn học (kẹp về khoảng [0.0, 10.0] và thống nhất tên môn)."""
+    normalized: Dict[str, float] = {}
+    if not grades:
+        return normalized
+    for k, v in grades.items():
+        canon = normalize_subject_name(str(k))
+        if not canon:
+            continue
+        try:
+            score_val = float(v)
+        except (TypeError, ValueError):
+            continue
+        if math.isnan(score_val) or math.isinf(score_val):
+            continue
+        clamped = round(max(0.0, min(10.0, score_val)), 2)
+        # Nếu trùng tên gốc (vd cả 'Vật lý' và 'Vật lí'), giữ giá trị sau cùng hoặc lớn hơn
+        normalized[canon] = clamped
+    return normalized
+
+
+# Danh mục các tổ hợp môn xét tuyển chuẩn quốc gia kèm tham số chuẩn hóa Z-Score (mu, sigma)
+STANDARD_SUBJECT_BLOCKS: Dict[str, Dict[str, Any]] = {
+    "A00": {"name": "Toán, Vật lý, Hóa học", "subjects": ["Toán", "Vật lý", "Hóa học"], "national_mean": 20.85, "national_std": 3.25},
+    "A01": {"name": "Toán, Vật lý, Tiếng Anh", "subjects": ["Toán", "Vật lý", "Tiếng Anh"], "national_mean": 20.15, "national_std": 3.10},
+    "A02": {"name": "Toán, Vật lý, Sinh học", "subjects": ["Toán", "Vật lý", "Sinh học"], "national_mean": 19.50, "national_std": 3.20},
+    "B00": {"name": "Toán, Hóa học, Sinh học", "subjects": ["Toán", "Hóa học", "Sinh học"], "national_mean": 19.80, "national_std": 3.40},
+    "B08": {"name": "Toán, Sinh học, Tiếng Anh", "subjects": ["Toán", "Sinh học", "Tiếng Anh"], "national_mean": 19.40, "national_std": 3.25},
+    "C00": {"name": "Ngữ văn, Lịch sử, Địa lý", "subjects": ["Ngữ văn", "Lịch sử", "Địa lý"], "national_mean": 21.50, "national_std": 3.35},
+    "C01": {"name": "Ngữ văn, Toán, Vật lý", "subjects": ["Ngữ văn", "Toán", "Vật lý"], "national_mean": 20.30, "national_std": 3.15},
+    "C03": {"name": "Ngữ văn, Toán, Lịch sử", "subjects": ["Ngữ văn", "Toán", "Lịch sử"], "national_mean": 20.40, "national_std": 3.20},
+    "C04": {"name": "Ngữ văn, Toán, Địa lý", "subjects": ["Ngữ văn", "Toán", "Địa lý"], "national_mean": 20.60, "national_std": 3.15},
+    "D01": {"name": "Toán, Ngữ văn, Tiếng Anh", "subjects": ["Toán", "Ngữ văn", "Tiếng Anh"], "national_mean": 19.20, "national_std": 3.15},
+    "D07": {"name": "Toán, Hóa học, Tiếng Anh", "subjects": ["Toán", "Hóa học", "Tiếng Anh"], "national_mean": 20.40, "national_std": 3.20},
+    "D08": {"name": "Toán, Sinh học, Tiếng Anh", "subjects": ["Toán", "Sinh học", "Tiếng Anh"], "national_mean": 19.90, "national_std": 3.30},
+    "D10": {"name": "Toán, Địa lý, Tiếng Anh", "subjects": ["Toán", "Địa lý", "Tiếng Anh"], "national_mean": 19.60, "national_std": 3.15},
+    "D14": {"name": "Ngữ văn, Lịch sử, Tiếng Anh", "subjects": ["Ngữ văn", "Lịch sử", "Tiếng Anh"], "national_mean": 20.50, "national_std": 3.25},
+    "D15": {"name": "Ngữ văn, Địa lý, Tiếng Anh", "subjects": ["Ngữ văn", "Địa lý", "Tiếng Anh"], "national_mean": 20.45, "national_std": 3.20},
+    "H00": {"name": "Ngữ văn, Hình họa mỹ thuật, Bố cục màu", "subjects": ["Ngữ văn", "Hình họa mỹ thuật", "Bố cục màu"], "national_mean": 21.00, "national_std": 3.00},
+    "V00": {"name": "Toán, Vật lý, Vẽ mỹ thuật", "subjects": ["Toán", "Vật lý", "Vẽ mỹ thuật"], "national_mean": 20.50, "national_std": 3.00},
+    "V01": {"name": "Toán, Ngữ văn, Vẽ mỹ thuật", "subjects": ["Toán", "Ngữ văn", "Vẽ mỹ thuật"], "national_mean": 20.20, "national_std": 3.00},
+}
+
+# Các khối có môn thi năng khiếu riêng không có trong bảng 10 môn THPT thông thường
+APTITUDE_BLOCKS = {"H00", "H01", "M00", "N00", "S00", "T00", "T01", "V00", "V01"}
+
+FAILING_SUBJECT_THRESHOLD = 1.0  # Điểm liệt quốc gia (<= 1.0đ)
+MIN_UNIVERSITY_SUBJECT_FLOOR = 3.5  # Ngưỡng tối thiểu cho từng môn trong khối xét tuyển
+
+
+def compute_block_zscores_from_grades(
+    grades: Optional[Dict[str, Any]],
+    db_blocks: Optional[List[Any]] = None,
+) -> Dict[str, Any]:
+    """
+    Tính điểm tổng 3 môn, Z-Score và phân vị CDF(Z) cho mọi khối xét tuyển có đủ điểm.
+    Hỗ trợ đồng thời khối từ DB và bộ khối chuẩn quốc gia (chuẩn hóa Vật lý/Vật lí, Địa lý/Địa lí).
+    """
+    norm_grades = normalize_grades_dict(grades)
+    if not norm_grades:
+        return {}
+
+    blocks_catalog: Dict[str, Dict[str, Any]] = {
+        code: dict(info) for code, info in STANDARD_SUBJECT_BLOCKS.items()
+    }
+    if db_blocks:
+        for blk in db_blocks:
+            b_code = getattr(blk, "block_code", None) if not isinstance(blk, dict) else blk.get("block_code")
+            b_subjs = getattr(blk, "subjects", None) if not isinstance(blk, dict) else blk.get("subjects")
+            b_mean = getattr(blk, "national_mean", None) if not isinstance(blk, dict) else blk.get("national_mean")
+            b_std = getattr(blk, "national_std", None) if not isinstance(blk, dict) else blk.get("national_std")
+            if b_code and b_subjs:
+                blocks_catalog[str(b_code).upper()] = {
+                    "subjects": [normalize_subject_name(s) for s in b_subjs],
+                    "national_mean": float(b_mean or 20.0),
+                    "national_std": float(b_std or 3.1),
+                }
+
+    computed_blocks: Dict[str, Any] = {}
+    for b_code, info in blocks_catalog.items():
+        req_subjects = [normalize_subject_name(s) for s in info.get("subjects", [])]
+        if not req_subjects:
+            continue
+        if all(sub in norm_grades and norm_grades[sub] is not None for sub in req_subjects):
+            subj_scores = {sub: round(float(norm_grades[sub]), 2) for sub in req_subjects}
+            raw_sum = sum(subj_scores.values())
+            z_val, cdf_val = calculate_z_score_and_cdf(
+                raw_total=raw_sum,
+                national_mean=float(info.get("national_mean", 20.0)),
+                national_std=float(info.get("national_std", 3.1)),
+            )
+            computed_blocks[b_code] = {
+                "block_code": b_code,
+                "subjects_used": req_subjects,
+                "subject_scores": subj_scores,
+                "raw_sum": round(raw_sum, 2),
+                "national_mean": float(info.get("national_mean", 20.0)),
+                "national_std": float(info.get("national_std", 3.1)),
+                "z_score": z_val,
+                "score_academic": cdf_val,
+            }
+    return computed_blocks
+
+
+def get_major_subject_requirements(
+    major_code: str,
+    major_name: str,
+    category: str = "",
+) -> Tuple[float, Dict[str, float]]:
+    """
+    Trả về ràng buộc điểm tối thiểu cho từng môn theo nhóm ngành đặc thù (TT74/2026):
+    - Trả về (min_any_block_subject, {tên_môn_chuẩn: ngưỡng_tối_thiểu}).
+    """
+    code6 = extract_6digit_code(major_code)
+    name_low = (major_name or "").lower()
+    min_any = MIN_UNIVERSITY_SUBJECT_FLOOR
+    req_subjects: Dict[str, float] = {}
+
+    # 1. Nhóm Sức khỏe (72) - Sàn chất lượng đầu vào Y Dược
+    if code6.startswith(("7201", "7202", "7205")) or any(
+        k in name_low for k in ("y khoa", "y đa khoa", "răng hàm mặt", "răng - hàm - mặt", "dược học", "y học cổ truyền")
+    ):
+        min_any = 6.0
+        req_subjects["Sinh học"] = 6.0
+        req_subjects["Hóa học"] = 6.0
+    elif code6.startswith("72"):
+        min_any = 5.0
+
+    # 2. Nhóm Đào tạo Giáo viên / Sư phạm (1402 hoặc chứa 'sư phạm')
+    elif code6.startswith("1402") or "sư phạm" in name_low or "giáo dục tiểu học" in name_low or "giáo dục mầm non" in name_low:
+        min_any = 5.0
+        if "toán" in name_low or "tin học" in name_low:
+            req_subjects["Toán"] = 6.5
+        elif "vật lý" in name_low or "vật lí" in name_low:
+            req_subjects["Vật lý"] = 6.5
+        elif "hóa học" in name_low:
+            req_subjects["Hóa học"] = 6.5
+        elif "sinh học" in name_low or "khoa học tự nhiên" in name_low:
+            req_subjects["Sinh học"] = 6.0
+        elif "ngữ văn" in name_low:
+            req_subjects["Ngữ văn"] = 6.5
+        elif "lịch sử" in name_low:
+            req_subjects["Lịch sử"] = 6.0
+        elif "địa lý" in name_low or "địa lí" in name_low:
+            req_subjects["Địa lý"] = 6.0
+        elif "tiếng anh" in name_low or "ngoại ngữ" in name_low:
+            req_subjects["Tiếng Anh"] = 6.5
+
+    # 3. Nhóm Máy tính, Toán học & Kỹ thuật mũi nhọn
+    elif any(k in name_low for k in ("khoa học máy tính", "trí tuệ nhân tạo", "khoa học dữ liệu", "vi mạch", "bán dẫn", "toán học", "toán tin")):
+        min_any = 4.5
+        req_subjects["Toán"] = 6.5
+    elif code6.startswith(("48", "46", "5201", "5202")):
+        min_any = 4.0
+        req_subjects["Toán"] = 5.5
+
+    # 4. Nhóm Ngôn ngữ nước ngoài (2202)
+    elif code6.startswith("2202") or name_low.startswith("ngôn ngữ ") or "phiên dịch" in name_low:
+        min_any = 4.5
+        req_subjects["Tiếng Anh"] = 6.0
+
+    return min_any, req_subjects
+
+
+def evaluate_subject_constraints_for_block(
+    block_code: Optional[str],
+    subject_scores: Dict[str, float],
+    major_code: str,
+    major_name: str,
+    category: str = "",
+    block_subjects: Optional[List[str]] = None,
+) -> List[str]:
+    """
+    Kiểm tra ràng buộc điểm liệt (<= 1.0đ) và ngưỡng tối thiểu từng môn tiên quyết trên khối thi đã chọn.
+    Chỉ kiểm tra các môn thực tế nằm trong khối thi của ngành.
+    """
+    violations: List[str] = []
+    norm_scores = normalize_grades_dict(subject_scores)
+    if not norm_scores:
+        return violations
+
+    if block_subjects:
+        block_subjs = [normalize_subject_name(s) for s in block_subjects]
+    elif block_code and block_code in STANDARD_SUBJECT_BLOCKS:
+        block_subjs = STANDARD_SUBJECT_BLOCKS[block_code]["subjects"]
+    else:
+        block_subjs = list(norm_scores.keys())
+
+    min_any, req_subjects = get_major_subject_requirements(major_code, major_name, category)
+
+    # Chỉ kiểm tra điểm liệt (<= 1.0đ) và ngưỡng tối thiểu trên các môn thuộc khối xét tuyển đang xét
+    for subj in block_subjs:
+        if subj not in norm_scores:
+            continue
+        sc = float(norm_scores[subj])
+        if sc <= FAILING_SUBJECT_THRESHOLD:
+            violations.append(f"Vướng điểm liệt môn {subj} ({sc:.1f}đ ≤ 1.0đ)")
+        else:
+            req_val = max(min_any, req_subjects.get(subj, 0.0))
+            if sc < req_val:
+                violations.append(f"Môn {subj} ({sc:.1f}đ) chưa đạt ngưỡng tối thiểu {req_val:.1f}đ")
+
+    return violations
+
+
 def evaluate_academic_readiness_for_major(
     admitted_block_codes: List[str],
     student_block_results: Dict[str, Any],
     default_score: float = 0.5
 ) -> Tuple[float, Optional[str], Dict[str, Any]]:
     """
-    Pillar 2: Academic Readiness via Z-Score Normalization across admitted subject blocks.
-    Identifies the best matching block among those accepted by the major.
-    
-    Returns:
-    - best_score: float in [0.0, 1.0]
-    - best_block: block code string, e.g. "A00"
-    - breakdown: dictionary of all evaluated admitted blocks
+    Trụ cột 2: Năng lực học thuật chuẩn hóa Z-Score theo các khối xét tuyển hợp lệ của ngành.
+    Tuyệt đối chỉ xét trong danh sách admitted_block_codes, không lấy khối ngoài ngành thay thế.
     """
     if not admitted_block_codes or not student_block_results:
         return default_score, (admitted_block_codes[0] if admitted_block_codes else None), {
@@ -118,7 +362,9 @@ def evaluate_academic_readiness_for_major(
             block_evaluations[block_code] = {
                 "raw_sum": raw_sum,
                 "z_score": z_score,
-                "score_academic": score_acad
+                "score_academic": score_acad,
+                "subjects_used": b_data.get("subjects_used", []),
+                "subject_scores": b_data.get("subject_scores", {}),
             }
 
             if score_acad > best_score:
@@ -334,67 +580,91 @@ def generate_xai_top_supporting_factors(
 def classify_major_academic_benchmark(
     major_code: str,
     major_name: str,
-    category: str = ""
+    category: str = "",
+    benchmark_override: Optional[float] = None,
+    min_recommended_override: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    Evaluates dynamic admission benchmark and competition tier for any Level-IV major.
-    Handles any Circular (TT09, TT74/2026, or future circulars).
+    Đánh giá ngưỡng điểm chuẩn tham chiếu và phân tầng cạnh tranh cho từng ngành cấp IV (TT74/2026).
+    Hỗ trợ ghi đè nếu ngành có sẵn thông số điểm chuẩn riêng từ CSDL/Excel.
     """
+    if benchmark_override is not None and benchmark_override > 0:
+        cutoff = round(float(benchmark_override), 2)
+        min_rec = round(
+            float(min_recommended_override) if min_recommended_override else max(14.0, cutoff - 2.0),
+            2,
+        )
+        tier = "HIGH_COMPETITION" if cutoff >= 24.0 else ("MEDIUM_COMPETITION" if cutoff >= 19.5 else "STANDARD_COMPETITION")
+        return {
+            "tier": tier,
+            "tier_label": f"Điểm chuẩn tham chiếu (~{cutoff}đ)",
+            "benchmark_cutoff": cutoff,
+            "min_recommended": min_rec,
+            "description": "Ngưỡng điểm chuẩn cấu hình trực tiếp theo dữ liệu ngành.",
+        }
+
     name_lower = (major_name or "").lower()
     cat_lower = (category or "").lower()
 
-    # Tier 1: Extreme / High Competition (Cutoff typically >= 24.5 - 28.5)
+    # Tầng 1: Cạnh tranh cực cao (Điểm chuẩn thường >= 24.5 - 28.5đ)
     high_keywords = [
-        "y khoa", "y đa khoa", "răng hàm mặt", "răng - hàm - mặt", "dược học",
+        "y khoa", "y đa khoa", "bác sĩ", "răng hàm mặt", "răng - hàm - mặt", "dược học",
         "y học cổ truyền", "khoa học máy tính", "trí tuệ nhân tạo", "khoa học dữ liệu",
-        "vi mạch", "bán dẫn", "kinh tế quốc tế", "kinh doanh quốc tế", "luật kinh tế",
-        "logistics"
+        "vi mạch", "bán dẫn", "kinh tế quốc tế", "kinh doanh quốc tế", "tài chính quốc tế",
+        "quan hệ quốc tế", "luật kinh tế", "logistics", "chuỗi cung ứng", "truyền thông đa phương tiện",
+        "sư phạm toán", "sư phạm ngữ văn", "sư phạm tiếng anh", "sư phạm lịch sử",
+        "sư phạm địa lý", "sư phạm địa lí", "sư phạm vật lý", "sư phạm vật lí", "sư phạm hóa học"
     ]
     if any(k in name_lower for k in high_keywords):
         return {
             "tier": "HIGH_COMPETITION",
-            "tier_label": "Cạnh tranh cực cao (≥ 24.5đ)",
+            "tier_label": "Cạnh tranh cao (~25.5đ)",
             "benchmark_cutoff": 25.5,
             "min_recommended": 23.5,
             "description": "Ngành mũi nhọn với điểm chuẩn đại học thuộc top đầu cả nước."
         }
 
-    # Tier 2: Medium / Solid Competition (Cutoff typically 19.5 - 23.5)
+    # Tầng 2: Cạnh tranh khá (Điểm chuẩn thường 19.5 - 23.5đ)
     medium_keywords = [
         "kỹ thuật xét nghiệm", "kỹ thuật hình ảnh", "phục hồi chức năng", "điều dưỡng",
+        "hộ sinh", "dinh dưỡng", "y tế công cộng",
         "công nghệ thông tin", "an toàn thông tin", "kỹ thuật phần mềm", "hệ thống thông tin",
-        "tài chính", "ngân hàng", "kế toán", "kiểm toán", "marketing", "truyền thông",
-        "thương mại điện tử", "luật", "sư phạm", "ngôn ngữ anh", "ngôn ngữ trung"
+        "mạng máy tính", "kỹ thuật máy tính", "công nghệ tài chính", "fintech",
+        "tài chính", "ngân hàng", "kế toán", "kiểm toán", "quản trị kinh doanh",
+        "marketing", "thương mại điện tử", "luật", "sư phạm", "giáo dục tiểu học",
+        "giáo dục mầm non", "ngôn ngữ anh", "ngôn ngữ trung", "ngôn ngữ nhật",
+        "ngôn ngữ hàn", "tâm lý học", "kiến trúc", "thiết kế đồ họa", "quan hệ công chúng"
     ]
     if any(k in name_lower for k in medium_keywords):
         return {
             "tier": "MEDIUM_COMPETITION",
-            "tier_label": "Cạnh tranh khá (≥ 19.5đ)",
+            "tier_label": "Cạnh tranh khá (~21.0đ)",
             "benchmark_cutoff": 21.0,
             "min_recommended": 19.0,
-            "description": "Ngành học có tính cạnh tranh khá tại các trường đại học công lập uy tín."
+            "description": "Ngành học có tính cạnh tranh khá tại các trường đại học uy tín."
         }
 
-    # Tier 3: Standard / Accessible Competition (Cutoff typically 15.0 - 18.5)
+    # Tầng 3: Tiêu chuẩn / Vừa sức (Điểm chuẩn thường 15.0 - 18.5đ)
     standard_keywords = [
-        "công nghệ sinh học", "sinh học", "y tế công cộng", "dinh dưỡng", "thú y",
-        "chăn nuôi", "nông nghiệp", "cây trồng", "lâm nghiệp", "thủy sản", "môi trường",
-        "đất đai", "thực phẩm", "vật liệu", "dệt may", "văn phòng", "công tác xã hội",
-        "xã hội học", "triết học", "lịch sử", "địa lý", "thống kê", "phát triển", "quản lý nhà nước"
+        "công nghệ sinh học", "sinh học", "thú y", "chăn nuôi", "nông nghiệp",
+        "cây trồng", "lâm nghiệp", "thủy sản", "môi trường", "đất đai", "thực phẩm",
+        "vật liệu", "dệt may", "văn phòng", "công tác xã hội", "xã hội học",
+        "triết học", "lịch sử", "địa lý", "địa lí", "thống kê", "phát triển",
+        "quản lý nhà nước", "công nghệ kỹ thuật"
     ]
     if any(k in name_lower for k in standard_keywords) or any(k in cat_lower for k in standard_keywords):
         return {
             "tier": "STANDARD_COMPETITION",
-            "tier_label": "Vừa sức / Tiêu chuẩn (≥ 15.0đ)",
+            "tier_label": "Vừa sức / Tiêu chuẩn (~16.5đ)",
             "benchmark_cutoff": 16.5,
             "min_recommended": 15.0,
             "description": "Ngành đào tạo ứng dụng thực tế, điểm chuẩn phù hợp với mặt bằng phổ thông."
         }
 
-    # Default fallback
+    # Mặc định phổ thông
     return {
         "tier": "STANDARD_COMPETITION",
-        "tier_label": "Phổ thông (≥ 16.0đ)",
+        "tier_label": "Phổ thông (~18.0đ)",
         "benchmark_cutoff": 18.0,
         "min_recommended": 15.5,
         "description": "Ngành học có phổ điểm tuyển sinh đa dạng theo phân khúc trường."
@@ -402,42 +672,108 @@ def classify_major_academic_benchmark(
 
 
 def evaluate_admission_feasibility(
-    raw_block_sum: float,
+    raw_block_sum: Optional[float],
     major_code: str,
     major_name: str,
-    category: str = ""
+    category: str = "",
+    has_matched_block: bool = True,
+    best_block: Optional[str] = None,
+    raw_grades: Optional[Dict[str, float]] = None,
+    admitted_blocks: Optional[List[str]] = None,
+    block_subjects: Optional[List[str]] = None,
+    benchmark_override: Optional[float] = None,
+    min_recommended_override: Optional[float] = None,
 ) -> Dict[str, Any]:
     """
-    Computes feasibility tier (TARGET, REACH, ALTERNATIVE) and score gap.
-    Prevents unrealistic recommendations (e.g. 15 points recommending Medicine as safe).
+    Đánh giá toàn diện tính khả thi (TARGET / REACH) dựa trên 3 tầng ràng buộc:
+    1) Không dùng điểm chéo khối xét tuyển (chỉ chấp nhận khối trong admitted_blocks).
+    2) Chặn điểm liệt (<= 1.0đ) và ngưỡng tối thiểu từng môn tiên quyết theo nhóm ngành.
+    3) Đối chiếu tổng điểm khối hợp lệ với ngưỡng tối thiểu (min_recommended) và điểm chuẩn tham chiếu.
     """
-    bm = classify_major_academic_benchmark(major_code, major_name, category)
+    bm = classify_major_academic_benchmark(
+        major_code,
+        major_name,
+        category,
+        benchmark_override=benchmark_override,
+        min_recommended_override=min_recommended_override,
+    )
     cutoff = bm["benchmark_cutoff"]
     min_rec = bm["min_recommended"]
-    score_gap = round(raw_block_sum - cutoff, 1)
 
-    if raw_block_sum >= min_rec - 1.0:
-        feasibility_tier = "TARGET"
-        feasibility_label = "Vừa sức / Khả thi cao"
-        advice = f"Điểm khối thi của bạn ({raw_block_sum}đ) nằm trong vùng trúng tuyển an toàn so với điểm sàn tham chiếu (~{cutoff}đ)."
-    else:
-        feasibility_tier = "REACH"
-        gap_abs = abs(score_gap)
-        feasibility_label = f"Thử thách cao (Thiếu ~{gap_abs}đ)"
-        advice = (
-            f"Điểm khối thi ({raw_block_sum}đ) thấp hơn khoảng {gap_abs} điểm so với điểm chuẩn trung bình (~{cutoff}đ). "
-            f"Đây là nguyện vọng mơ ước, cần bứt phá điểm số lớn để cạnh tranh trúng tuyển."
+    violations: List[str] = []
+
+    if not has_matched_block:
+        blocks_str = ", ".join(admitted_blocks) if admitted_blocks else "chuyên ngành"
+        violations.append(
+            f"Chưa có điểm tổ hợp xét tuyển của ngành ({blocks_str}); không lấy điểm khối khác thay thế."
         )
+        return {
+            "feasibility_tier": "REACH",
+            "feasibility_label": "Thiếu tổ hợp xét tuyển",
+            "benchmark_cutoff": cutoff,
+            "min_recommended": min_rec,
+            "best_block_score": None,
+            "score_gap": round(-cutoff, 1),
+            "constraint_passed": False,
+            "constraint_violations": violations,
+            "admission_advice": violations[0],
+            "academic_tier": bm["tier"],
+            "academic_tier_label": bm["tier_label"],
+        }
+
+    block_sum = round(float(raw_block_sum if raw_block_sum is not None else 0.0), 2)
+    score_gap = round(block_sum - cutoff, 1)
+
+    if raw_grades:
+        subj_violations = evaluate_subject_constraints_for_block(
+            block_code=best_block,
+            subject_scores=raw_grades,
+            major_code=major_code,
+            major_name=major_name,
+            category=category,
+            block_subjects=block_subjects,
+        )
+        violations.extend(subj_violations)
+
+    if block_sum < min_rec:
+        deficit = round(min_rec - block_sum, 1)
+        violations.append(
+            f"Tổng điểm khối {best_block or ''} ({block_sum:.1f}đ) thấp hơn ngưỡng tối thiểu ({min_rec:.1f}đ)."
+        )
+
+    constraint_passed = len(violations) == 0
+
+    if not constraint_passed:
+        feasibility_tier = "REACH"
+        if any("điểm liệt" in v.lower() for v in violations):
+            feasibility_label = "Vướng điểm liệt"
+        elif any("ngưỡng tối thiểu" in v.lower() or "chuyên ngành" in v.lower() for v in violations) and block_sum >= min_rec:
+            feasibility_label = "Chưa đạt môn bắt buộc"
+        else:
+            gap_abs = abs(score_gap) if score_gap < 0 else round(min_rec - block_sum, 1)
+            feasibility_label = f"Thử thách (Thiếu ~{gap_abs}đ)"
+        advice = " ".join(violations)
+    else:
+        feasibility_tier = "TARGET"
+        if block_sum >= cutoff:
+            feasibility_label = "An toàn / Khả thi cao"
+            advice = f"Khối {best_block or 'xét tuyển'} ({block_sum:.1f}đ) vượt điểm chuẩn tham chiếu (~{cutoff}đ) và đạt mọi ngưỡng môn."
+        else:
+            feasibility_label = "Vừa sức / Khả thi"
+            advice = f"Khối {best_block or 'xét tuyển'} ({block_sum:.1f}đ) đạt ngưỡng an toàn tối thiểu (≥ {min_rec}đ, chuẩn ~{cutoff}đ)."
 
     return {
         "feasibility_tier": feasibility_tier,
         "feasibility_label": feasibility_label,
         "benchmark_cutoff": cutoff,
         "min_recommended": min_rec,
+        "best_block_score": block_sum,
         "score_gap": score_gap,
+        "constraint_passed": constraint_passed,
+        "constraint_violations": violations,
         "admission_advice": advice,
         "academic_tier": bm["tier"],
-        "academic_tier_label": bm["tier_label"]
+        "academic_tier_label": bm["tier_label"],
     }
 
 
@@ -510,47 +846,99 @@ def evaluate_target_anchored_academic_fit(
     student_block_results: Dict[str, Any],
     benchmark_cutoff: float = 18.0,
     min_recommended: float = 15.5,
-    default_score: float = 0.5
+    default_score: float = 0.5,
+    raw_grades: Optional[Dict[str, float]] = None,
+    major_code: str = "",
+    major_name: str = "",
+    category: str = "",
 ) -> Tuple[float, Optional[str], Dict[str, Any]]:
     """
-    Optimized Pillar 2 (35%):
-    Target-Anchored Academic Fit combining national Z-Score CDF with Major Cutoff Alignment.
-    Rewards majors whose admission benchmark matches the student's actual competency zone,
-    and penalizes majors whose cutoff exceeds the student's score.
+    Trụ cột 2 (35%):
+    Đánh giá năng lực học thuật theo Z-Score kết hợp ràng buộc ngưỡng điểm chuẩn & môn tiên quyết.
+    - Chỉ chấm điểm trên các khối thuộc admitted_block_codes (tuyệt đối không lấy khối ngoài ngành thay thế).
+    - Ưu tiên chọn khối thỏa mãn mọi ràng buộc môn (không điểm liệt, đủ điểm sàn môn chuyên ngành).
+    - Phạt mạnh điểm học lực nếu thiếu khối, vướng điểm liệt, thiếu môn bắt buộc hoặc dưới min_recommended.
     """
     base_acad, best_block, breakdown = evaluate_academic_readiness_for_major(
         admitted_block_codes, student_block_results, default_score=default_score
     )
-    if not best_block or not isinstance(breakdown, dict) or best_block not in breakdown:
+
+    if not student_block_results:
+        breakdown["has_matched_block"] = False
         return base_acad, best_block, breakdown
+
+    if not best_block or not isinstance(breakdown, dict) or best_block not in breakdown:
+        # Học sinh đã nhập điểm nhưng không có khối nào khớp với tổ hợp xét tuyển của ngành
+        breakdown["has_matched_block"] = False
+        breakdown["cross_block_blocked"] = True
+        breakdown["safety_tier"] = "REACH"
+        return 0.15, (admitted_block_codes[0] if admitted_block_codes else None), breakdown
+
+    # Nếu có nhiều khối khớp, ưu tiên khối KHÔNG vi phạm ràng buộc môn/điểm liệt
+    norm_raw = normalize_grades_dict(raw_grades)
+    candidate_tuples: List[Tuple[bool, float, str, List[str]]] = []
+    for b_code, b_info in breakdown.items():
+        if not isinstance(b_info, dict) or "raw_sum" not in b_info:
+            continue
+        merged_scores = dict(norm_raw)
+        if isinstance(b_info.get("subject_scores"), dict):
+            merged_scores.update(normalize_grades_dict(b_info["subject_scores"]))
+        viols = (
+            evaluate_subject_constraints_for_block(
+                block_code=b_code,
+                subject_scores=merged_scores,
+                major_code=major_code,
+                major_name=major_name,
+                category=category,
+            )
+            if merged_scores
+            else []
+        )
+        b_info["subject_violations"] = viols
+        candidate_tuples.append(
+            (len(viols) == 0, float(b_info.get("score_academic", 0.5)), b_code, viols)
+        )
+
+    if candidate_tuples:
+        candidate_tuples.sort(key=lambda t: (1 if t[0] else 0, t[1]), reverse=True)
+        _, best_acad, chosen_block, best_violations = candidate_tuples[0]
+        best_block = chosen_block
+        base_acad = round(best_acad, 4)
+    else:
+        best_violations = []
 
     raw_sum = float(breakdown[best_block].get("raw_sum", 18.0))
     gap_to_cutoff = raw_sum - benchmark_cutoff
     gap_to_min = raw_sum - min_recommended
 
-    if gap_to_min >= -0.5:
-        # Student meets or exceeds the minimum recommended threshold for this major
+    breakdown["has_matched_block"] = True
+    breakdown["subject_violations"] = best_violations
+    breakdown["gap_to_cutoff"] = round(gap_to_cutoff, 2)
+
+    if best_violations:
+        # Vi phạm điểm liệt hoặc môn tiên quyết -> hạ mạnh điểm học lực và xếp vào REACH
+        anchored_score = max(0.08, min(0.28, base_acad * 0.35))
+        breakdown["safety_tier"] = "REACH"
+        return round(anchored_score, 4), best_block, breakdown
+
+    if gap_to_min >= 0.0:
         if -1.0 <= gap_to_cutoff <= 3.5:
-            # Sweet spot: major difficulty aligns closely with student's score
             anchored_score = min(1.0, max(base_acad, 0.82 + 0.04 * max(0.0, gap_to_cutoff + 1.0)))
         elif gap_to_cutoff > 3.5:
-            # Student is well above cutoff (safe match, slight taper so high-tier majors still shine for top students)
             anchored_score = min(1.0, 0.65 * base_acad + 0.35 * 0.86)
         else:
-            anchored_score = max(0.60, base_acad)
+            anchored_score = max(0.65, base_acad)
     else:
-        # Student is below minimum threshold -> sharp reduction
         deficit = abs(gap_to_min)
         penalty_factor = max(0.10, 1.0 - (deficit / 10.0) * 0.85)
         anchored_score = max(0.05, base_acad * penalty_factor)
 
-    if raw_sum < min_recommended - 1.0:
+    if raw_sum < min_recommended:
         breakdown["safety_tier"] = "REACH"
     elif raw_sum >= benchmark_cutoff + 1.0:
         breakdown["safety_tier"] = "SAFETY"
     else:
         breakdown["safety_tier"] = "TARGET"
-    breakdown["gap_to_cutoff"] = round(gap_to_cutoff, 2)
 
     return round(anchored_score, 4), best_block, breakdown
 
@@ -782,4 +1170,83 @@ def are_majors_related_pathway(code_high: str, code_sub: str) -> int:
     if c_s[:2] in CROSS_FIELD_SUBSTITUTION_MAP.get(c_h[:2], set()):
         return 1
     return 0
+
+
+def build_radar_and_block_summary(
+    student_riasec: Dict[str, float],
+    student_zscores: Dict[str, Any],
+    raw_grades: Optional[Dict[str, float]] = None,
+) -> Tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    """
+    Tổng hợp dữ liệu Radar kép (Sở thích RIASEC vs Học lực thực tế) và khối thi mạnh nhất
+    cùng cảnh báo điểm liệt (<= 1.0đ) để trả về nhất quán cho Dashboard.
+    """
+    norm_grades = normalize_grades_dict(raw_grades)
+
+    def _avg_subjs(s1: str, s2: str, fallback: int) -> int:
+        vals = [norm_grades[s] for s in (s1, s2) if s in norm_grades]
+        if not vals:
+            return fallback
+        return max(0, min(100, round((sum(vals) / len(vals)) * 10)))
+
+    radar_meta = [
+        ("R", "Thực tế", "Vật lý", "Toán", "Vật lý & Toán", 70),
+        ("I", "Nghiên cứu", "Toán", "Hóa học", "Toán & Hóa học", 75),
+        ("A", "Nghệ thuật", "Ngữ văn", "Tiếng Anh", "Ngữ văn & Ngoại ngữ", 70),
+        ("S", "Xã hội", "Ngữ văn", "Lịch sử", "Ngữ văn & Xã hội", 72),
+        ("E", "Quản lý", "Tiếng Anh", "Toán", "Tiếng Anh & Toán", 72),
+        ("C", "Nghiệp vụ", "Toán", "Tin học / Công nghệ", "Toán & Tin học", 74),
+    ]
+
+    riasec_data: List[Dict[str, Any]] = []
+    for key, label, s1, s2, subj_label, fb in radar_meta:
+        interest_pct = max(0, min(100, round(float(student_riasec.get(key, 0.5)) * 100)))
+        acad_pct = _avg_subjs(s1, s2, interest_pct if norm_grades else fb)
+        riasec_data.append({
+            "key": key,
+            "label": label,
+            "value": interest_pct,
+            "academicValue": acad_pct,
+            "subjectMapping": subj_label,
+            "fullMark": 100,
+        })
+
+    # Xác định khối thi mạnh nhất từ toàn bộ khối học sinh có đủ điểm
+    best_block_info: Dict[str, Any] = {
+        "block": "Chưa xác định",
+        "raw_sum": None,
+        "z_score": "+0.00",
+        "percentile": "Chưa có điểm",
+        "failing_subjects": [],
+    }
+    if norm_grades:
+        best_block_info["failing_subjects"] = [
+            f"{s} ({v:.1f}đ)" for s, v in norm_grades.items() if v <= FAILING_SUBJECT_THRESHOLD
+        ]
+
+    if student_zscores:
+        best_entry = max(
+            (v for v in student_zscores.values() if isinstance(v, dict) and "raw_sum" in v),
+            key=lambda v: (float(v.get("raw_sum", 0.0)), float(v.get("z_score", 0.0))),
+            default=None,
+        )
+        if best_entry:
+            z = float(best_entry.get("z_score", 0.0))
+            pct_str = (
+                "Top 10%" if z >= 1.28 else (
+                    "Top 20%" if z >= 0.84 else (
+                        "Top 35%" if z >= 0.38 else (
+                            "Top 50%" if z >= 0.0 else "Cần bứt phá"
+                        )
+                    )
+                )
+            )
+            best_block_info.update({
+                "block": f"Khối {best_entry.get('block_code', 'A00')}",
+                "raw_sum": round(float(best_entry.get("raw_sum", 0.0)), 2),
+                "z_score": f"{'+' if z >= 0 else ''}{z:.2f}",
+                "percentile": pct_str,
+            })
+
+    return riasec_data, best_block_info
 

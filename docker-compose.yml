@@ -40,6 +40,10 @@ services:
       - XAI_API_KEY=${XAI_API_KEY:-}
       - XAI_BASE_URL=${XAI_BASE_URL:-https://api.xkiro.com/v1}
       - LLM_MODEL=${LLM_MODEL:-mistralai/mistral-large-2512}
+      - LLM_MAX_TOKENS=${LLM_MAX_TOKENS:-128000}
+      - LLM_MAX_CONTEXT_TOKENS=${LLM_MAX_CONTEXT_TOKENS:-272000}
+      - LLM_MAX_CONTEXT_CHARS=${LLM_MAX_CONTEXT_CHARS:-240000}
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-120.0}
       - VISION_LLM_MODEL=${VISION_LLM_MODEL:-mistralai/mistral-large-2512}
       - TAVILY_API_KEY=${TAVILY_API_KEY:-}
       - ENVIRONMENT=development

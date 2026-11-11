@@ -13,7 +13,12 @@ from app.schemas.assessment import (
     DiagnosticCheckInput,
     DiagnosticCheckBatchSubmit,
 )
-from app.services.recommender.engine import normal_cdf, calculate_z_score_and_cdf
+from app.services.recommender.engine import (
+    normal_cdf,
+    calculate_z_score_and_cdf,
+    compute_block_zscores_from_grades,
+    normalize_grades_dict,
+)
 from app.services.gap_roadmap_engine.gap_engine import (
     infer_mastered_skills_from_grades,
     infer_mastered_skills_from_diagnostic_tests,
@@ -113,32 +118,16 @@ async def process_and_save_grades(
     payload: GradeEntrySubmit
 ) -> StudentGrade:
     """
-    Standardizes subject grades using national Z-score normalization parameters (mu, sigma)
-    and computes cumulative percentile CDF(Z) for each national subject block.
+    Chuẩn hóa điểm các môn THPT (khớp cả 'Vật lý'/'Vật lí', 'Địa lý'/'Địa lí'),
+    tính Z-Score và phân vị CDF(Z) cho toàn bộ các khối xét tuyển quốc gia.
     """
     blocks_res = await db.execute(select(SubjectBlock))
     subject_blocks: List[SubjectBlock] = list(blocks_res.scalars().all())
 
-    computed_blocks: Dict[str, Any] = {}
-
-    for block in subject_blocks:
-        required_subjects = block.subjects
-        if all(sub in payload.grades for sub in required_subjects):
-            raw_sum = sum(float(payload.grades[sub]) for sub in required_subjects)
-            z_val, cdf_val = calculate_z_score_and_cdf(
-                raw_total=raw_sum,
-                national_mean=block.national_mean,
-                national_std=block.national_std
-            )
-            computed_blocks[block.block_code] = {
-                "block_code": block.block_code,
-                "subjects_used": required_subjects,
-                "raw_sum": round(raw_sum, 2),
-                "national_mean": block.national_mean,
-                "national_std": block.national_std,
-                "z_score": z_val,
-                "score_academic": cdf_val
-            }
+    normalized_grades = normalize_grades_dict(payload.grades)
+    computed_blocks = compute_block_zscores_from_grades(
+        normalized_grades, db_blocks=subject_blocks
+    )
 
     # Save diagnostic checks if submitted concurrently
     if payload.diagnostic_checks:
@@ -166,13 +155,13 @@ async def process_and_save_grades(
     multi_sem = payload.multi_semester or {}
 
     if student_grade:
-        student_grade.grades_by_subject = payload.grades
+        student_grade.grades_by_subject = normalized_grades
         student_grade.multi_semester_data = multi_sem
         student_grade.computed_block_zscores = computed_blocks
     else:
         student_grade = StudentGrade(
             user_id=user_id,
-            grades_by_subject=payload.grades,
+            grades_by_subject=normalized_grades,
             multi_semester_data=multi_sem,
             computed_block_zscores=computed_blocks,
             academic_year=payload.academic_year,
