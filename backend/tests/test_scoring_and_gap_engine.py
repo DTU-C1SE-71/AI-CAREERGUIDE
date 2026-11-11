@@ -1052,10 +1052,10 @@ class TestTrendHunterAgent:
             rec_before = client.post("/api/v1/recommender/evaluate", json=eval_payload).json()["majors"]
             assert all(m.get("is_trending") is False for m in rec_before[:10])
 
-            # 3) Admin bấm nút chạy Trend Hunter Agent -> trả về bản nháp (chưa ghi vào CSDL)
+            # 3) Admin bấm nút chạy Trend Hunter Agent -> trả về bản nháp 2026 (chưa ghi vào CSDL)
             run_res = client.post(
                 "/api/v1/taxonomy/trend-agent/run",
-                json={"focus_query": "ngành xu hướng AI bán dẫn logistics Việt Nam"},
+                json={"focus_query": "ngành nghề xu hướng khát nhân lực Việt Nam 2026"},
                 headers={"Authorization": f"Bearer {admin_token}"},
             )
             assert run_res.status_code == 200
@@ -1064,20 +1064,45 @@ class TestTrendHunterAgent:
             assert run_body["pending_save"] is True
             assert run_body["saved_to_db"] is False
             assert run_body["articles_scanned"] == 3
-            assert run_body["categories_covered"] >= 20
+            assert run_body["categories_covered"] == 23
             assert run_body["total_categories"] == 23
-            assert run_body["total_trending_marked"] >= 20
+            assert run_body["total_trending_marked"] >= 66
             assert run_body["tier_counts"]["TIER_1"] >= 1
             assert run_body["tier_counts"]["TIER_2"] >= 1
 
-            # Kiểm tra Lựa chọn 3 (Macro Level Trend): 100% nhóm ngành có đại diện & không đôn ép lên Bậc 1
+            # Kiểm tra >= 3 ngành/nhóm (trừ DỊCH VỤ XÃ HỘI = 2, THÚ Y = 1 trong TT74) & trần vĩ mô
             by_cat = {}
             for item in run_body["trending_majors"]:
                 by_cat.setdefault(item.get("category"), []).append(item)
-            assert len(by_cat) >= 20
-            for low_macro_cat in ("THÚ Y", "DỊCH VỤ XÃ HỘI"):
+            assert len(by_cat) == 23
+            for cat_name, items in by_cat.items():
+                if cat_name == "THÚ Y":
+                    assert len(items) == 1
+                elif cat_name == "DỊCH VỤ XÃ HỘI":
+                    assert len(items) == 2
+                else:
+                    assert len(items) >= 3, f"Nhóm {cat_name} chỉ có {len(items)} ngành (< 3)"
+            assert len(by_cat["MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN"]) >= 4
+            for low_macro_cat in ("THÚ Y", "DỊCH VỤ XÃ HỘI", "NÔNG, LÂM NGHIỆP VÀ THỦY SẢN", "PHÁP LUẬT"):
                 assert low_macro_cat in by_cat
                 assert all(it["trend_tier"] != "TIER_1" for it in by_cat[low_macro_cat])
+
+            # Kiểm tra chốt chặn kẹp trần vĩ mô nếu LLM lỡ đôn nhóm ít nhu cầu lên TIER_1
+            clamped_map = trend_agent._build_classified_trend_map(
+                [
+                    {
+                        "major_code": "7640101",
+                        "major_name": "Thú y",
+                        "category": "THÚ Y",
+                        "evidence_score": 1.2,
+                        "macro_suggested_tier": "TIER_3",
+                        "matched_topics": ["Thú y"],
+                        "sources": [],
+                    }
+                ],
+                llm_refined={"7640101": {"trend_tier": "TIER_1", "trend_reason": "Thử nghiệm vượt trần"}},
+            )
+            assert clamped_map["7640101"]["trend_tier"] == "TIER_3"
 
             # Trước khi Admin bấm "Lưu vào CSDL": Taxonomy và Recommender chưa bị tác động bởi bản nháp
             first_trend_code = run_body["trending_majors"][0]["major_code"]
