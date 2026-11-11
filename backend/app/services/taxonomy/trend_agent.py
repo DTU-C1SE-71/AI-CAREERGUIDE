@@ -6,11 +6,11 @@ NGUYÊN TẮC BẮT BUỘC:
    (`POST /api/v1/taxonomy/trend-agent/run`). Tuyệt đối không tự chạy ngầm hay tự chạy khi học sinh đánh giá.
 2. Sau khi Agent chạy xong, trả về danh sách để Admin xem/điều chỉnh và bấm nút **Lưu vào CSDL**
    (`POST /api/v1/taxonomy/trend-agent/save`). Khi đề xuất cho học sinh, hệ thống CHỈ đọc từ CSDL đã lưu.
-3. Sử dụng System Prompt chuẩn (Lựa chọn 3 - Macro Level Trend & 100% Coverage):
-   - Độ phủ 100% các nhóm ngành chuẩn Bộ GD&ĐT (mỗi nhóm đều có 1–2 ngành xu hướng đại diện).
-   - Thang đo vĩ mô toàn diện (Macro Level Trend), áp dụng đồng nhất cho mọi nhóm ngành.
+3. Sử dụng System Prompt chuẩn (Lựa chọn 3 - Macro Level Trend 2026 & 100% Coverage):
+   - Độ phủ 100% các nhóm ngành chuẩn Bộ GD&ĐT (mỗi nhóm có tối thiểu 3 ngành đại diện, trừ nhóm chỉ có 1–2 ngành trong TT74; nhóm xu hướng mạnh 2026 mở rộng linh hoạt 4–6 ngành).
+   - Thang đo vĩ mô toàn diện năm 2026 (Macro Level Trend 2026), áp dụng đồng nhất cho mọi nhóm ngành.
    - Không ép hạng nội bộ: Nếu ngành cao nhất của một nhóm chỉ đạt Cấp 2 (TIER_2) hoặc Cấp 3 (TIER_3)
-     trên toàn thị trường, giữ nguyên đúng Cấp 2 / Cấp 3, tuyệt đối không đôn lên Cấp 1.
+     trên toàn thị trường 2026, giữ nguyên đúng Cấp 2 / Cấp 3, tuyệt đối không đôn lên Cấp 1.
 """
 
 import asyncio
@@ -72,125 +72,266 @@ TREND_TIER_CONFIG: Dict[str, Dict[str, Any]] = {
 }
 
 # Ánh xạ cụm chủ đề xu hướng phủ toàn bộ 24 lĩnh vực đào tạo chuẩn MOET TT74/2026
-# Kèm `macro_cap_tier`: trần thang đo vĩ mô thực tế để tuyệt đối không ép nhóm ngành ổn định lên Cấp 1
+# Ánh xạ cụm chủ đề xu hướng 2026 phủ toàn bộ 23 nhóm lĩnh vực đào tạo chuẩn MOET TT74/2026 (tất cả mã đã kiểm chứng tồn tại trong TT74)
+# Kèm `macro_cap_tier`: trần thang đo vĩ mô 2026 thực tế để tuyệt đối không ép nhóm ngành ổn định lên Cấp 1
 TREND_TOPIC_CLUSTERS: List[Dict[str, Any]] = [
     {
-        "topic": "Trí tuệ nhân tạo & Khoa học máy tính",
-        "keywords": ["tri tue nhan tao", "artificial intelligence", "ai", "genai", "machine learning", "deep learning"],
-        "major_codes": ["7480107", "7480101"],
+        "topic": "Trí tuệ nhân tạo, Khoa học máy tính & Kỹ thuật phần mềm 2026",
+        "keywords": ["tri tue nhan tao", "artificial intelligence", "ai", "genai", "llm", "machine learning", "deep learning"],
+        "major_codes": ["7480107", "7480101", "7480103", "7480104", "7480201", "7480106"],
         "macro_cap_tier": "TIER_1",
     },
     {
-        "topic": "Vi mạch Bán dẫn & Thiết kế Chip",
+        "topic": "Vi mạch Bán dẫn, Công nghệ Bán dẫn & Thiết kế Chip 2026",
         "keywords": ["vi mach", "ban dan", "semiconductor", "chip", "ic design"],
-        "major_codes": ["7520202", "7520207", "7510301", "7510302"],
+        "major_codes": ["7520202", "7440180", "7510301", "7510302", "7520207", "7520203"],
         "macro_cap_tier": "TIER_1",
     },
     {
-        "topic": "Khoa học dữ liệu, Toán ứng dụng & Hệ thống thông tin",
-        "keywords": ["khoa hoc du lieu", "data science", "phan tich du lieu", "big data", "toan ung dung", "thong ke"],
-        "major_codes": ["7460108", "7460112", "7480104"],
+        "topic": "Khoa học dữ liệu, Tính toán & Toán ứng dụng",
+        "keywords": ["khoa hoc du lieu", "data science", "phan tich du lieu", "big data", "toan ung dung", "thong ke", "toan tin"],
+        "major_codes": ["7460108", "7460107", "7460112", "7460117", "7460201"],
         "macro_cap_tier": "TIER_1",
     },
     {
-        "topic": "An toàn thông tin & An ninh mạng",
-        "keywords": ["an toan thong tin", "an ninh mang", "cybersecurity", "bao mat", "toi pham cong nghe cao"],
-        "major_codes": ["7480202", "7480102", "7860114", "7860215"],
+        "topic": "An ninh mạng, Tác chiến không gian mạng & Mạng truyền thông",
+        "keywords": ["an toan thong tin", "an ninh mang", "cybersecurity", "bao mat", "khong gian mang", "toi pham cong nghe cao"],
+        "major_codes": ["7480208", "7480102", "7860114", "7860215", "7860233"],
         "macro_cap_tier": "TIER_1",
     },
     {
-        "topic": "Kỹ thuật phần mềm & Công nghệ thông tin",
+        "topic": "Kỹ thuật phần mềm, Điện toán đám mây & Chuyển đổi số 2026",
         "keywords": ["ky thuat phan mem", "cong nghe thong tin", "lap trinh", "chuyen doi so", "phan mem", "cloud"],
-        "major_codes": ["7480103", "7480201"],
+        "major_codes": ["7480103", "7480201", "7480104", "7480108"],
         "macro_cap_tier": "TIER_2",
     },
     {
-        "topic": "Công nghệ tài chính (Fintech) & Tài chính - Ngân hàng",
-        "keywords": ["fintech", "cong nghe tai chinh", "tai chinh so", "ngan hang so", "tai chinh", "kiem toan"],
-        "major_codes": ["7340205", "7340201", "7340302"],
+        "topic": "Công nghệ tài chính (Fintech), Kinh tế số & Tài chính - Ngân hàng",
+        "keywords": ["fintech", "cong nghe tai chinh", "tai chinh so", "ngan hang so", "tai chinh", "kiem toan", "kinh te so"],
+        "major_codes": ["7340205", "7340201", "7340302", "7340405", "7310109"],
         "macro_cap_tier": "TIER_1",
     },
     {
-        "topic": "Logistics, Chuỗi cung ứng & Kinh tế vận tải",
-        "keywords": ["logistics", "chuoi cung ung", "xuat nhap khau", "supply chain", "khai thac van tai", "hang khong"],
-        "major_codes": ["7510605", "7840101", "7840104", "7340120"],
+        "topic": "Logistics, Chuỗi cung ứng thông minh & Vận tải hàng không",
+        "keywords": ["logistics", "chuoi cung ung", "xuat nhap khau", "supply chain", "khai thac van tai", "hang khong", "kinh doanh quoc te"],
+        "major_codes": ["7340123", "7340120", "7840101", "7840102", "7840104"],
         "macro_cap_tier": "TIER_1",
     },
     {
-        "topic": "Thương mại điện tử, Digital Marketing & Truyền thông số",
-        "keywords": ["thuong mai dien tu", "e-commerce", "digital marketing", "marketing", "truyen thong da phuong tien", "bao chi"],
-        "major_codes": ["7340122", "7340115", "7320104", "7320106"],
+        "topic": "Thương mại điện tử, Digital Marketing & Truyền thông đa phương tiện",
+        "keywords": ["thuong mai dien tu", "e-commerce", "digital marketing", "marketing", "truyen thong da phuong tien", "bao chi", "quan he cong chung"],
+        "major_codes": ["7340122", "7340115", "7320104", "7320106", "7320108", "7320107"],
         "macro_cap_tier": "TIER_2",
     },
     {
-        "topic": "Tự động hóa, Robot & Công nghệ Xe điện",
+        "topic": "Robot công nghiệp, Tự động hóa, Cơ điện tử & Xe điện 2026",
         "keywords": ["tu dong hoa", "robot", "co dien tu", "xe dien", "o to", "cong nghe o to", "co khi"],
-        "major_codes": ["7510303", "7520114", "7520130", "7510205"],
+        "major_codes": ["7520107", "7520114", "7520216", "7520130", "7510303", "7510203", "7510205"],
+        "macro_cap_tier": "TIER_1",
+    },
+    {
+        "topic": "Năng lượng tái tạo, Môi trường, Vật liệu & Phát triển bền vững (ESG)",
+        "keywords": ["nang luong", "nang luong xanh", "esg", "net zero", "moi truong", "phat trien ben vung", "quan ly nang luong"],
+        "major_codes": ["7520135", "7510602", "7850104", "7850101", "7850202", "7310313"],
         "macro_cap_tier": "TIER_2",
     },
     {
-        "topic": "Năng lượng tái tạo, Môi trường & Kinh tế Xanh (ESG)",
-        "keywords": ["nang luong tai tao", "nang luong xanh", "esg", "net zero", "moi truong", "phat trien ben vung"],
-        "major_codes": ["7520212", "7850101", "7850103", "7510406"],
+        "topic": "Y khoa, Điều dưỡng, Dược phẩm & Kỹ thuật xét nghiệm - Y sinh",
+        "keywords": ["y khoa", "bac si", "dieu duong", "y te", "duoc", "xet nghiem", "ky thuat y sinh", "cham soc suc khoe"],
+        "major_codes": ["7720101", "7720301", "7720201", "7720202", "7720601", "7520212"],
         "macro_cap_tier": "TIER_2",
     },
     {
-        "topic": "Y khoa, Điều dưỡng, Dược & Công nghệ Sinh học",
-        "keywords": ["y khoa", "bac si", "dieu duong", "y te", "duoc", "cong nghe sinh hoc", "sinh hoc", "cham soc suc khoe"],
-        "major_codes": ["7720101", "7720301", "7720201", "7420201", "7720601"],
+        "topic": "Công nghệ Giáo dục, Sư phạm Công nghệ/STEM & Tâm lý học",
+        "keywords": ["cong nghe giao duc", "su pham", "giao vien", "tam ly hoc", "tham van", "quan he quoc te", "kinh te quoc te"],
+        "major_codes": ["7140103", "7140246", "7140247", "7310401", "7310106", "7310206"],
         "macro_cap_tier": "TIER_2",
     },
     {
-        "topic": "Công nghệ Giáo dục, Sư phạm STEM & Tâm lý học",
-        "keywords": ["cong nghe giao duc", "su pham", "giao vien", "tam ly hoc", "tham van", "kinh te so", "quan he quoc te"],
-        "major_codes": ["7140103", "7140209", "7310401", "7310101", "7310206"],
+        "topic": "Nghệ thuật số, Thiết kế UI/UX, Đồ họa & Kiến trúc - Xây dựng BIM",
+        "keywords": ["nghe thuat so", "thiet ke do hoa", "ui/ux", "kien truc", "xay dung", "bim", "do thi", "quy hoach"],
+        "major_codes": ["7210408", "7210403", "7210402", "7210302", "7580101", "7580302", "7580105", "7580210"],
         "macro_cap_tier": "TIER_2",
     },
     {
-        "topic": "Thiết kế Đồ họa, UI/UX & Kiến trúc - Xây dựng xanh",
-        "keywords": ["thiet ke do hoa", "ui/ux", "kien truc", "xay dung", "noi that", "bim", "do thi"],
-        "major_codes": ["7210403", "7210404", "7580101", "7580302"],
-        "macro_cap_tier": "TIER_2",
-    },
-    {
-        "topic": "Pháp luật Kinh tế, Ngoại ngữ & Công nghệ Chế biến Thực phẩm",
-        "keywords": ["luat kinh te", "luat", "phap che", "ngon ngu anh", "ngon ngu trung", "cong nghe thuc pham", "che bien"],
-        "major_codes": ["7380107", "7220201", "7220204", "7540101"],
+        "topic": "Pháp luật Kinh tế - Thương mại, Ngoại ngữ & Công nghệ Sinh học - Thực phẩm",
+        "keywords": ["luat kinh te", "luat", "phap che", "thuong mai quoc te", "ngon ngu anh", "ngon ngu trung", "ngon ngu nhat", "cong nghe sinh hoc", "thuc pham"],
+        "major_codes": ["7380107", "7380109", "7380108", "7220201", "7220204", "7220209", "7220205", "7420201", "7420202", "7540101", "7540106"],
         "macro_cap_tier": "TIER_2",
     },
     {
         "topic": "Khoa học Vật liệu, Nông nghiệp CNC, Thú y, Du lịch & Dịch vụ Xã hội",
-        "keywords": ["vat lieu", "hoa duoc", "nong nghiep", "thuy san", "thu y", "du lich", "khach san", "cong tac xa hoi"],
-        "major_codes": ["7440122", "7440112", "7620101", "7640101", "7810201", "7810101", "7760101"],
+        "keywords": ["vat lieu", "ban dan", "hoa hoc", "nong nghiep", "thuy san", "thu y", "du lich", "khach san", "cong tac xa hoi"],
+        "major_codes": ["7440122", "7440104", "7440118", "7620115", "7620101", "7620301", "7640101", "7810201", "7810101", "7810202", "7760101", "7760104"],
         "macro_cap_tier": "TIER_3",
     },
 ]
 
-# Ngành đại diện chuẩn theo từng nhóm lĩnh vực + trần thang đo Vĩ mô mặc định (không ép TIER_1)
+# Định mức linh hoạt theo sức hút xu hướng 2026:
+# (min_target, max_cap, macro_max_tier)
+# - Mọi nhóm >= 3 ngành có tối thiểu 3 ngành đại diện (DỊCH VỤ XÃ HỘI chỉ có 2 ngành, THÚ Y chỉ có 1 ngành trong TT74).
+# - Nhóm nhiều xu hướng 2026 được mở rộng tới 4–6 ngành; nhóm ít xu hướng giữ mức 3 ngành.
+CATEGORY_TREND_QUOTA: Dict[str, Tuple[int, int, str]] = {
+    "MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN": (3, 6, "TIER_1"),
+    "KỸ THUẬT": (3, 6, "TIER_1"),
+    "KINH DOANH VÀ QUẢN LÝ": (3, 6, "TIER_1"),
+    "CÔNG NGHỆ KỸ THUẬT": (3, 5, "TIER_1"),
+    "SỨC KHỎE": (3, 5, "TIER_2"),
+    "TOÁN VÀ THỐNG KÊ": (3, 4, "TIER_1"),
+    "KHOA HỌC TỰ NHIÊN": (3, 4, "TIER_1"),
+    "KHOA HỌC XÃ HỘI VÀ HÀNH VI": (3, 4, "TIER_2"),
+    "BÁO CHÍ VÀ THÔNG TIN": (3, 4, "TIER_2"),
+    "NGHỆ THUẬT": (3, 4, "TIER_2"),
+    "KIẾN TRÚC VÀ XÂY DỰNG": (3, 4, "TIER_2"),
+    "NHÂN VĂN": (3, 4, "TIER_2"),
+    "AN NINH, QUỐC PHÒNG": (3, 4, "TIER_2"),
+    "PHÁP LUẬT": (3, 3, "TIER_2"),
+    "KHOA HỌC GIÁO DỤC VÀ ĐÀO TẠO GIÁO VIÊN": (3, 3, "TIER_2"),
+    "KHOA HỌC SỰ SỐNG": (3, 3, "TIER_2"),
+    "SẢN XUẤT VÀ CHẾ BIẾN": (3, 3, "TIER_2"),
+    "DU LỊCH, KHÁCH SẠN, THỂ THAO VÀ DỊCH VÀ CÁ NHÂN": (3, 3, "TIER_2"),
+    "MÔI TRƯỜNG VÀ BẢO VỆ MÔI TRƯỜNG": (3, 3, "TIER_2"),
+    "DỊCH VỤ VẬN TẢI": (3, 3, "TIER_2"),
+    "NÔNG, LÂM NGHIỆP VÀ THỦY SẢN": (3, 3, "TIER_3"),
+    "DỊCH VỤ XÃ HỘI": (2, 2, "TIER_3"),
+    "THÚ Y": (1, 1, "TIER_3"),
+}
+
+# Ngành đại diện chuẩn theo từng nhóm lĩnh vực + trần thang đo Vĩ mô 2026 (100% mã khớp TT74)
 CATEGORY_BASELINE_REPRESENTATIVES: Dict[str, List[Tuple[str, str, str]]] = {
-    "MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN": [("7480107", "TIER_1", "Cơn khát nhân lực AI/ML và chuyển đổi số toàn cầu"), ("7480202", "TIER_1", "Nhu cầu an ninh mạng tăng mạnh trong kinh tế số")],
-    "CÔNG NGHỆ KỸ THUẬT": [("7510303", "TIER_2", "Tự động hóa sản xuất và công nghiệp 4.0 phát triển mạnh"), ("7510605", "TIER_1", "Chuỗi cung ứng và Logistics tăng trưởng đột phá")],
-    "KỸ THUẬT": [("7520202", "TIER_1", "Chiến lược phát triển công nghiệp bán dẫn & thiết kế chip"), ("7520114", "TIER_2", "Nhu cầu kỹ sư cơ điện tử và robot công nghiệp")],
-    "KINH DOANH VÀ QUẢN LÝ": [("7340205", "TIER_1", "Fintech và tài chính số mở rộng nhanh"), ("7340122", "TIER_2", "Thương mại điện tử và bán lẻ đa kênh tăng trưởng bền vững")],
-    "TOÁN VÀ THỐNG KÊ": [("7460108", "TIER_1", "Nền tảng cốt lõi cho Khoa học dữ liệu & AI"), ("7460112", "TIER_2", "Toán ứng dụng trong mô hình hóa định lượng và tài chính")],
-    "BÁO CHÍ VÀ THÔNG TIN": [("7320104", "TIER_2", "Truyền thông đa phương tiện dẫn dắt nội dung số"), ("7320106", "TIER_2", "Công nghệ truyền thông kết hợp dữ liệu khán giả")],
-    "SỨC KHỎE": [("7720101", "TIER_2", "Nhu cầu bác sĩ và nhân lực y tế chất lượng cao tăng ổn định"), ("7720301", "TIER_2", "Thiếu hụt nhân lực điều dưỡng trong nước và quốc tế")],
-    "NGHỆ THUẬT": [("7210403", "TIER_2", "Thiết kế đồ họa và UI/UX phục vụ kinh tế sáng tạo"), ("7210404", "TIER_3", "Thiết kế công nghiệp ứng dụng trong sản phẩm tiêu dùng")],
-    "KIẾN TRÚC VÀ XÂY DỰNG": [("7580101", "TIER_2", "Xu hướng kiến trúc xanh và đô thị thông minh"), ("7580302", "TIER_2", "Quản lý xây dựng số hóa mô hình BIM")],
-    "KHOA HỌC XÃ HỘI VÀ HÀNH VI": [("7310401", "TIER_2", "Nhu cầu tham vấn tâm lý học đường & tổ chức gia tăng"), ("7310101", "TIER_2", "Phân tích kinh tế số và chính sách công")],
-    "PHÁP LUẬT": [("7380107", "TIER_2", "Nhu cầu luật sư pháp chế doanh nghiệp & thương mại tăng trưởng")],
-    "KHOA HỌC GIÁO DỤC VÀ ĐÀO TẠO GIÁO VIÊN": [("7140103", "TIER_2", "Công nghệ giáo dục và chuyển đổi số giảng dạy"), ("7140209", "TIER_3", "Nhu cầu giáo viên Toán/STEM chất lượng cao ổn định")],
-    "KHOA HỌC SỰ SỐNG": [("7420201", "TIER_2", "Công nghệ sinh học ứng dụng trong y dược và nông nghiệp")],
-    "KHOA HỌC TỰ NHIÊN": [("7440122", "TIER_2", "Khoa học vật liệu phục vụ công nghệ bán dẫn & năng lượng"), ("7440112", "TIER_3", "Hóa học ứng dụng trong dược phẩm và vật liệu mới")],
-    "SẢN XUẤT VÀ CHẾ BIẾN": [("7540101", "TIER_2", "Công nghệ thực phẩm gắn với chế biến sâu xuất khẩu")],
-    "NHÂN VĂN": [("7220201", "TIER_2", "Ngôn ngữ Anh phục vụ hội nhập và dịch vụ quốc tế"), ("7220204", "TIER_2", "Ngôn ngữ Trung Quốc có nhu cầu cao từ FDI & chuỗi cung ứng")],
-    "DU LỊCH, KHÁCH SẠN, THỂ THAO VÀ DỊCH VÀ CÁ NHÂN": [("7810201", "TIER_2", "Phục hồi du lịch quốc tế thúc đẩy nhân lực quản trị khách sạn"), ("7810101", "TIER_3", "Du lịch bền vững và trải nghiệm bản địa ổn định")],
-    "MÔI TRƯỜNG VÀ BẢO VỆ MÔI TRƯỜNG": [("7850101", "TIER_2", "Chuyển dịch xanh, ESG và Net Zero tăng nhu cầu chuyên gia môi trường")],
-    "DỊCH VỤ VẬN TẢI": [("7840101", "TIER_2", "Khai thác vận tải gắn với logistics đa phương thức"), ("7840104", "TIER_3", "Kinh tế vận tải tăng trưởng theo lưu thông hàng hóa")],
-    "NÔNG, LÂM NGHIỆP VÀ THỦY SẢN": [("7620101", "TIER_3", "Nông nghiệp công nghệ cao phát triển ổn định, chuyển đổi số từng bước")],
-    "THÚ Y": [("7640101", "TIER_3", "Nhu cầu bác sĩ thú y ổn định theo chăn nuôi an toàn sinh học và dịch vụ thú cưng")],
-    "DỊCH VỤ XÃ HỘI": [("7760101", "TIER_3", "An sinh xã hội và hỗ trợ cộng đồng có nhu cầu ổn định dài hạn")],
-    "AN NINH, QUỐC PHÒNG": [("7860114", "TIER_2", "An ninh mạng và phòng chống tội phạm công nghệ cao ngày càng cấp thiết")],
+    "MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN": [
+        ("7480107", "TIER_1", "AI & GenAI bùng nổ mạnh mẽ trong mọi doanh nghiệp năm 2026"),
+        ("7480208", "TIER_1", "Thiếu hụt nghiêm trọng chuyên gia An ninh mạng và bảo mật hạ tầng số 2026"),
+        ("7480101", "TIER_1", "Nền tảng thuật toán cốt lõi cho AI, dữ liệu và hệ thống hiệu năng cao"),
+        ("7480103", "TIER_2", "Nhu cầu kỹ sư phát triển phần mềm kết hợp AI Coding Copilot duy trì cao"),
+        ("7480104", "TIER_2", "Chuyển đổi số dữ liệu doanh nghiệp và ERP/Cloud tiếp tục mở rộng"),
+        ("7480106", "TIER_2", "Thiết kế hệ thống nhúng, Edge AI và phần cứng tính toán tăng trưởng tốt"),
+    ],
+    "KỸ THUẬT": [
+        ("7520202", "TIER_1", "Đề án phát triển nhân lực ngành công nghiệp bán dẫn & thiết kế vi mạch đến 2030"),
+        ("7520107", "TIER_1", "Robot tự hành và tự động hóa nhà máy thông minh bùng nổ tại các khu công nghiệp"),
+        ("7520114", "TIER_2", "Cơ điện tử dẫn dắt dây chuyền sản xuất thông minh FDI năm 2026"),
+        ("7520216", "TIER_2", "Tự động hóa công nghiệp và điều khiển thông minh có nhu cầu tuyển dụng cao"),
+        ("7520130", "TIER_2", "Xu hướng chuyển dịch xe điện và phương tiện giao thông thông minh"),
+        ("7520135", "TIER_2", "Chuyển dịch năng lượng tái tạo, lưới điện thông minh và mục tiêu Net Zero"),
+    ],
+    "KINH DOANH VÀ QUẢN LÝ": [
+        ("7340205", "TIER_1", "Fintech, thanh toán số và ngân hàng AI tăng tốc mạnh năm 2026"),
+        ("7340123", "TIER_1", "Logistics xanh và quản trị chuỗi cung ứng toàn cầu khát nhân lực chất lượng cao"),
+        ("7340122", "TIER_2", "Thương mại điện tử và bán lẻ đa kênh tiếp tục tăng trưởng hai con số"),
+        ("7340115", "TIER_2", "Digital Marketing ứng dụng dữ liệu lớn và AI cá nhân hóa khách hàng"),
+        ("7340405", "TIER_2", "Số hóa quy trình quản trị và phân tích hệ thống thông tin doanh nghiệp"),
+        ("7340120", "TIER_2", "Mở rộng xuất nhập khẩu và dịch chuyển chuỗi cung ứng vào Việt Nam"),
+    ],
+    "CÔNG NGHỆ KỸ THUẬT": [
+        ("7510303", "TIER_2", "Tự động hóa sản xuất và điều khiển thông minh trong nhà máy 4.0"),
+        ("7510301", "TIER_1", "Nhu cầu kỹ sư điện - điện tử phục vụ chuỗi cung ứng sản xuất chip & điện tử"),
+        ("7510302", "TIER_2", "Hạ tầng viễn thông 5G, IoT công nghiệp và đóng gói kiểm thử vi mạch"),
+        ("7510203", "TIER_2", "Vận hành và bảo trì dây chuyền cơ điện tử tại các tổ hợp sản xuất FDI"),
+        ("7510205", "TIER_2", "Công nghệ ô tô thế hệ mới, xe hybrid và xe điện tại Việt Nam"),
+    ],
+    "SỨC KHỎE": [
+        ("7720101", "TIER_2", "Nhu cầu bác sĩ đa khoa chất lượng cao tăng bền vững theo già hóa dân số"),
+        ("7720301", "TIER_2", "Thiếu hụt nhân lực điều dưỡng chuẩn quốc tế cả trong nước và xuất khẩu"),
+        ("7720201", "TIER_2", "Phát triển công nghiệp dược phẩm và chăm sóc sức khỏe chủ động"),
+        ("7720202", "TIER_2", "Chuyển dịch sản xuất thuốc sinh học và dược phẩm công nghệ cao"),
+        ("7720601", "TIER_2", "Nhu cầu xét nghiệm y học chính xác và chẩn đoán sớm gia tăng"),
+    ],
+    "TOÁN VÀ THỐNG KÊ": [
+        ("7460108", "TIER_1", "Khoa học dữ liệu là ngành cốt lõi dẫn dắt chuyển đổi số và AI năm 2026"),
+        ("7460107", "TIER_2", "Khoa học tính toán mô phỏng kỹ thuật, tài chính định lượng và mô hình AI"),
+        ("7460112", "TIER_2", "Toán ứng dụng trong tối ưu hóa vận hành, chuỗi cung ứng và định lượng rủi ro"),
+        ("7460117", "TIER_2", "Toán tin đáp ứng nhu cầu phát triển phần mềm và phân tích dữ liệu lớn"),
+    ],
+    "KHOA HỌC TỰ NHIÊN": [
+        ("7440180", "TIER_1", "Công nghệ bán dẫn là trọng tâm đào tạo chiến lược quốc gia giai đoạn 2025–2030"),
+        ("7440122", "TIER_2", "Khoa học vật liệu mới phục vụ chip bán dẫn, pin xe điện và năng lượng sạch"),
+        ("7440104", "TIER_2", "Vật lý chất rắn nền tảng trực tiếp cho công nghệ bán dẫn và linh kiện quang điện tử"),
+        ("7440118", "TIER_3", "Hóa phân tích phục vụ kiểm định môi trường, dược phẩm và an toàn thực phẩm"),
+    ],
+    "KHOA HỌC XÃ HỘI VÀ HÀNH VI": [
+        ("7310109", "TIER_2", "Kinh tế số dẫn dắt chuyển đổi mô hình kinh doanh và thương mại điện tử 2026"),
+        ("7310401", "TIER_2", "Nhu cầu tham vấn tâm lý học đường, doanh nghiệp và sức khỏe tinh thần tăng mạnh"),
+        ("7310313", "TIER_2", "Nhân lực hoạch định phát triển bền vững và báo cáo ESG ngày càng thiết yếu"),
+        ("7310106", "TIER_2", "Kinh tế quốc tế phục vụ hội nhập FTA và dòng vốn đầu tư FDI vào Việt Nam"),
+    ],
+    "BÁO CHÍ VÀ THÔNG TIN": [
+        ("7320104", "TIER_2", "Truyền thông đa phương tiện bùng nổ cùng hệ sinh thái nội dung số 2026"),
+        ("7320106", "TIER_2", "Công nghệ truyền thông kết hợp AI sản xuất nội dung và phân tích khán giả"),
+        ("7320108", "TIER_2", "Quan hệ công chúng và quản trị khủng hoảng truyền thông thương hiệu doanh nghiệp"),
+        ("7320107", "TIER_3", "Truyền thông quốc tế phục vụ doanh nghiệp mở rộng thị trường toàn cầu"),
+    ],
+    "NGHỆ THUẬT": [
+        ("7210408", "TIER_2", "Nghệ thuật số phát triển nhanh cùng game, hoạt hình 3D và thực tế ảo"),
+        ("7210403", "TIER_2", "Thiết kế đồ họa và UI/UX cho sản phẩm số và thương hiệu doanh nghiệp"),
+        ("7210402", "TIER_3", "Thiết kế công nghiệp tạo giá trị gia tăng cho sản phẩm sản xuất trong nước"),
+        ("7210302", "TIER_3", "Công nghệ điện ảnh - truyền hình hậu kỳ kỹ thuật số đáp ứng thị trường giải trí"),
+    ],
+    "KIẾN TRÚC VÀ XÂY DỰNG": [
+        ("7580101", "TIER_2", "Kiến trúc xanh, công trình tiết kiệm năng lượng và không gian đô thị thông minh"),
+        ("7580302", "TIER_2", "Quản lý xây dựng áp dụng bắt buộc mô hình BIM trong các dự án đầu tư lớn"),
+        ("7580105", "TIER_2", "Quy hoạch vùng và đô thị thích ứng biến đổi khí hậu"),
+        ("7580210", "TIER_2", "Đẩy mạnh đầu tư công hạ tầng giao thông, sân bay và đô thị trọng điểm 2026"),
+    ],
+    "NHÂN VĂN": [
+        ("7220201", "TIER_2", "Ngôn ngữ Anh gắn với dịch vụ toàn cầu, công nghệ và kinh tế tri thức"),
+        ("7220204", "TIER_2", "Ngôn ngữ Trung Quốc có nhu cầu tuyển dụng rất lớn tại các cụm FDI công nghiệp"),
+        ("7220209", "TIER_2", "Ngôn ngữ Nhật phục vụ gia công phần mềm, kỹ thuật và thị trường lao động Nhật Bản"),
+        ("7220205", "TIER_3", "Ngôn ngữ Đức mở rộng cơ hội việc làm kỹ thuật và điều dưỡng tại châu Âu"),
+    ],
+    "AN NINH, QUỐC PHÒNG": [
+        ("7860114", "TIER_2", "An ninh mạng và phòng chống tội phạm công nghệ cao là mặt trận ưu tiên 2026"),
+        ("7860215", "TIER_2", "Tác chiến không gian mạng giữ vai trò trọng yếu trong bảo vệ hạ tầng số quốc gia"),
+        ("7860233", "TIER_2", "Tác chiến điện tử hiện đại gắn liền công nghệ radar, viễn thông và UAV"),
+        ("7860118", "TIER_3", "An ninh phi truyền thống ứng phó an ninh năng lượng, môi trường và dữ liệu"),
+    ],
+    "PHÁP LUẬT": [
+        ("7380107", "TIER_2", "Luật kinh tế và pháp chế doanh nghiệp tăng nhu cầu theo quy định dữ liệu/thuế mới 2026"),
+        ("7380109", "TIER_2", "Luật thương mại quốc tế hỗ trợ doanh nghiệp xuất khẩu và phòng vệ thương mại"),
+        ("7380108", "TIER_3", "Luật quốc tế đáp ứng giao dịch xuyên biên giới và hợp tác đa phương"),
+    ],
+    "KHOA HỌC GIÁO DỤC VÀ ĐÀO TẠO GIÁO VIÊN": [
+        ("7140103", "TIER_2", "Công nghệ giáo dục (EdTech) và chuyển đổi số bài giảng AI trong trường học 2026"),
+        ("7140246", "TIER_2", "Sư phạm công nghệ đáp ứng chương trình giáo dục STEM và phổ thông mới"),
+        ("7140247", "TIER_3", "Nhu cầu giáo viên Khoa học tự nhiên giảng dạy tích hợp ổn định tại các địa phương"),
+    ],
+    "KHOA HỌC SỰ SỐNG": [
+        ("7420201", "TIER_2", "Công nghệ sinh học ứng dụng trong y sinh, dược phẩm và giống cây trồng CNC"),
+        ("7420202", "TIER_2", "Kỹ thuật sinh học phục vụ công nghiệp chế biến sinh học và môi trường"),
+        ("7420107", "TIER_3", "Vi sinh vật học ứng dụng kiểm soát an toàn thực phẩm và nông nghiệp sinh học"),
+    ],
+    "SẢN XUẤT VÀ CHẾ BIẾN": [
+        ("7540101", "TIER_2", "Công nghệ thực phẩm hướng tới chế biến sâu nông thủy sản xuất khẩu"),
+        ("7540106", "TIER_2", "Đảm bảo chất lượng và an toàn thực phẩm đáp ứng tiêu chuẩn khắt khe thị trường EU/Mỹ"),
+        ("7540203", "TIER_3", "Vật liệu dệt may xanh, tái chế đáp ứng chuẩn xuất khẩu dệt may 2026"),
+    ],
+    "DU LỊCH, KHÁCH SẠN, THỂ THAO VÀ DỊCH VÀ CÁ NHÂN": [
+        ("7810201", "TIER_2", "Quản trị khách sạn chuẩn quốc tế phục hồi mạnh theo làn sóng khách du lịch 2026"),
+        ("7810101", "TIER_3", "Du lịch bền vững, du lịch số và trải nghiệm văn hóa bản địa ổn định"),
+        ("7810202", "TIER_3", "Quản trị nhà hàng và dịch vụ ăn uống tăng trưởng theo tiêu dùng đô thị"),
+    ],
+    "MÔI TRƯỜNG VÀ BẢO VỆ MÔI TRƯỜNG": [
+        ("7850104", "TIER_2", "Chuyên gia ESG, kiểm kê khí nhà kính và phát triển bền vững rất được săn đón 2026"),
+        ("7850101", "TIER_2", "Quản lý tài nguyên và đánh giá tác động môi trường các khu công nghiệp xanh"),
+        ("7850202", "TIER_3", "An toàn, vệ sinh lao động theo chuẩn tuân thủ nhà máy xuất khẩu"),
+    ],
+    "DỊCH VỤ VẬN TẢI": [
+        ("7840101", "TIER_2", "Khai thác vận tải đa phương thức gắn liền chuỗi logistics và cảng biển 2026"),
+        ("7840102", "TIER_2", "Quản lý hoạt động bay phục vụ mở rộng mạng đường bay và hạ tầng hàng không"),
+        ("7840104", "TIER_3", "Kinh tế vận tải tối ưu chi phí lưu thông hàng hóa nội địa và quốc tế"),
+    ],
+    "NÔNG, LÂM NGHIỆP VÀ THỦY SẢN": [
+        ("7620115", "TIER_3", "Kinh tế nông nghiệp số và chuỗi giá trị nông sản xuất khẩu phát triển ổn định"),
+        ("7620101", "TIER_3", "Nông nghiệp công nghệ cao và nông nghiệp tuần hoàn chuyển dịch từng bước"),
+        ("7620301", "TIER_3", "Nuôi trồng thủy sản bền vững theo tiêu chuẩn truy xuất nguồn gốc"),
+    ],
+    "DỊCH VỤ XÃ HỘI": [
+        ("7760101", "TIER_3", "Công tác xã hội hỗ trợ an sinh, trường học và cộng đồng giữ nhu cầu ổn định"),
+        ("7760104", "TIER_3", "Dân số và phát triển phục vụ chính sách an sinh trong bối cảnh già hóa dân số"),
+    ],
+    "THÚ Y": [
+        ("7640101", "TIER_3", "Thú y duy trì nhu cầu ổn định gắn với chăn nuôi an toàn sinh học và dịch vụ thú cưng"),
+    ],
 }
 
 
@@ -390,18 +531,20 @@ async def _fetch_rss_articles(client: httpx.AsyncClient, url: str, engine_name: 
 
 
 async def search_trending_majors_online(
-    focus_query: str = "ngành nghề xu hướng khát nhân lực Việt Nam",
+    focus_query: str = "ngành nghề xu hướng khát nhân lực Việt Nam 2026",
 ) -> List[Dict[str, Any]]:
     """
-    Thực thi tìm kiếm trực tuyến phủ rộng toàn thị trường Việt Nam.
+    Thực thi tìm kiếm trực tuyến phủ rộng toàn thị trường Việt Nam năm 2026.
     Kết hợp Tavily API (nếu có key thực tế), Google News RSS và Bing News RSS.
     """
-    base_q = focus_query.strip() or "ngành nghề xu hướng khát nhân lực Việt Nam"
+    raw_q = focus_query.strip() or "ngành nghề xu hướng khát nhân lực Việt Nam 2026"
+    base_q = raw_q if ("2026" in raw_q or "2025" in raw_q) else f"{raw_q} 2026"
     queries = [
         base_q,
-        f"{base_q} trí tuệ nhân tạo vi mạch bán dẫn logistics fintech",
-        "ngành học dễ xin việc thiếu nhân lực y tế luật kiến trúc du lịch Việt Nam 2026",
-        "xu hướng nghề nghiệp chuyển đổi xanh nông nghiệp công nghệ cao ngôn ngữ Việt Nam",
+        f"{base_q} trí tuệ nhân tạo vi mạch bán dẫn an ninh mạng fintech logistics",
+        "ngành nghề khát nhân lực Việt Nam 2026 công nghệ kỹ thuật robot tự động hóa khoa học dữ liệu",
+        "xu hướng tuyển dụng Việt Nam 2026 y tế điều dưỡng dược luật kinh tế giáo dục STEM thiết kế số",
+        "thị trường lao động 2026 chuyển đổi xanh ESG năng lượng tái tạo nông nghiệp công nghệ cao du lịch ngoại ngữ",
     ]
 
     all_articles: List[Dict[str, Any]] = []
@@ -448,7 +591,7 @@ async def search_trending_majors_online(
         seen_titles.add(norm_t)
         deduped.append(art)
 
-    return deduped[:45]
+    return deduped[:55]
 
 
 def _extract_candidates_from_articles(
@@ -565,53 +708,74 @@ def _extract_candidates_from_articles(
                 ],
             }
 
-    # Đảm bảo 100% các nhóm ngành đều có ít nhất 1–2 ngành đại diện
-    covered_cats = {c["category"] for c in candidates_map.values()}
+    # Đảm bảo 100% các nhóm ngành đều đạt định mức tối thiểu (>= 3 ngành/nhóm, hoặc đủ 100% với nhóm chỉ có 1–2 ngành)
+    # Nhóm ít xu hướng giữ mức tối thiểu 3 ngành; nhóm xu hướng mạnh 2026 mở rộng linh hoạt lên 4–6 ngành.
+    majors_by_cat: Dict[str, List[Dict[str, Any]]] = {}
+    for m in catalog_majors:
+        c_cat = str(m.get("category") or "Khác").strip()
+        if c_cat and c_cat != "Khác":
+            majors_by_cat.setdefault(c_cat, []).append(m)
+
     fallback_article_refs = [
         {"title": a["title"], "url": a["url"], "source": a.get("source", "Web Search")}
         for a in articles[:2]
     ]
 
     for cat in all_categories:
-        cat_existing = [c for c in candidates_map.values() if c["category"] == cat]
-        if cat_existing:
-            continue
+        cat_majors = majors_by_cat.get(cat, [])
+        q_min, q_cap, _ = CATEGORY_TREND_QUOTA.get(cat, (3, 3, "TIER_3"))
+        min_needed = min(q_min, len(cat_majors))
+
+        cat_existing_codes = {c["major_code"] for c in candidates_map.values() if c["category"] == cat}
+        # Nếu nhóm chưa có tín hiệu mạnh, giữ mức tối thiểu (min_needed = 3);
+        # nếu nhóm đã có tín hiệu từ tin tức nhưng chưa đủ 3 ngành, bổ sung thêm từ danh sách baseline đến đủ min_needed.
+        target_fill = min_needed
         baselines = CATEGORY_BASELINE_REPRESENTATIVES.get(cat) or []
-        if baselines:
-            for base_code, macro_tier, reason_hint in baselines[:2]:
-                m_obj = None
-                for v in _code_variants(base_code):
-                    if v in major_by_code:
-                        m_obj = major_by_code[v]
-                        break
-                if m_obj:
-                    actual_code = str(m_obj["major_code"]).strip()
-                    candidates_map[actual_code] = {
-                        "major_code": actual_code,
-                        "major_name": m_obj["name"],
-                        "category": cat,
-                        "evidence_score": 3.0 if macro_tier == "TIER_1" else (2.0 if macro_tier == "TIER_2" else 1.2),
-                        "macro_suggested_tier": macro_tier,
-                        "matched_topics": [reason_hint],
-                        "sources": fallback_article_refs,
-                    }
-        else:
-            # Nếu nhóm ngành mới từ Excel Thông tư mới chưa có trong bảng tham chiếu
-            cat_majors = [m for m in catalog_majors if str(m.get("category") or "").strip() == cat]
-            if cat_majors:
-                rep = cat_majors[0]
-                actual_code = str(rep["major_code"]).strip()
+        for base_code, macro_tier, reason_hint in baselines:
+            if len(cat_existing_codes) >= target_fill:
+                break
+            m_obj = None
+            for v in _code_variants(base_code):
+                if v in major_by_code:
+                    m_obj = major_by_code[v]
+                    break
+            if not m_obj:
+                continue
+            actual_code = str(m_obj["major_code"]).strip()
+            if actual_code in candidates_map:
+                cat_existing_codes.add(actual_code)
+                continue
+            candidates_map[actual_code] = {
+                "major_code": actual_code,
+                "major_name": m_obj["name"],
+                "category": cat,
+                "evidence_score": 3.0 if macro_tier == "TIER_1" else (2.0 if macro_tier == "TIER_2" else 1.2),
+                "macro_suggested_tier": macro_tier,
+                "matched_topics": [reason_hint],
+                "sources": fallback_article_refs,
+            }
+            cat_existing_codes.add(actual_code)
+
+        # Trường hợp nhóm mới từ Thông tư/Excel có thêm ngành nhưng chưa đủ định mức tối thiểu
+        if len(cat_existing_codes) < target_fill:
+            for rep in cat_majors:
+                if len(cat_existing_codes) >= target_fill:
+                    break
+                actual_code = str(rep.get("major_code") or "").strip()
+                if not actual_code or actual_code in candidates_map:
+                    continue
                 candidates_map[actual_code] = {
                     "major_code": actual_code,
-                    "major_name": rep["name"],
+                    "major_name": rep.get("name") or actual_code,
                     "category": cat,
                     "evidence_score": 1.2,
                     "macro_suggested_tier": "TIER_3",
-                    "matched_topics": [f"Đại diện nhóm {cat} trên mặt bằng nhu cầu ổn định"],
+                    "matched_topics": [f"Đại diện nhóm {cat} trên mặt bằng nhu cầu năm 2026"],
                     "sources": fallback_article_refs,
                 }
+                cat_existing_codes.add(actual_code)
 
-    # Giữ tối đa 2-3 đại diện tinh gọn mỗi nhóm ngành để bảng kết quả cân đối & phủ 100% nhóm
+    # Giữ số lượng linh hoạt theo từng nhóm: ít xu hướng = 3 ngành, nhiều xu hướng 2026 = tối đa 4–6 ngành
     by_cat_grouped: Dict[str, List[Dict[str, Any]]] = {}
     for cand in candidates_map.values():
         by_cat_grouped.setdefault(cand["category"], []).append(cand)
@@ -619,7 +783,7 @@ def _extract_candidates_from_articles(
     balanced_candidates: List[Dict[str, Any]] = []
     for cat, items in by_cat_grouped.items():
         items.sort(key=lambda x: x["evidence_score"], reverse=True)
-        cap_count = 3 if cat in ("MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN", "KỸ THUẬT", "KINH DOANH VÀ QUẢN LÝ") else 2
+        _, cap_count, _ = CATEGORY_TREND_QUOTA.get(cat, (3, 3, "TIER_3"))
         balanced_candidates.extend(items[:cap_count])
 
     balanced_candidates.sort(key=lambda c: c["evidence_score"], reverse=True)
@@ -633,10 +797,11 @@ async def _refine_tiers_with_llm(
     all_categories: List[str],
 ) -> Optional[Dict[str, Dict[str, Any]]]:
     """
-    Áp dụng System Prompt Lựa chọn 3 (Macro Level Trend & 100% Coverage):
-    - Đảm bảo 100% các nhóm ngành đều xuất hiện với 1–2 ngành đại diện xu hướng.
-    - Chấm hạng theo thang đo vĩ mô toàn thị trường (TIER_1 > TIER_2 > TIER_3),
-      KHÔNG xếp hạng tương đối cục bộ (nếu nhóm ngành X cao nhất chỉ đạt TIER_2 hoặc TIER_3 thì giữ nguyên).
+    Áp dụng System Prompt Lựa chọn 3 nâng cấp cho thị trường 2026 (Chi tiết, chống sai sót):
+    - Đảm bảo 100% nhóm ngành đều góp mặt với >= 3 ngành đại diện (trừ nhóm chỉ có 1-2 ngành trong TT74).
+    - Nhóm ít xu hướng giữ ở mức 3 ngành; nhóm xu hướng cao 2026 mở rộng 4–6 ngành.
+    - Chấm hạng theo thang đo vĩ mô toàn thị trường 2026 (TIER_1 > TIER_2 > TIER_3),
+      KHÔNG xếp hạng tương đối cục bộ, KHÔNG bịa mã ngành mới, KHÔNG bỏ sót mã nào.
     """
     if (
         not candidates
@@ -659,33 +824,44 @@ async def _refine_tiers_with_llm(
 
         headlines = "\n".join(
             f"- [{a.get('source', 'Báo')}] {a['title']}" + (f" ({a['snippet'][:220]})" if a.get("snippet") else "")
-            for a in articles[:40]
+            for a in articles[:45]
         )
         cand_lines = "\n".join(
-            f"- Nhóm: {c['category']} | Mã: {c['major_code']} | Ngành: {c['major_name']} | Gợi ý vĩ mô: {c['macro_suggested_tier']} | Tín hiệu: {', '.join(c['matched_topics'][:2])}"
+            f"- Nhóm: {c['category']} | Mã: {c['major_code']} | Ngành: {c['major_name']} | Gợi ý vĩ mô 2026: {c['macro_suggested_tier']} | Tín hiệu: {', '.join(c['matched_topics'][:2])}"
             for c in candidates
         )
+        valid_codes = [c["major_code"] for c in candidates]
 
         system_prompt = (
-            "Mục tiêu: Cập nhật bảng phân loại ngành nghề đón đầu xu hướng từ kết quả tìm kiếm thị trường.\n"
-            "Yêu cầu & Ràng buộc:\n"
-            "1. Độ phủ dữ liệu (Coverage): 100% các nhóm ngành trong danh sách ứng viên phải xuất hiện trong kết quả đầu ra (ít nhất 1–2 ngành/nhóm).\n"
-            "2. Thang đo (Benchmark): Sử dụng thang đo xu hướng vĩ mô toàn diện (Macro Level Trend), áp dụng đồng nhất cho tất cả các nhóm ngành.\n"
-            "3. Quy tắc phân hạng (Grading Rule):\n"
-            "   - Cấp 1 (`TIER_1`): Chỉ các ngành bùng nổ/khát nhân lực đột phá toàn thị trường (AI, Bán dẫn/Vi mạch, Dữ liệu, An toàn thông tin, Fintech, Logistics chuỗi cung ứng...).\n"
-            "   - Cấp 2 (`TIER_2`): Tăng trưởng mạnh theo chuyển đổi số/xanh hóa/y tế/pháp chế/du lịch quốc tế.\n"
-            "   - Cấp 3 (`TIER_3`): Nhu cầu ổn định dài hạn, phục vụ thiết yếu (Nông nghiệp, Thú y, Công tác xã hội, Vận tải cơ bản...).\n"
-            "   - Không áp dụng xếp hạng tương đối nội bộ (relative ranking per group). Nếu nhóm ngành X có ngành cao nhất chỉ đạt Cấp 2 hoặc Cấp 3 trên thị trường chung, BẮT BUỘC giữ nguyên TIER_2 hoặc TIER_3, tuyệt đối KHÔNG chuẩn hóa lên TIER_1.\n"
-            "4. Định dạng đầu ra: Trả về DUY NHẤT JSON array chứa các object có đủ 4 khóa: "
-            '`{"category": "...", "major_code": "...", "trend_tier": "TIER_1"|"TIER_2"|"TIER_3", "trend_reason": "1 câu tiếng Việt ngắn gọn nêu rõ vị thế xu hướng vĩ mô"}`. '
-            "Tuyệt đối không nhắc học phí hay vị trí địa lý."
+            "Vai trò: Chuyên gia Phân tích Thị trường Lao động Việt Nam & Toàn cầu năm 2026 (tầm nhìn 2026–2030).\n"
+            "Mục tiêu: Cập nhật bảng phân loại các ngành đại học đón đầu xu hướng năm 2026 từ dữ liệu báo chí vừa thu thập.\n\n"
+            "YÊU CẦU & RÀNG BUỘC BẮT BUỘC (KHÔNG ĐƯỢC SAI SÓT):\n"
+            "1. Bảo toàn 100% danh sách & Độ phủ (Zero Omission / Zero Fabrication):\n"
+            "   - PHẢI đánh giá và trả về ĐÚNG TẤT CẢ các `major_code` có trong DANH SÁCH ỨNG VIÊN bên dưới.\n"
+            "   - TUYỆT ĐỐI KHÔNG tự bịa thêm mã ngành mới ngoài danh sách, KHÔNG bỏ sót hoặc làm rơi bất kỳ ngành nào (đảm bảo mọi nhóm có ít nhất 3 ngành, riêng nhóm DỊCH VỤ XÃ HỘI có 2 ngành và THÚ Y có 1 ngành theo đúng Thông tư 74).\n"
+            "   - Giữ nguyên chính xác chuỗi `category` và `major_code` từ đầu vào.\n"
+            "2. Thang đo xu hướng vĩ mô 2026 (Macro Level Trend Benchmark 2026):\n"
+            "   - Áp dụng MỘT thước đo chung duy nhất cho toàn bộ 23 nhóm ngành.\n"
+            "   - `TIER_1` (Mũi nhọn bùng nổ 2026): Chỉ các ngành đang khát nhân lực đột phá toàn thị trường năm 2026 như Trí tuệ nhân tạo (AI/GenAI), Thiết kế vi mạch & Công nghệ bán dẫn, An ninh mạng, Khoa học dữ liệu, Fintech, Logistics & Chuỗi cung ứng, Robot & Tự động hóa công nghệ cao.\n"
+            "   - `TIER_2` (Tăng trưởng mạnh 2026): Ngành tăng trưởng rõ rệt theo chuyển đổi số, kinh tế xanh/ESG, năng lượng sạch, y tế chất lượng cao, thương mại điện tử, truyền thông số, pháp chế thương mại, du lịch quốc tế.\n"
+            "   - `TIER_3` (Nhu cầu ổn định 2026): Ngành thiết yếu truyền thống có tốc độ tăng trưởng vừa phải và ổn định dài hạn (nông nghiệp cơ bản, thú y, công tác xã hội, nghệ thuật hàn lâm, vận tải cơ bản, sư phạm truyền thống...).\n"
+            "3. Chống chuẩn hóa sai (No Relative Inflation Per Group):\n"
+            "   - KHÔNG xếp hạng tương đối riêng trong nội bộ từng nhóm. Nếu nhóm ngành X có các ngành mạnh nhất năm 2026 chỉ đạt mức `TIER_2` hoặc `TIER_3` trên bình diện toàn thị trường, BẮT BUỘC giữ nguyên `TIER_2` hoặc `TIER_3`, tuyệt đối KHÔNG đôn lên `TIER_1` chỉ để nhóm đó có đại diện Cấp 1.\n"
+            "   - Nhóm `MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN`, `KỸ THUẬT`, `KINH DOANH VÀ QUẢN LÝ` có thể có nhiều ngành đạt `TIER_1` và `TIER_2`; ngược lại các nhóm như `THÚ Y`, `DỊCH VỤ XÃ HỘI`, `NÔNG, LÂM NGHIỆP VÀ THỦY SẢN`, `PHÁP LUẬT` tuyệt đối KHÔNG gắn `TIER_1`.\n"
+            "4. Pure Guidance & Tính xác thực 2026:\n"
+            "   - Lý do `trend_reason` viết bằng tiếng Việt chuẩn mực, 1–2 câu súc tích (dưới 220 ký tự), nêu rõ động lực nhân lực năm 2026 đối chiếu từ tin tức thị trường.\n"
+            "   - Tuyệt đối KHÔNG bịa số liệu lương/tỷ lệ thất nghiệp giả, KHÔNG nhắc học phí hay vị trí địa lý.\n"
+            "5. Định dạng đầu ra:\n"
+            "   - Trả về DUY NHẤT một JSON array hợp lệ (không bọc markdown ```json, không lời bình thêm). Mỗi phần tử gồm đúng 5 khóa: "
+            '`{"category": "...", "major_code": "...", "major_name": "...", "trend_tier": "TIER_1"|"TIER_2"|"TIER_3", "trend_reason": "..."}`.'
         )
 
         user_prompt = (
-            f"Truy vấn tìm kiếm của Admin: '{focus_query}'.\n"
-            f"Tổng số nhóm ngành bắt buộc phủ đủ ({len(all_categories)} nhóm): {', '.join(all_categories)}.\n\n"
-            f"TIN TỨC THỊ TRƯỜNG THỰC TẾ VỪA TÌM ĐƯỢC:\n{headlines}\n\n"
-            f"DANH SÁCH ỨNG VIÊN THEO TỪNG NHÓM NGÀNH:\n{cand_lines}\n"
+            f"BỐI CẢNH ĐÁNH GIÁ: Năm 2026 | Truy vấn Admin: '{focus_query}'.\n"
+            f"Tổng số nhóm ngành phải phủ đủ: {len(all_categories)} nhóm ({', '.join(all_categories)}).\n"
+            f"Tổng số mã ngành BẮT BUỘC phải có mặt đầy đủ trong JSON đầu ra: {len(valid_codes)} mã.\n\n"
+            f"TIN TỨC THỊ TRƯỜNG LAO ĐỘNG & TUYỂN SINH NĂM 2026 VỪA TÌM ĐƯỢC:\n{headlines}\n\n"
+            f"DANH SÁCH {len(candidates)} NGÀNH ỨNG VIÊN CẦN PHÂN HẠNG VĨ MÔ 2026:\n{cand_lines}\n"
         )
 
         async def _call() -> str:
@@ -696,7 +872,7 @@ async def _refine_tiers_with_llm(
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
                     ],
-                    temperature=0.15,
+                    temperature=0.1,
                     max_tokens=token_limits["max_output_tokens"],
                 )
                 return (resp.choices[0].message.content or "").strip()
@@ -706,7 +882,7 @@ async def _refine_tiers_with_llm(
                 except Exception:
                     pass
 
-        raw = await asyncio.wait_for(_call(), timeout=45.0)
+        raw = await asyncio.wait_for(_call(), timeout=60.0)
         m = re.search(r"\[.*\]", raw, flags=re.DOTALL)
         if not m:
             return None
@@ -734,8 +910,8 @@ def _build_classified_trend_map(
     llm_refined: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
-    Tổng hợp bảng ngành xu hướng phủ 100% các nhóm ngành theo thang đo vĩ mô đồng nhất.
-    Luôn bảo toàn nguyên tắc Macro Level Trend (không đôn nhóm Cấp 2/Cấp 3 lên Cấp 1).
+    Tổng hợp bảng ngành xu hướng 2026 phủ 100% các nhóm ngành theo thang đo vĩ mô đồng nhất.
+    Luôn bảo toàn nguyên tắc Macro Level Trend (kẹp chặt trần tier của từng nhóm để không bao giờ đôn ép sai).
     """
     now_iso = datetime.now(timezone.utc).isoformat()
     llm_map = llm_refined or {}
@@ -745,6 +921,7 @@ def _build_classified_trend_map(
 
     for cand in candidates:
         code = cand["major_code"]
+        cat = cand["category"]
         llm_entry = None
         for v in _code_variants(code):
             if v in llm_map:
@@ -760,9 +937,15 @@ def _build_classified_trend_map(
             topics_str = ", ".join(cand["matched_topics"][:2]) if cand["matched_topics"] else cand["major_name"]
             top_headline = cand["sources"][0]["title"] if cand["sources"] else ""
             reason = (
-                f"[{cand['category']}] {topics_str}"
-                + (f" (tham chiếu: \"{top_headline[:80]}\")" if top_headline and cand["evidence_score"] >= 2.0 else ".")
+                f"[{cat}] {topics_str}"
+                + (f" (tham chiếu 2026: \"{top_headline[:80]}\")" if top_headline and cand["evidence_score"] >= 2.0 else ".")
             )
+
+        # Chốt an toàn trần vĩ mô theo nhóm: chống sai sót nếu LLM lỡ đôn nhóm ít nhu cầu lên TIER_1
+        _, _, cat_max_tier = CATEGORY_TREND_QUOTA.get(cat, (3, 3, "TIER_3"))
+        max_allowed_priority = TREND_TIER_CONFIG[cat_max_tier]["priority"]
+        if TREND_TIER_CONFIG[tier]["priority"] > max_allowed_priority:
+            tier = cat_max_tier
 
         cfg = TREND_TIER_CONFIG[tier]
         base_by_tier = 92 if tier == "TIER_1" else (81 if tier == "TIER_2" else 70)
@@ -771,7 +954,7 @@ def _build_classified_trend_map(
         classified[code] = {
             "major_code": code,
             "major_name": cand["major_name"],
-            "category": cand["category"],
+            "category": cat,
             "trend_tier": tier,
             "trend_priority": cfg["priority"],
             "trend_label": cfg["label"],
@@ -918,7 +1101,7 @@ async def apply_trending_markers(
 
 async def run_trend_discovery_agent(
     db: Optional[AsyncSession],
-    focus_query: str = "ngành nghề xu hướng khát nhân lực Việt Nam",
+    focus_query: str = "ngành nghề xu hướng khát nhân lực Việt Nam 2026",
     triggered_by: str = "admin",
     auto_save: bool = False,
     override_articles: Optional[List[Dict[str, Any]]] = None,

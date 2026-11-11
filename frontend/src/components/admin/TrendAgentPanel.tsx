@@ -99,7 +99,7 @@ function formatRunTime(iso?: string | null): string {
 export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
   const [statusData, setStatusData] = useState<TrendAgentStatusPayload | null>(null)
   const [focusQuery, setFocusQuery] = useState(
-    "ngành nghề xu hướng khát nhân lực Việt Nam",
+    "ngành nghề xu hướng khát nhân lực Việt Nam 2026",
   )
   const [running, setRunning] = useState(false)
   const [savingToDb, setSavingToDb] = useState(false)
@@ -140,7 +140,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
           ...getAdminAuthHeader(),
         },
         body: JSON.stringify({
-          focus_query: focusQuery.trim() || "ngành nghề xu hướng khát nhân lực Việt Nam",
+          focus_query: focusQuery.trim() || "ngành nghề xu hướng khát nhân lực Việt Nam 2026",
           auto_save: false,
         }),
       })
@@ -398,7 +398,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
                       ? `Lưu CSDL: ${formatRunTime(statusData.saved_at)}`
                       : `Quét lúc: ${formatRunTime(statusData?.last_run_at)}`
                   } (${statusData?.articles_scanned || 0} tin) · Nguồn đề xuất: CSDL`
-                : "Agent tìm tin tức thị trường lao động, phân hạng theo thang đo vĩ mô toàn thị trường phủ 100% nhóm ngành. Admin bấm Lưu vào CSDL để lưu cố định (1 tháng – 1 năm mới cần chạy lại)."}
+                : "Agent tìm tin tức thị trường lao động năm 2026, phân hạng theo thang đo vĩ mô toàn thị trường phủ 100% nhóm ngành (tối thiểu 3 ngành/nhóm; nhóm xu hướng cao 4–6 ngành). Admin bấm Lưu vào CSDL để lưu cố định."}
             </p>
           </div>
         </div>
