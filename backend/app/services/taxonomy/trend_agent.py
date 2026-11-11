@@ -531,20 +531,21 @@ async def _fetch_rss_articles(client: httpx.AsyncClient, url: str, engine_name: 
 
 
 async def search_trending_majors_online(
-    focus_query: str = "ngành nghề xu hướng khát nhân lực Việt Nam 2026",
+    focus_query: str = "dự báo nhu cầu nhân lực thị trường lao động Việt Nam 2026 ngành mũi nhọn AI bán dẫn y tế kinh tế xanh",
 ) -> List[Dict[str, Any]]:
     """
-    Thực thi tìm kiếm trực tuyến phủ rộng toàn thị trường Việt Nam năm 2026.
-    Kết hợp Tavily API (nếu có key thực tế), Google News RSS và Bing News RSS.
+    Thực thi tìm kiếm trực tuyến đa tầng phủ rộng toàn thị trường Việt Nam năm 2026.
+    Kết hợp Tavily API (nếu có key thực tế), Google News RSS (6 cụm báo cáo & ngành) và Bing News RSS.
     """
-    raw_q = focus_query.strip() or "ngành nghề xu hướng khát nhân lực Việt Nam 2026"
-    base_q = raw_q if ("2026" in raw_q or "2025" in raw_q) else f"{raw_q} 2026"
+    raw_q = focus_query.strip() or "dự báo nhu cầu nhân lực thị trường lao động Việt Nam 2026"
+    base_q = raw_q if ("2026" in raw_q or "2025" in raw_q or "2027" in raw_q) else f"{raw_q} 2026"
     queries = [
         base_q,
-        f"{base_q} trí tuệ nhân tạo vi mạch bán dẫn an ninh mạng fintech logistics",
-        "ngành nghề khát nhân lực Việt Nam 2026 công nghệ kỹ thuật robot tự động hóa khoa học dữ liệu",
-        "xu hướng tuyển dụng Việt Nam 2026 y tế điều dưỡng dược luật kinh tế giáo dục STEM thiết kế số",
-        "thị trường lao động 2026 chuyển đổi xanh ESG năng lượng tái tạo nông nghiệp công nghệ cao du lịch ngoại ngữ",
+        "báo cáo thị trường lao động Việt Nam 2026 TopCV VietnamWorks Navigos ngành khát nhân lực",
+        "xu hướng tuyển dụng Việt Nam 2026 trí tuệ nhân tạo AI vi mạch bán dẫn an ninh mạng khoa học dữ liệu",
+        "nhu cầu nhân lực 2026 Fintech thương mại điện tử logistics chuỗi cung ứng kỹ thuật robot tự động hóa",
+        "ngành học thiếu nhân lực Việt Nam 2026 y khoa điều dưỡng dược luật kinh tế giáo dục STEM tâm lý học",
+        "chuyển đổi xanh ESG năng lượng tái tạo nông nghiệp công nghệ cao du lịch ngoại ngữ kiến trúc BIM 2026",
     ]
 
     all_articles: List[Dict[str, Any]] = []
@@ -555,16 +556,20 @@ async def search_trending_majors_online(
             from tavily import TavilyClient
 
             tavily = TavilyClient(api_key=tavily_key)
-            resp = tavily.search(query=base_q, search_depth="advanced", max_results=12)
-            for r in resp.get("results", []):
-                all_articles.append({
-                    "title": _clean_html_text(r.get("title") or ""),
-                    "url": r.get("url") or "",
-                    "source": "Tavily Web Search",
-                    "published_at": "",
-                    "snippet": _clean_html_text(r.get("content") or "")[:450],
-                    "engine": "Tavily",
-                })
+            for tq in (
+                base_q,
+                "báo cáo thị trường lao động Việt Nam 2026 nhu cầu tuyển dụng nhân lực đa ngành",
+            ):
+                resp = tavily.search(query=tq, search_depth="advanced", max_results=12)
+                for r in resp.get("results", []):
+                    all_articles.append({
+                        "title": _clean_html_text(r.get("title") or ""),
+                        "url": r.get("url") or "",
+                        "source": "Tavily Web Search",
+                        "published_at": "",
+                        "snippet": _clean_html_text(r.get("content") or "")[:450],
+                        "engine": "Tavily",
+                    })
         except Exception as exc:
             logger.warning("Tavily trend search fallback sang RSS (%s)", exc)
 
@@ -574,8 +579,9 @@ async def search_trending_majors_online(
             encoded = urllib.parse.quote(q)
             gn_url = f"https://news.google.com/rss/search?q={encoded}&hl=vi&gl=VN&ceid=VN:vi"
             tasks.append(_fetch_rss_articles(client, gn_url, "Google News"))
-        bn_url = f"https://www.bing.com/news/search?q={urllib.parse.quote(base_q)}&format=rss"
-        tasks.append(_fetch_rss_articles(client, bn_url, "Bing News"))
+        for bq in (base_q, "xu hướng ngành nghề tuyển dụng Việt Nam 2026"):
+            bn_url = f"https://www.bing.com/news/search?q={urllib.parse.quote(bq)}&format=rss"
+            tasks.append(_fetch_rss_articles(client, bn_url, "Bing News"))
 
         batches = await asyncio.gather(*tasks, return_exceptions=True)
         for b in batches:
@@ -591,7 +597,7 @@ async def search_trending_majors_online(
         seen_titles.add(norm_t)
         deduped.append(art)
 
-    return deduped[:55]
+    return deduped[:65]
 
 
 def _extract_candidates_from_articles(
@@ -1101,7 +1107,7 @@ async def apply_trending_markers(
 
 async def run_trend_discovery_agent(
     db: Optional[AsyncSession],
-    focus_query: str = "ngành nghề xu hướng khát nhân lực Việt Nam 2026",
+    focus_query: str = "dự báo nhu cầu nhân lực thị trường lao động Việt Nam 2026 ngành mũi nhọn AI bán dẫn y tế kinh tế xanh",
     triggered_by: str = "admin",
     auto_save: bool = False,
     override_articles: Optional[List[Dict[str, Any]]] = None,

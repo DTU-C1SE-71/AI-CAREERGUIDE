@@ -120,8 +120,8 @@ class MajorItemResponse(BaseModel):
 
 class TrendAgentRunRequest(BaseModel):
     focus_query: str = Field(
-        default="ngành nghề xu hướng khát nhân lực Việt Nam 2026",
-        max_length=250,
+        default="dự báo nhu cầu nhân lực thị trường lao động Việt Nam 2026 ngành mũi nhọn AI bán dẫn y tế kinh tế xanh",
+        max_length=400,
         description="Từ khóa tìm kiếm thông tin các ngành xu hướng năm 2026 trên Internet",
     )
     auto_save: bool = Field(
