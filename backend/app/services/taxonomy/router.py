@@ -81,12 +81,17 @@ async def sync_tt09_catalog(
     """
     try:
         seed_data = service.load_seed_majors()
-        return await service.bulk_sync_majors(db, seed_data)
+        return await service.bulk_sync_majors(
+            db,
+            seed_data,
+            deactivate_missing=len(seed_data) >= 20,
+        )
     except Exception as exc:
         return {
             "status": "success",
             "inserted": 0,
             "updated": 435,
+            "deactivated": 0,
             "total": 435,
             "note": f"Synchronized 435 MOET Level-IV majors (fallback mode: {str(exc)})"
         }
@@ -126,6 +131,10 @@ async def import_majors_from_excel(
     file: UploadFile = File(...),
     preview_only: bool = Query(default=False),
     sheet_name: Optional[str] = Query(default=None),
+    replace_catalog: Optional[bool] = Query(
+        default=None,
+        description="True để đồng bộ chính xác danh mục đang hiệu lực (ẩn mã cũ không còn trong file); mặc định bật khi file >= 20 ngành.",
+    ),
     circular_title: str = Query(default="Thông tư 74/2026/TT-BGDĐT"),
     circular_code: str = Query(default="74/2026/TT-BGDĐT"),
     db: AsyncSession = Depends(get_db)
@@ -169,8 +178,14 @@ async def import_majors_from_excel(
 
     from app.core.config import settings
 
+    should_replace = replace_catalog if replace_catalog is not None else len(enriched_majors) >= 20
+
     try:
-        res = await service.bulk_sync_majors(db, enriched_majors)
+        res = await service.bulk_sync_majors(
+            db,
+            enriched_majors,
+            deactivate_missing=should_replace,
+        )
         persisted_to_db = True
     except Exception as db_err:
         logger.exception("Failed persisting imported Excel majors to DB: %s", db_err)
@@ -183,7 +198,7 @@ async def import_majors_from_excel(
             detail=f"Không thể lưu {len(enriched_majors)} ngành từ Excel vào CSDL: {db_err}",
         )
 
-    if settings.ENVIRONMENT != "test":
+    if settings.ENVIRONMENT != "test" and should_replace:
         try:
             trend_map = trend_agent.load_trending_registry_map()
             active_records = []
@@ -218,6 +233,7 @@ async def import_majors_from_excel(
         "circular_code": circular_code,
         "inserted": res.get("inserted", 0),
         "updated": res.get("updated", len(enriched_majors)),
+        "deactivated": res.get("deactivated", 0),
         "total": res.get("total", len(enriched_majors)),
         "persisted_to_db": persisted_to_db,
         "majors": enriched_majors,
@@ -238,10 +254,15 @@ async def publish_majors_to_db(
     from app.core.config import settings
 
     enriched_list = [auto_enrich_major_record(m) for m in payload.majors]
+    should_replace = len(enriched_list) >= 20
 
     # 1. Persist directly into PostgreSQL majors table
     try:
-        res = await service.bulk_sync_majors(db, enriched_list)
+        res = await service.bulk_sync_majors(
+            db,
+            enriched_list,
+            deactivate_missing=should_replace,
+        )
         persisted_to_db = True
     except Exception as db_err:
         logger.exception("Failed publishing majors to DB: %s", db_err)
@@ -255,7 +276,7 @@ async def publish_majors_to_db(
         )
 
     # 2. Also persist active seeds JSON file on disk for instantaneous zero-latency fallback
-    if settings.ENVIRONMENT != "test":
+    if settings.ENVIRONMENT != "test" and should_replace:
         try:
             seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"
             active_path = seeds_dir / "moet_taxonomy_active.json"
@@ -275,6 +296,7 @@ async def publish_majors_to_db(
         "circular_code": payload.circular_code,
         "inserted": res.get("inserted", 0),
         "updated": res.get("updated", 0),
+        "deactivated": res.get("deactivated", 0),
         "total": res.get("total", len(enriched_list)),
         "persisted_to_db": persisted_to_db
     }

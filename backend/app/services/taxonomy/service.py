@@ -4,7 +4,7 @@ import uuid
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import selectinload
 
 from app.models.taxonomy import (
@@ -244,14 +244,20 @@ async def list_skills(
     return list(result.scalars().all())
 
 
-async def bulk_sync_majors(db: AsyncSession, majors_data: List[dict]) -> dict:
+async def bulk_sync_majors(
+    db: AsyncSession,
+    majors_data: List[dict],
+    deactivate_missing: bool = False,
+) -> dict:
     """
     Syncs or updates MOET Level-IV majors catalog into PostgreSQL.
     Guarantees idempotency, 100% pure guidance scope compliance, and zero async lazy-load crashes.
     Persists category, subject blocks, and careers relationships using batched scalar queries.
+    When `deactivate_missing=True`, marks legacy majors absent from `majors_data` as `is_active=False`
+    so the active DB count matches the uploaded circular catalog exactly without breaking FKs.
     """
     if not majors_data:
-        return {"status": "success", "inserted": 0, "updated": 0, "total": 0}
+        return {"status": "success", "inserted": 0, "updated": 0, "deactivated": 0, "total": 0}
 
     inserted_count = 0
     updated_count = 0
@@ -413,10 +419,25 @@ async def bulk_sync_majors(db: AsyncSession, majors_data: List[dict]) -> dict:
                     )
                 )
 
+    deactivated_count = 0
+    if deactivate_missing and incoming_codes:
+        incoming_set = set(incoming_codes)
+        active_rows = (
+            await db.execute(select(Major.id, Major.major_code).where(Major.is_active == True))
+        ).all()
+        to_deactivate_ids = [mid for mid, mcode in active_rows if mcode not in incoming_set]
+        for start in range(0, len(to_deactivate_ids), 400):
+            id_chunk = to_deactivate_ids[start : start + 400]
+            await db.execute(
+                update(Major).where(Major.id.in_(id_chunk)).values(is_active=False)
+            )
+        deactivated_count = len(to_deactivate_ids)
+
     await db.commit()
     return {
         "status": "success",
         "inserted": inserted_count,
         "updated": updated_count,
+        "deactivated": deactivated_count,
         "total": len(deduped_items),
     }
