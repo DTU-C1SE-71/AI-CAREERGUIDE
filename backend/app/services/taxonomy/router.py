@@ -1,3 +1,4 @@
+import logging
 from typing import List, Optional
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
@@ -12,6 +13,7 @@ from app.schemas.taxonomy import (
     CareerResponse,
     SkillResponse,
     TrendAgentRunRequest,
+    TrendAgentSaveRequest,
     TrendTierUpdateRequest,
 )
 from app.services.taxonomy import service, trend_agent
@@ -21,6 +23,7 @@ from app.services.taxonomy.tt74_reference import (
     parse_excel_or_csv_sheets,
 )
 
+logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/taxonomy", tags=["Taxonomy & Pure Guidance Catalog"])
 
 
@@ -164,26 +167,47 @@ async def import_majors_from_excel(
             "sheets": all_sheets,
         }
 
-    persisted_to_db = False
-    res = {"inserted": 0, "updated": len(enriched_majors)}
+    from app.core.config import settings
+
     try:
         res = await service.bulk_sync_majors(db, enriched_majors)
         persisted_to_db = True
-    except Exception:
-        pass
+    except Exception as db_err:
+        logger.exception("Failed persisting imported Excel majors to DB: %s", db_err)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Không thể lưu {len(enriched_majors)} ngành từ Excel vào CSDL: {db_err}",
+        )
 
-    try:
-        seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"
-        active_path = seeds_dir / "moet_taxonomy_active.json"
-        with open(active_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "circular_title": circular_title,
-                "circular_code": circular_code,
-                "total_majors": len(enriched_majors),
-                "majors": enriched_majors
-            }, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
+    if settings.ENVIRONMENT != "test":
+        try:
+            trend_map = trend_agent.load_trending_registry_map()
+            active_records = []
+            for m in enriched_majors:
+                rec = dict(m)
+                t = trend_map.get(str(rec.get("major_code") or "").strip())
+                if t:
+                    cog = dict(rec.get("cognitive") or {})
+                    cog["_trend"] = t
+                    rec["cognitive"] = cog
+                    rec["cognitive_attributes"] = cog
+                active_records.append(rec)
+
+            seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"
+            active_path = seeds_dir / "moet_taxonomy_active.json"
+            with open(active_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "circular_title": circular_title,
+                    "circular_code": circular_code,
+                    "total_majors": len(active_records),
+                    "majors": active_records,
+                }, f, ensure_ascii=False, indent=2)
+        except Exception as exc:
+            logger.warning("Could not write moet_taxonomy_active.json after Excel import: %s", exc)
 
     return {
         "status": "success",
@@ -194,7 +218,7 @@ async def import_majors_from_excel(
         "circular_code": circular_code,
         "inserted": res.get("inserted", 0),
         "updated": res.get("updated", len(enriched_majors)),
-        "total": len(enriched_majors),
+        "total": res.get("total", len(enriched_majors)),
         "persisted_to_db": persisted_to_db,
         "majors": enriched_majors,
     }
@@ -211,31 +235,39 @@ async def publish_majors_to_db(
     """
     import json
     from pathlib import Path
+    from app.core.config import settings
 
     enriched_list = [auto_enrich_major_record(m) for m in payload.majors]
-    persisted_to_db = False
-    res = {"inserted": 0, "updated": 0}
-    
-    # 1. Persist directly into PostgreSQL majors table if DB is available
+
+    # 1. Persist directly into PostgreSQL majors table
     try:
         res = await service.bulk_sync_majors(db, enriched_list)
         persisted_to_db = True
     except Exception as db_err:
-        pass
-    
+        logger.exception("Failed publishing majors to DB: %s", db_err)
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Không thể lưu {len(enriched_list)} ngành vào CSDL: {db_err}",
+        )
+
     # 2. Also persist active seeds JSON file on disk for instantaneous zero-latency fallback
-    try:
-        seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"
-        active_path = seeds_dir / "moet_taxonomy_active.json"
-        with open(active_path, "w", encoding="utf-8") as f:
-            json.dump({
-                "circular_title": payload.circular_title,
-                "circular_code": payload.circular_code,
-                "total_majors": len(enriched_list),
-                "majors": enriched_list
-            }, f, ensure_ascii=False, indent=2)
-    except Exception as exc:
-        pass
+    if settings.ENVIRONMENT != "test":
+        try:
+            seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"
+            active_path = seeds_dir / "moet_taxonomy_active.json"
+            with open(active_path, "w", encoding="utf-8") as f:
+                json.dump({
+                    "circular_title": payload.circular_title,
+                    "circular_code": payload.circular_code,
+                    "total_majors": len(enriched_list),
+                    "majors": enriched_list
+                }, f, ensure_ascii=False, indent=2)
+        except Exception as exc:
+            logger.warning("Could not write moet_taxonomy_active.json after publish: %s", exc)
 
     return {
         "status": "success",
@@ -243,18 +275,18 @@ async def publish_majors_to_db(
         "circular_code": payload.circular_code,
         "inserted": res.get("inserted", 0),
         "updated": res.get("updated", 0),
-        "total": len(enriched_list),
+        "total": res.get("total", len(enriched_list)),
         "persisted_to_db": persisted_to_db
     }
 
 
 @router.get("/trend-agent/status", status_code=status.HTTP_200_OK)
-async def get_trend_agent_status():
+async def get_trend_agent_status(db: AsyncSession = Depends(get_db)):
     """
-    Trả về trạng thái danh sách ngành xu hướng đã được Admin đánh dấu.
+    Trả về trạng thái danh sách ngành xu hướng đã được Admin lưu trong CSDL.
     Chỉ đọc dữ liệu đã lưu — TUYỆT ĐỐI không tự động chạy tìm kiếm web.
     """
-    return trend_agent.get_trending_status()
+    return await trend_agent.get_trending_status_async(db)
 
 
 @router.post("/trend-agent/run", status_code=status.HTTP_200_OK)
@@ -266,12 +298,35 @@ async def trigger_trend_discovery_agent(
     """
     KÍCH HOẠT THỦ CÔNG BỞI ADMIN:
     Chạy AI Trend Hunter Agent tìm kiếm các ngành xu hướng trên mạng Internet,
-    phân thành 3 bậc ưu tiên (TIER_1 > TIER_2 > TIER_3) và đánh dấu vào dữ liệu ngành.
+    phân hạng theo thang đo vĩ mô toàn thị trường (Macro Level Trend) phủ 100% nhóm ngành.
+    Mặc định auto_save=False trả về bản nháp để Admin kiểm tra và bấm "Lưu vào CSDL".
     GUARDRAIL: Chỉ Quản trị viên (ADMIN) bấm nút chạy mới thực thi tìm kiếm.
     """
     return await trend_agent.run_trend_discovery_agent(
         db=db,
         focus_query=payload.focus_query,
+        triggered_by=str(admin_actor.get("email") or "admin"),
+        auto_save=payload.auto_save,
+    )
+
+
+@router.post("/trend-agent/save", status_code=status.HTTP_200_OK)
+async def save_trend_agent_results(
+    payload: TrendAgentSaveRequest,
+    admin_actor: dict = Depends(require_admin_actor),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    XÁC NHẬN LƯU VÀO CSDL BỞI ADMIN:
+    Lưu danh sách các ngành xu hướng đã được rà soát vào bảng `majors` trong CSDL
+    để hệ thống Recommender đọc trực tiếp mà không bao giờ chạy lại Agent tìm kiếm.
+    """
+    return await trend_agent.save_trending_majors_to_db(
+        db=db,
+        majors_list=[m.model_dump() for m in payload.majors],
+        focus_query=payload.focus_query or "",
+        articles_scanned=payload.articles_scanned,
+        search_sources=payload.search_sources,
         triggered_by=str(admin_actor.get("email") or "admin"),
     )
 

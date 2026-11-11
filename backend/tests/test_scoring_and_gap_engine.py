@@ -1052,7 +1052,7 @@ class TestTrendHunterAgent:
             rec_before = client.post("/api/v1/recommender/evaluate", json=eval_payload).json()["majors"]
             assert all(m.get("is_trending") is False for m in rec_before[:10])
 
-            # 3) Admin bấm nút chạy Trend Hunter Agent
+            # 3) Admin bấm nút chạy Trend Hunter Agent -> trả về bản nháp (chưa ghi vào CSDL)
             run_res = client.post(
                 "/api/v1/taxonomy/trend-agent/run",
                 json={"focus_query": "ngành xu hướng AI bán dẫn logistics Việt Nam"},
@@ -1060,14 +1060,66 @@ class TestTrendHunterAgent:
             )
             assert run_res.status_code == 200
             run_body = run_res.json()
-            assert run_body["status"] == "success"
+            assert run_body["status"] == "draft_ready"
+            assert run_body["pending_save"] is True
+            assert run_body["saved_to_db"] is False
             assert run_body["articles_scanned"] == 3
-            assert run_body["total_trending_marked"] >= 6
+            assert run_body["categories_covered"] >= 20
+            assert run_body["total_categories"] == 23
+            assert run_body["total_trending_marked"] >= 20
             assert run_body["tier_counts"]["TIER_1"] >= 1
             assert run_body["tier_counts"]["TIER_2"] >= 1
 
-            # 4) Kiểm tra dữ liệu ngành đã được đánh dấu trực tiếp trong Taxonomy API
+            # Kiểm tra Lựa chọn 3 (Macro Level Trend): 100% nhóm ngành có đại diện & không đôn ép lên Bậc 1
+            by_cat = {}
+            for item in run_body["trending_majors"]:
+                by_cat.setdefault(item.get("category"), []).append(item)
+            assert len(by_cat) >= 20
+            for low_macro_cat in ("THÚ Y", "DỊCH VỤ XÃ HỘI"):
+                assert low_macro_cat in by_cat
+                assert all(it["trend_tier"] != "TIER_1" for it in by_cat[low_macro_cat])
+
+            # Trước khi Admin bấm "Lưu vào CSDL": Taxonomy và Recommender chưa bị tác động bởi bản nháp
             first_trend_code = run_body["trending_majors"][0]["major_code"]
+            draft_detail = client.get(f"/api/v1/taxonomy/majors/{first_trend_code}")
+            assert draft_detail.status_code == 200
+            assert draft_detail.json()["is_trending"] is False
+            rec_draft = client.post("/api/v1/recommender/evaluate", json=eval_payload).json()["majors"]
+            assert all(m.get("is_trending") is False for m in rec_draft[:10])
+
+            # 3b) Student không được phép lưu vào CSDL (403)
+            save_payload = {
+                "focus_query": run_body["focus_query"],
+                "articles_scanned": run_body["articles_scanned"],
+                "search_sources": run_body["search_sources"],
+                "majors": run_body["trending_majors"],
+            }
+            student_save_res = client.post(
+                "/api/v1/taxonomy/trend-agent/save",
+                json=save_payload,
+                headers={"Authorization": f"Bearer {student_token}"},
+            )
+            assert student_save_res.status_code == 403
+
+            # 3c) Admin bấm "Lưu vào CSDL" -> lưu chính thức vào DB để Recommender đọc trực tiếp
+            save_res = client.post(
+                "/api/v1/taxonomy/trend-agent/save",
+                json=save_payload,
+                headers={"Authorization": f"Bearer {admin_token}"},
+            )
+            assert save_res.status_code == 200
+            save_body = save_res.json()
+            assert save_body["status"] == "saved"
+            assert save_body["saved_to_db"] is True
+            assert save_body["pending_save"] is False
+            assert save_body["total_trending_marked"] == len(run_body["trending_majors"])
+
+            status_after = client.get("/api/v1/taxonomy/trend-agent/status")
+            assert status_after.status_code == 200
+            assert status_after.json()["saved_to_db"] is True
+            assert status_after.json()["total_trending_marked"] == save_body["total_trending_marked"]
+
+            # 4) Kiểm tra dữ liệu ngành đã được đánh dấu trực tiếp trong Taxonomy API sau khi lưu CSDL
             major_detail = client.get(f"/api/v1/taxonomy/majors/{first_trend_code}")
             assert major_detail.status_code == 200
             m_data = major_detail.json()
@@ -1075,9 +1127,8 @@ class TestTrendHunterAgent:
             assert m_data["trend_tier"] in ("TIER_1", "TIER_2", "TIER_3")
             assert m_data["trend_priority"] >= 1
 
-            # 5) Kiểm tra Recommender ưu tiên các ngành Xu hướng Bậc 1 lên đầu mà vẫn giữ nguyên TARGET trước REACH
+            # 5) Kiểm tra Recommender đọc từ CSDL, ưu tiên các ngành Xu hướng Bậc 1 mà vẫn giữ TARGET trước REACH
             rec_after = client.post("/api/v1/recommender/evaluate", json=eval_payload).json()["majors"]
-            top5_codes = [m["major_code"] for m in rec_after[:5]]
             assert any(m.get("is_trending") for m in rec_after[:5])
             assert any(m.get("trend_tier") == "TIER_1" for m in rec_after[:5])
             assert all(m["feasibility_tier"] == "TARGET" for m in rec_after[:5])
@@ -1097,6 +1148,130 @@ class TestTrendHunterAgent:
             )
         finally:
             app.dependency_overrides.clear()
+
+
+class TestExcelBulkImportPersistence:
+    @pytest.mark.anyio
+    async def test_bulk_sync_majors_inserts_new_and_preserves_trend_without_lazy_load(self):
+        import uuid
+        from unittest.mock import AsyncMock, MagicMock
+        from app.models.taxonomy import Major, SubjectBlock
+        from app.services.taxonomy.service import bulk_sync_majors
+
+        existing_id = uuid.uuid4()
+        sb_id = uuid.uuid4()
+        existing_major = Major(
+            id=existing_id,
+            major_code="7480107",
+            name="Trí tuệ nhân tạo",
+            category="MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN",
+            degree_level="Đại học",
+            riasec_vector={"R": 0.4, "I": 0.9, "A": 0.2, "S": 0.3, "E": 0.3, "C": 0.7},
+            cognitive_attributes={"abstract_thinking": "high", "_trend": {"trend_tier": "TIER_1"}},
+            industry_outlook="Nhu cầu AI tăng mạnh",
+            is_active=True,
+        )
+        # Ensure unloaded relationship access would raise if bulk_sync_majors regressed to lazy-load
+        block_a00 = SubjectBlock(
+            id=sb_id,
+            block_code="A00",
+            name="Toán, Vật lí, Hóa học",
+            subjects=["Toán", "Vật lí", "Hóa học"],
+            national_mean=20.85,
+            national_std=3.25,
+        )
+
+        # Sequence of execute() calls in bulk_sync_majors:
+        # 1) SubjectBlock -> [block_a00]
+        # 2) Major chunk -> [existing_major]
+        # 3) MajorSubjectBlock scalar links -> [(existing_id, sb_id)]
+        # 4) Career scalar titles -> [(existing_id, "Kỹ sư AI")]
+        sb_res = MagicMock()
+        sb_res.scalars.return_value.all.return_value = [block_a00]
+
+        maj_res = MagicMock()
+        maj_res.scalars.return_value.all.return_value = [existing_major]
+
+        msb_res = MagicMock()
+        msb_res.all.return_value = [(existing_id, sb_id)]
+
+        car_res = MagicMock()
+        car_res.all.return_value = [(existing_id, "Kỹ sư AI")]
+
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.execute = AsyncMock(side_effect=[sb_res, maj_res, msb_res, car_res])
+
+        payload = [
+            {
+                "major_code": "7480107",
+                "name": "Trí tuệ nhân tạo (Cập nhật)",
+                "category": "MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN",
+                "blocks": ["A00", "A00"],
+                "careers": ["Kỹ sư AI", "Nhà nghiên cứu ML"],
+                "riasec": {"R": 0.4, "I": 0.95, "A": 0.2, "S": 0.3, "E": 0.3, "C": 0.7},
+                "cognitive": {"abstract_thinking": "high"},
+                "outlook": "Cập nhật xu hướng",
+            },
+            {
+                "major_code": "7999999",
+                "name": "Ngành Mới TT74 Test",
+                "category": "KỸ THUẬT",
+                "blocks": ["A00", "A01", "A00"],
+                "careers": ["Kỹ sư mới", "Kỹ sư mới"],
+                "riasec": {"R": 0.8, "I": 0.7, "A": 0.2, "S": 0.3, "E": 0.4, "C": 0.6},
+                "cognitive": {"abstract_thinking": "medium"},
+                "outlook": "Triển vọng tốt",
+            },
+            # Duplicate row in same Excel sheet should deduplicate cleanly
+            {
+                "major_code": "7999999",
+                "name": "Ngành Mới TT74 Test (Bản mới)",
+                "category": "KỸ THUẬT",
+                "blocks": ["A00"],
+                "careers": ["Kỹ sư mới"],
+            },
+        ]
+
+        res = await bulk_sync_majors(db, payload)
+        assert res["status"] == "success"
+        assert res["inserted"] == 1
+        assert res["updated"] == 1
+        assert res["total"] == 2
+        assert existing_major.cognitive_attributes["_trend"]["trend_tier"] == "TIER_1"
+        db.flush.assert_awaited()
+        db.commit.assert_awaited_once()
+
+    def test_import_excel_raises_500_instead_of_silently_faking_success_on_db_error(self, monkeypatch):
+        from pathlib import Path
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.core.database import get_db
+        from app.services.taxonomy import service
+
+        async def _fake_db():
+            from unittest.mock import AsyncMock
+            yield AsyncMock()
+
+        async def _broken_bulk_sync(db, majors_data):
+            raise RuntimeError("Simulated PostgreSQL MissingGreenlet failure")
+
+        monkeypatch.setattr(service, "bulk_sync_majors", _broken_bulk_sync)
+        app.dependency_overrides[get_db] = _fake_db
+
+        try:
+            tpl_path = Path(__file__).resolve().parents[1] / "app" / "db" / "seeds" / "MOET_Major_Import_Template_Standard.xlsx"
+            client = TestClient(app)
+            with open(tpl_path, "rb") as f:
+                res = client.post(
+                    "/api/v1/taxonomy/import-excel?preview_only=false",
+                    files={"file": ("MOET_Major_Import_Template_Standard.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                )
+            assert res.status_code == 500
+            assert "Không thể lưu" in res.json()["detail"]
+        finally:
+            app.dependency_overrides.clear()
+
 
 
 
