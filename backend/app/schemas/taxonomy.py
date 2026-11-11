@@ -108,8 +108,30 @@ class MajorItemResponse(BaseModel):
     industry_outlook: Optional[str] = None
     description: Optional[str] = None
     is_active: bool = True
+    is_trending: bool = False
+    trend_tier: Optional[str] = None
+    trend_priority: int = 0
+    trend_label: Optional[str] = None
+    trend_reason: Optional[str] = None
+    trend_sources: List[Dict[str, str]] = []
 
     model_config = ConfigDict(from_attributes=True, extra="allow")
+
+
+class TrendAgentRunRequest(BaseModel):
+    focus_query: str = Field(
+        default="ngành nghề xu hướng khát nhân lực Việt Nam",
+        max_length=250,
+        description="Từ khóa tìm kiếm thông tin các ngành xu hướng trên Internet",
+    )
+
+
+class TrendTierUpdateRequest(BaseModel):
+    trend_tier: str = Field(
+        ...,
+        description="TIER_1 (Ưu tiên cao nhất), TIER_2 (Tăng trưởng mạnh), TIER_3 (Triển vọng ổn định), hoặc NONE (Bỏ đánh dấu)",
+    )
+    trend_reason: Optional[str] = Field(default=None, max_length=500)
 
 
 class MajorResponse(MajorBase):

@@ -87,6 +87,10 @@ class AssessmentSubmissionRequest(BaseModel):
         ...,
         description="Dictionary mapping cognitive question code or dimension to chosen option key ('A'|'B'|'C'|'D')"
     )
+    aspiration: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Optional career aspiration & work values submitted at the end of the assessment"
+    )
     completion_time_seconds: Optional[int] = Field(default=360, ge=10)
 
 

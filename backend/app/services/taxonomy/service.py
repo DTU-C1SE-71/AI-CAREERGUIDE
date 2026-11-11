@@ -53,8 +53,13 @@ def load_seed_majors() -> List[dict]:
     return []
 
 
-def format_major_dict(major: Major) -> Dict[str, Any]:
+def format_major_dict(
+    major: Major,
+    trend_map: Optional[Dict[str, Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
     """Formats a Major ORM entity into a standardized frontend & API response dictionary."""
+    from app.services.taxonomy.trend_agent import get_major_trend_info
+
     blocks: List[str] = []
     if hasattr(major, "subject_blocks") and major.subject_blocks:
         blocks = [
@@ -70,6 +75,7 @@ def format_major_dict(major: Major) -> Dict[str, Any]:
     rv = major.riasec_vector or {}
     cog = major.cognitive_attributes or {}
     outlook = major.industry_outlook or ""
+    t_info = get_major_trend_info(major.major_code, trend_map=trend_map, cognitive_attributes=cog)
 
     return {
         "id": major.id,
@@ -88,7 +94,24 @@ def format_major_dict(major: Major) -> Dict[str, Any]:
         "industry_outlook": outlook,
         "description": major.description,
         "is_active": major.is_active,
+        **t_info,
     }
+
+
+def _attach_seed_trend_info(
+    m_dict: Dict[str, Any],
+    trend_map: Dict[str, Dict[str, Any]],
+) -> Dict[str, Any]:
+    from app.services.taxonomy.trend_agent import get_major_trend_info
+
+    enriched = dict(m_dict)
+    t_info = get_major_trend_info(
+        str(enriched.get("major_code") or ""),
+        trend_map=trend_map,
+        cognitive_attributes=enriched.get("cognitive") or enriched.get("cognitive_attributes"),
+    )
+    enriched.update(t_info)
+    return enriched
 
 
 async def list_majors(
@@ -130,12 +153,17 @@ async def list_majors(
                 result = await db.execute(query)
                 majors = list(result.scalars().all())
 
+        from app.services.taxonomy.trend_agent import load_trending_registry_map
+        trend_map = load_trending_registry_map()
+
         if majors:
-            return [format_major_dict(m) for m in majors]
+            return [format_major_dict(m, trend_map=trend_map) for m in majors]
     except Exception as exc:
         logger.warning("Database unavailable in list_majors (%s), falling back to seed JSON", exc)
 
     # Safe fallback to seed JSON (435 majors)
+    from app.services.taxonomy.trend_agent import load_trending_registry_map
+    trend_map = load_trending_registry_map()
     seed_data = load_seed_majors()
     if search:
         s_lower = search.lower()
@@ -146,10 +174,12 @@ async def list_majors(
     if category and category.upper() != "ALL":
         seed_data = [m for m in seed_data if m.get("category") == category]
 
-    return seed_data[offset : offset + limit]
+    return [_attach_seed_trend_info(m, trend_map) for m in seed_data[offset : offset + limit]]
 
 
 async def get_major_by_code(db: AsyncSession, major_code: str) -> Optional[Dict[str, Any]]:
+    from app.services.taxonomy.trend_agent import load_trending_registry_map
+    trend_map = load_trending_registry_map()
     try:
         query = (
             select(Major)
@@ -163,14 +193,14 @@ async def get_major_by_code(db: AsyncSession, major_code: str) -> Optional[Dict[
         result = await db.execute(query)
         major = result.scalar_one_or_none()
         if major:
-            return format_major_dict(major)
+            return format_major_dict(major, trend_map=trend_map)
     except Exception as exc:
         logger.warning("Database unavailable in get_major_by_code (%s), falling back to seed JSON", exc)
 
     seed_data = load_seed_majors()
     for m in seed_data:
         if m.get("major_code") == major_code:
-            return m
+            return _attach_seed_trend_info(m, trend_map)
     return None
 
 

@@ -311,7 +311,8 @@ async def process_assessment_submission(
                 cognitive_answers=cognitive_answers_clean,
                 raw_answers={
                     "riasec_answers": riasec_answers,
-                    "cognitive_answers": cog_answers
+                    "cognitive_answers": cog_answers,
+                    "aspiration": payload.aspiration or {},
                 },
                 dominant_traits=dominant_traits,
                 xp_earned=xp_earned,
@@ -354,7 +355,11 @@ async def process_assessment_submission(
                 user_id=user_id,
                 riasec_scores=normalized_vector,
                 cognitive_preferences=cognitive_traits,
-                raw_responses={"riasec": riasec_answers, "cognitive": cog_answers},
+                raw_responses={
+                    "riasec": riasec_answers,
+                    "cognitive": cog_answers,
+                    "aspiration": payload.aspiration or {},
+                },
                 assessed_at=now
             )
             db.add(legacy_record)

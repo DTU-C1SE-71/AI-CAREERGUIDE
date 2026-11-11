@@ -237,6 +237,9 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
         id: `attempt-${Date.now()}`,
         createdAt: nowIso,
         ...summary,
+        aspiration: completedState.aspiration
+          ? { ...completedState.aspiration }
+          : undefined,
       }
 
       setHistory((prev) => {
@@ -255,10 +258,11 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
       const found = history.find((item) => item.id === id)
       if (!found) return
       const restored: AssessmentState = {
-        step: 3,
+        step: 4,
         answers: { ...found.answers },
         cognitive: { ...found.cognitive },
         scores: [...found.scores],
+        aspiration: found.aspiration ? { ...found.aspiration } : undefined,
         completed: true,
         completedAt: found.createdAt,
       }
@@ -282,10 +286,13 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
         } else if (activeHistoryId === id) {
           const fallbackAttempt = nextHistory[0]
           const restored: AssessmentState = {
-            step: 3,
+            step: 4,
             answers: { ...fallbackAttempt.answers },
             cognitive: { ...fallbackAttempt.cognitive },
             scores: [...fallbackAttempt.scores],
+            aspiration: fallbackAttempt.aspiration
+              ? { ...fallbackAttempt.aspiration }
+              : undefined,
             completed: true,
             completedAt: fallbackAttempt.createdAt,
           }

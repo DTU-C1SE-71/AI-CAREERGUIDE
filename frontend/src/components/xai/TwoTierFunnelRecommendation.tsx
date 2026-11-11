@@ -5,6 +5,7 @@ import { Link } from "react-router"
 import type { FunnelRecommendationData, Major } from "../../types/major"
 import { Card } from "../common/Card"
 import { FeasibilityBadge } from "./FeasibilityBadge"
+import { TrendBadge } from "./TrendBadge"
 
 interface TwoTierFunnelProps {
   funnelData: FunnelRecommendationData
@@ -121,6 +122,11 @@ export function TwoTierFunnelRecommendation({
                                 <FeasibilityBadge
                                   value={major.feasibility}
                                   label={major.feasibility_label}
+                                />
+                                <TrendBadge
+                                  tier={major.trend_tier}
+                                  isTrending={major.is_trending}
+                                  reason={major.trend_reason}
                                 />
                                 {major.best_matching_block && major.best_block_score != null && (
                                   <span className="rounded-lg border border-sky-200/80 bg-sky-50/80 px-2 py-0.5 text-[10px] font-extrabold text-sky-700">

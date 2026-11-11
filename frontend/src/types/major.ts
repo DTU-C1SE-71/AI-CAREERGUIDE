@@ -4,6 +4,12 @@ export interface MajorFit {
   cognitive: number
 }
 
+export interface TrendSourceItem {
+  title: string
+  url: string
+  source?: string
+}
+
 export interface Major {
   id: string
   code: string
@@ -21,6 +27,12 @@ export interface Major {
   constraint_passed?: boolean
   constraint_violations?: string[]
   admission_advice?: string
+  is_trending?: boolean
+  trend_tier?: "TIER_1" | "TIER_2" | "TIER_3" | null
+  trend_priority?: number
+  trend_label?: string | null
+  trend_reason?: string | null
+  trend_sources?: TrendSourceItem[]
   fit: MajorFit
   explanation: string
   gaps: string[]

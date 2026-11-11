@@ -21,6 +21,7 @@ import { type ChangeEvent, type DragEvent, useEffect, useMemo, useRef, useState 
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import * as XLSX from "xlsx"
+import { TrendAgentPanel } from "../components/admin/TrendAgentPanel"
 import { Badge } from "../components/common/Badge"
 import { Button } from "../components/common/Button"
 import { PageContainer } from "../components/layout/PageContainer"
@@ -624,6 +625,9 @@ export function AdminHITLDashboard() {
             </Button>
           </div>
         </div>
+
+        {/* AI Trend Hunter Agent Panel (Chạy thủ công khi Admin bấm nút) */}
+        <TrendAgentPanel onNotify={showToast} />
 
         {/* Drag & Drop Excel Upload + Preview Table */}
         <div className="glass-card mb-5 rounded-3xl p-4">

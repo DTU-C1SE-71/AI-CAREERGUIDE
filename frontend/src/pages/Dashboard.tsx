@@ -21,6 +21,8 @@ import { Button } from "../components/common/Button"
 import { Card } from "../components/common/Card"
 import { PageContainer } from "../components/layout/PageContainer"
 import { RiasecRadarChart } from "../components/visualization/RiasecRadarChart"
+import { AspirationAlignmentCard } from "../components/xai/AspirationAlignmentCard"
+import { TrendBadge } from "../components/xai/TrendBadge"
 import { TwoTierFunnelRecommendation } from "../components/xai/TwoTierFunnelRecommendation"
 import { useAuth } from "../context/AuthContext"
 import { MOET_435_MAJORS } from "../data/moetMajors435"
@@ -30,6 +32,10 @@ import {
   riasecData as fallbackRiasec,
   type RiasecRadarPoint,
 } from "../services/mockData"
+import type {
+  AspirationAnalysisPayload,
+  CareerAspirationInput,
+} from "../types/assessment"
 import type { FunnelRecommendationData, Major } from "../types/major"
 import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
 
@@ -49,6 +55,7 @@ interface DashboardOverviewPayload {
   scoreBarData?: Array<{ name: string; value: number }>
   majors?: Major[]
   funnel?: FunnelRecommendationData
+  aspirationAnalysis?: AspirationAnalysisPayload | null
 }
 
 interface TaxonomyCatalogItem {
@@ -59,6 +66,10 @@ interface TaxonomyCatalogItem {
   description?: string
   subject_blocks?: string[]
   blocks?: string[]
+  is_trending?: boolean
+  trend_tier?: "TIER_1" | "TIER_2" | "TIER_3" | null
+  trend_priority?: number
+  trend_reason?: string | null
 }
 
 const ARCHETYPES: Record<string, string> = {
@@ -428,6 +439,7 @@ export function Dashboard() {
     assessment,
     history,
     activeHistoryId,
+    update,
     reset,
     selectHistoryAttempt,
     deleteHistoryAttempt,
@@ -435,6 +447,7 @@ export function Dashboard() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [data, setData] = useState<DashboardOverviewPayload | null>(null)
+  const [isAnalyzingAspiration, setIsAnalyzingAspiration] = useState(false)
   const [catalog, setCatalog] = useState<TaxonomyCatalogItem[]>(MOET_435_MAJORS)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedCategory, setSelectedCategory] = useState("ALL")
@@ -454,6 +467,7 @@ export function Dashboard() {
   useEffect(() => {
     let mounted = true
     if (hasCompletedAssessment) {
+      setIsAnalyzingAspiration(true)
       const payload = buildEvaluateProfilePayload(assessment, 435)
       apiRequest<DashboardOverviewPayload | null>(
         "/recommender/evaluate",
@@ -469,6 +483,9 @@ export function Dashboard() {
           }
         })
         .catch(() => {})
+        .finally(() => {
+          if (mounted) setIsAnalyzingAspiration(false)
+        })
     } else {
       setData(null)
     }
@@ -487,7 +504,18 @@ export function Dashboard() {
     return () => {
       mounted = false
     }
-  }, [hasCompletedAssessment, assessment.answers, assessment.cognitive, assessment.scores])
+  }, [
+    hasCompletedAssessment,
+    assessment.answers,
+    assessment.cognitive,
+    assessment.scores,
+    assessment.aspiration,
+  ])
+
+  const handleUpdateAspiration = (nextAspiration: CareerAspirationInput) => {
+    setIsAnalyzingAspiration(true)
+    update({ aspiration: nextAspiration })
+  }
 
   useEffect(() => {
     if (searchParams.get("search") === "1" && catalogRef.current) {
@@ -781,17 +809,19 @@ export function Dashboard() {
 
   const filteredCatalog = useMemo(() => {
     const q = searchQuery.trim().toLowerCase()
-    return catalog.filter((item) => {
-      const majorName = (item.name_vi || item.name || "").toLowerCase()
-      const matchCat =
-        selectedCategory === "ALL" || item.category === selectedCategory
-      const matchQuery =
-        !q ||
-        item.major_code.toLowerCase().includes(q) ||
-        majorName.includes(q) ||
-        (item.category && item.category.toLowerCase().includes(q))
-      return matchCat && matchQuery
-    })
+    return catalog
+      .filter((item) => {
+        const majorName = (item.name_vi || item.name || "").toLowerCase()
+        const matchCat =
+          selectedCategory === "ALL" || item.category === selectedCategory
+        const matchQuery =
+          !q ||
+          item.major_code.toLowerCase().includes(q) ||
+          majorName.includes(q) ||
+          (item.category && item.category.toLowerCase().includes(q))
+        return matchCat && matchQuery
+      })
+      .sort((a, b) => (b.trend_priority || 0) - (a.trend_priority || 0))
   }, [catalog, searchQuery, selectedCategory])
 
   const visibleCatalog = showAllCatalog
@@ -972,6 +1002,14 @@ export function Dashboard() {
               </div>
             )}
 
+            {/* AI Aspiration Alignment Agent Summary Card */}
+            <AspirationAlignmentCard
+              analysis={data?.aspirationAnalysis ?? null}
+              currentAspiration={assessment.aspiration}
+              onUpdateAspiration={handleUpdateAspiration}
+              isAnalyzing={isAnalyzingAspiration}
+            />
+
             {/* Clean 2-Column Layout: Single Left Profile Card + Right 2-Tier Funnel */}
             <div className="grid gap-6 lg:grid-cols-[.82fr_1.18fr]">
               {/* Left Column: Single Unified Profile Card */}
@@ -1090,10 +1128,17 @@ export function Dashboard() {
                     className="group flex flex-col justify-between rounded-2xl border border-white/80 bg-white/55 p-4 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/80"
                   >
                     <div>
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="rounded-md bg-sky-500/12 px-2 py-0.5 text-[10px] font-extrabold text-sky-700">
-                          Mã {item.major_code}
-                        </span>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="rounded-md bg-sky-500/12 px-2 py-0.5 text-[10px] font-extrabold text-sky-700">
+                            Mã {item.major_code}
+                          </span>
+                          <TrendBadge
+                            tier={item.trend_tier}
+                            isTrending={item.is_trending}
+                            reason={item.trend_reason}
+                          />
+                        </div>
                         {blocks.length > 0 && (
                           <span className="text-[10px] font-bold text-slate-500">
                             {blocks.slice(0, 3).join(", ")}
