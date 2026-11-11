@@ -352,10 +352,11 @@ async def calculate_3pillar_recommendations(
             block_subjs = None
             effective_matched = False
         else:
-            # Trường hợp chỉ truyền vector RIASEC (chưa nhập điểm học tập)
-            raw_block_sum = 21.5
+            # Chưa nhập bất kỳ điểm học lực nào -> KHÔNG suy đoán điểm khối (trước đây hard-code 21.5đ).
+            # Trả về tier UNKNOWN để giao diện không đưa ra kết luận TARGET/REACH sai lệch.
+            raw_block_sum = None
             block_subjs = None
-            effective_matched = True
+            effective_matched = False
 
         feasibility = evaluate_admission_feasibility(
             raw_block_sum=raw_block_sum,
@@ -369,6 +370,7 @@ async def calculate_3pillar_recommendations(
             block_subjects=block_subjs,
             benchmark_override=bm_override,
             min_recommended_override=min_override,
+            has_academic_data=has_any_grades,
         )
 
         # --- GIẢI THÍCH XAI TẤT ĐỊNH ---
@@ -386,6 +388,11 @@ async def calculate_3pillar_recommendations(
 
         if feasibility["feasibility_tier"] == "REACH":
             top_factors.insert(0, f"Chặn ràng buộc điểm: {feasibility['feasibility_label']}. {feasibility['admission_advice']}")
+        elif feasibility["feasibility_tier"] == "UNKNOWN":
+            top_factors.insert(
+                0,
+                f"Chưa đủ dữ liệu xét tuyển: {feasibility['admission_advice']}",
+            )
         else:
             disp_sum = feasibility["best_block_score"] if feasibility["best_block_score"] is not None else raw_block_sum
             top_factors.insert(0, f"Đạt ngưỡng tuyển sinh: Khối {best_block or 'xét tuyển'} ({disp_sum}đ) phù hợp mức chuẩn (~{feasibility['benchmark_cutoff']}đ).")
@@ -699,11 +706,15 @@ async def evaluate_dashboard_profile_bundle(
 
     effective_riasec = student_riasec or {"R": 0.5, "I": 0.5, "A": 0.5, "S": 0.5, "E": 0.5, "C": 0.5}
     student_zscores = compute_block_zscores_from_grades(norm_raw_grades) if norm_raw_grades else {}
+    has_academic_data = bool(norm_raw_grades) or any(
+        m.feasibility_tier in ("TARGET", "REACH") for m in rec_resp.recommendations
+    )
     riasec_data, best_block_stats = build_radar_and_block_summary(
         effective_riasec,
         student_zscores,
         norm_raw_grades,
     )
+    best_block_stats["has_academic_data"] = has_academic_data
 
     funnel_payload = build_two_tier_funnel_payload(rec_resp.recommendations)
 
@@ -719,6 +730,7 @@ async def evaluate_dashboard_profile_bundle(
 
     return {
         "has_assessment": True,
+        "has_academic_data": has_academic_data,
         "user_name": user_name or "Học sinh",
         "total_majors_evaluated": rec_resp.total_majors_evaluated,
         "weights_applied": rec_resp.weights_applied,

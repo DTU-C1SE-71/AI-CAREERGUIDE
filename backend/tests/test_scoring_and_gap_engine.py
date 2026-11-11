@@ -956,6 +956,79 @@ class TestCareerAspirationAgent:
         finally:
             app.dependency_overrides.clear()
 
+    def test_aspiration_no_grades_returns_need_academic_data_and_unknown_tier(self):
+        """Đảm bảo không bịa điểm khi học sinh chưa nhập học bạ."""
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.core.database import get_db
+
+        async def _override_get_db_none():
+            yield None
+
+        app.dependency_overrides[get_db] = _override_get_db_none
+        try:
+            client = TestClient(app)
+            res = client.post(
+                "/api/v1/recommender/analyze-aspiration",
+                json={
+                    "riasec_answers": {"I1": 5, "I2": 5, "R1": 4, "R2": 4, "C1": 3},
+                    "grades_by_subject": {},
+                    "aspiration": {"dream_job": "Kỹ sư Trí tuệ nhân tạo & Lập trình phần mềm"},
+                    "top_k": 435,
+                },
+            )
+            assert res.status_code == 200
+            asp = res.json()
+            assert asp["alignment_status"] == "NEED_ACADEMIC_DATA"
+            assert asp["has_academic_data"] is False
+            assert asp["score_basis"] == "RIASEC_ONLY"
+            assert asp["dream_majors"][0]["feasibility_tier"] == "UNKNOWN"
+            assert "chưa nhập điểm học lực" in asp["agent_verdict"].lower()
+        finally:
+            app.dependency_overrides.clear()
+
+    def test_aspiration_expanded_career_clusters(self):
+        """Kiểm tra các cụm nghề mở rộng: phi công, ca sĩ, đầu bếp, an ninh."""
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.core.database import get_db
+
+        async def _override_get_db_none():
+            yield None
+
+        app.dependency_overrides[get_db] = _override_get_db_none
+        try:
+            client = TestClient(app)
+            # Test phi công hàng không
+            res1 = client.post(
+                "/api/v1/recommender/analyze-aspiration",
+                json={
+                    "riasec_answers": {"R1": 5, "I1": 4, "C1": 4},
+                    "grades_by_subject": {"Toán": 9.0, "Vật lý": 9.0, "Tiếng Anh": 8.5},
+                    "aspiration": {"dream_job": "Phi công lái máy bay dân dụng"},
+                    "top_k": 435,
+                },
+            )
+            assert res1.status_code == 200
+            majors1 = [m["major_name"].lower() for m in res1.json()["dream_majors"]]
+            assert any(k in " ".join(majors1) for k in ("hàng không", "vận tải", "hoạt động bay"))
+
+            # Test ca sĩ thanh nhạc
+            res2 = client.post(
+                "/api/v1/recommender/analyze-aspiration",
+                json={
+                    "riasec_answers": {"A1": 5, "A2": 5, "S1": 4},
+                    "grades_by_subject": {"Ngữ văn": 8.0},
+                    "aspiration": {"dream_job": "Ca sĩ thần tượng thanh nhạc"},
+                    "top_k": 435,
+                },
+            )
+            assert res2.status_code == 200
+            majors2 = [m["major_name"].lower() for m in res2.json()["dream_majors"]]
+            assert any(k in " ".join(majors2) for k in ("thanh nhạc", "âm nhạc", "biểu diễn"))
+        finally:
+            app.dependency_overrides.clear()
+
 
 # =========================================================================
 # 11. AI TREND HUNTER AGENT & MULTI-TIER PRIORITIZATION TESTS
