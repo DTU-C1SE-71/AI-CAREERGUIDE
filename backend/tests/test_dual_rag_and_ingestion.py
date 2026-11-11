@@ -632,3 +632,36 @@ class TestAIExplanationAndChatCounselor:
             assert result.preview_reply == "PONG"
             assert result.latency_ms >= 0.0
 
+    @pytest.mark.anyio
+    async def test_dynamic_max_token_resolution_from_provider_models(self):
+        from app.core.llm_client import (
+            _match_model_record,
+            _parse_capabilities,
+            resolve_model_token_limits,
+            clear_model_caps_cache,
+        )
+        from app.services.llamaindex_rag_orchestrator.guidance_rag import get_llm_status
+
+        clear_model_caps_cache()
+        sample_models = [
+            {
+                "id": "cx/gpt-6-luna",
+                "capabilities": {"contextWindow": 272000, "maxOutput": 128000},
+                "context_length": 272000,
+                "max_completion_tokens": 128000,
+            }
+        ]
+        matched = _match_model_record(sample_models, "gpt-6-luna")
+        assert matched is not None
+        caps = _parse_capabilities(matched)
+        assert caps["max_output_tokens"] == 128000
+        assert caps["context_window"] == 272000
+        assert caps["max_context_chars"] >= 240000
+
+        limits = await resolve_model_token_limits()
+        assert limits["max_output_tokens"] >= 128000
+
+        status_info = get_llm_status()
+        assert status_info.max_tokens >= 128000
+        assert status_info.context_window >= 272000
+

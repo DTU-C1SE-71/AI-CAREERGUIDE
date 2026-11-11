@@ -53,6 +53,10 @@ class Settings(BaseSettings):
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536
     LLM_MODEL: str = "mistralai/mistral-large-2512"
+    LLM_MAX_TOKENS: int = 128000
+    LLM_MAX_CONTEXT_TOKENS: int = 272000
+    LLM_MAX_CONTEXT_CHARS: int = 240000
+    LLM_TIMEOUT_SECONDS: float = 120.0
 
     # 3-Pillar Scoring Weights (Default: RIASEC 0.45, Academic 0.35, Preference 0.20)
     WEIGHT_RIASEC: float = 0.45
