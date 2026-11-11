@@ -63,6 +63,7 @@ function MajorBriefTile({
   tagLabel: string
 }) {
   const isTarget = major.feasibility_tier === "TARGET"
+  const isUnknown = major.feasibility_tier === "UNKNOWN"
   return (
     <Link
       to={`/majors/${major.major_code}`}
@@ -80,15 +81,19 @@ function MajorBriefTile({
             className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-extrabold ${
               isTarget
                 ? "bg-sky-600 text-white"
-                : "border border-slate-300 bg-slate-100 text-slate-700"
+                : isUnknown
+                  ? "border border-amber-300 bg-amber-50 text-amber-800"
+                  : "border border-slate-300 bg-slate-100 text-slate-700"
             }`}
           >
             {isTarget ? (
               <CheckCircle2 className="size-3" />
+            ) : isUnknown ? (
+              <Compass className="size-3 text-amber-600" />
             ) : (
               <ShieldAlert className="size-3" />
             )}
-            {isTarget ? "Đủ điểm (TARGET)" : "Thử thách (REACH)"}
+            {isTarget ? "Đủ điểm (TARGET)" : isUnknown ? "Chưa có điểm" : "Thử thách (REACH)"}
           </span>
         </div>
 
@@ -201,7 +206,9 @@ export function AspirationAlignmentCard({
         ? "border-sky-300/80 bg-sky-100 text-sky-900"
         : analysis?.alignment_status === "TRAIT_DIVERGENCE"
           ? "border-cyan-300/80 bg-cyan-50 text-cyan-900"
-          : "border-slate-200 bg-slate-100 text-slate-700"
+          : analysis?.alignment_status === "NEED_ACADEMIC_DATA"
+            ? "border-amber-300/80 bg-amber-50 text-amber-900"
+            : "border-slate-200 bg-slate-100 text-slate-700"
 
   return (
     <div className="mb-6 rounded-[28px] border border-white/85 bg-white/55 p-5 sm:p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_16px_44px_rgba(14,165,233,0.1)] backdrop-blur-2xl">

@@ -22,7 +22,7 @@ export interface AspirationMajorBrief {
   riasec_fit: number
   academic_fit: number
   cognitive_fit: number
-  feasibility_tier: "TARGET" | "REACH"
+  feasibility_tier: "TARGET" | "REACH" | "UNKNOWN"
   feasibility_label: string
   best_matching_block?: string | null
   best_block_score?: number | null
@@ -50,6 +50,7 @@ export interface AspirationAnalysisPayload {
     | "PASSION_MATCH_SCORE_GAP"
     | "TRAIT_DIVERGENCE"
     | "EXPLORATORY_DISCOVERY"
+    | "NEED_ACADEMIC_DATA"
   alignment_label: string
   alignment_score: number
   holland_code: string
@@ -60,6 +61,8 @@ export interface AspirationAnalysisPayload {
   agent_verdict: string
   key_takeaways: string[]
   is_llm_enriched?: boolean
+  has_academic_data?: boolean
+  score_basis?: string
 }
 
 export interface AssessmentState {
