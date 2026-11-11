@@ -874,7 +874,7 @@ async def apply_trending_markers(
     # Cập nhật trực tiếp bảng `majors` trong CSDL
     if db is not None:
         try:
-            res = await db.execute(select(Major))
+            res = await db.execute(select(Major).where(Major.is_active == True))
             db_majors = list(res.scalars().all())
             existing_db_codes = {str(m.major_code).strip() for m in db_majors}
 
@@ -1221,7 +1221,7 @@ async def get_trending_status_async(db: Optional[AsyncSession] = None) -> Dict[s
     # Nếu kết nối được DB thực tế và bảng majors đang chứa dấu `_trend`, ưu tiên đồng bộ từ DB
     if db is not None and settings.ENVIRONMENT != "test":
         try:
-            res = await db.execute(select(Major))
+            res = await db.execute(select(Major).where(Major.is_active == True))
             db_rows = list(res.scalars().all())
             db_trends: Dict[str, Dict[str, Any]] = {}
             for m in db_rows:

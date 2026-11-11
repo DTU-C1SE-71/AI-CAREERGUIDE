@@ -486,6 +486,10 @@ export function AdminHITLDashboard() {
       }
       const totalImported = data.total ?? previewMajors.length
 
+      const deactivatedNote =
+        data.deactivated && data.deactivated > 0
+          ? `, Tạm ẩn mã cũ: ${data.deactivated}`
+          : ""
       const newRecord: StagingRecord = {
         id: Date.now(),
         title: `Import · ${previewFile.name}`,
@@ -494,7 +498,7 @@ export function AdminHITLDashboard() {
         type: "Excel Auto-Map",
         status: "APPROVED",
         updated: "Vừa đồng bộ",
-        markdown: `Đã nạp **${totalImported} ngành** từ Sheet \`${activeSheetName}\` (Mới: ${data.inserted ?? 0}, Cập nhật: ${data.updated ?? totalImported}).`,
+        markdown: `Đã nạp **${totalImported} ngành** từ Sheet \`${activeSheetName}\` (Mới: ${data.inserted ?? 0}, Cập nhật: ${data.updated ?? totalImported}${deactivatedNote}).`,
       }
       setRecords((prev) => [newRecord, ...prev])
       setSelectedId(newRecord.id)
@@ -507,7 +511,7 @@ export function AdminHITLDashboard() {
       }
 
       showToast(
-        `Đã lưu ${totalImported} ngành vào CSDL! (Thêm mới: ${data.inserted ?? 0}, Cập nhật: ${data.updated ?? 0})`,
+        `Đã lưu ${totalImported} ngành vào CSDL! (Thêm mới: ${data.inserted ?? 0}, Cập nhật: ${data.updated ?? 0}${deactivatedNote})`,
       )
       setPreviewFile(null)
       setPreviewMajors([])

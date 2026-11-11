@@ -1253,7 +1253,7 @@ class TestExcelBulkImportPersistence:
             from unittest.mock import AsyncMock
             yield AsyncMock()
 
-        async def _broken_bulk_sync(db, majors_data):
+        async def _broken_bulk_sync(db, majors_data, deactivate_missing=False):
             raise RuntimeError("Simulated PostgreSQL MissingGreenlet failure")
 
         monkeypatch.setattr(service, "bulk_sync_majors", _broken_bulk_sync)
@@ -1271,6 +1271,45 @@ class TestExcelBulkImportPersistence:
             assert "Không thể lưu" in res.json()["detail"]
         finally:
             app.dependency_overrides.clear()
+
+    @pytest.mark.anyio
+    async def test_bulk_sync_majors_deactivates_legacy_codes_when_replace_catalog_enabled(self):
+        import uuid
+        from unittest.mock import AsyncMock, MagicMock
+        from app.models.taxonomy import SubjectBlock
+        from app.services.taxonomy.service import bulk_sync_majors
+
+        sb_id = uuid.uuid4()
+        stale_id = uuid.uuid4()
+        block_a00 = SubjectBlock(
+            id=sb_id,
+            block_code="A00",
+            name="Toán, Vật lí, Hóa học",
+            subjects=["Toán", "Vật lí", "Hóa học"],
+            national_mean=20.85,
+            national_std=3.25,
+        )
+        sb_res = MagicMock()
+        sb_res.scalars.return_value.all.return_value = [block_a00]
+        maj_res = MagicMock()
+        maj_res.scalars.return_value.all.return_value = []
+        active_res = MagicMock()
+        # Simulate one active incoming code and one stale TT09 code in DB
+        active_res.all.return_value = [(stale_id, "7480202"), (uuid.uuid4(), "7480107")]
+        update_res = MagicMock()
+
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.execute = AsyncMock(side_effect=[sb_res, maj_res, active_res, update_res])
+
+        res = await bulk_sync_majors(
+            db,
+            [{"major_code": "7480107", "name": "Trí tuệ nhân tạo", "category": "CNTT"}],
+            deactivate_missing=True,
+        )
+        assert res["deactivated"] == 1
+        assert res["total"] == 1
+        db.commit.assert_awaited_once()
 
 
 
