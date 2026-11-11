@@ -124,6 +124,30 @@ class TrendAgentRunRequest(BaseModel):
         max_length=250,
         description="Từ khóa tìm kiếm thông tin các ngành xu hướng trên Internet",
     )
+    auto_save: bool = Field(
+        default=False,
+        description="Mặc định False để trả về bản nháp cho Admin rà soát trước khi bấm nút Lưu vào CSDL",
+    )
+
+
+class TrendDraftMajorItem(BaseModel):
+    major_code: str
+    major_name: Optional[str] = None
+    category: Optional[str] = None
+    trend_tier: str = Field(description="TIER_1 | TIER_2 | TIER_3 | NONE")
+    trend_score: Optional[int] = 80
+    trend_reason: Optional[str] = None
+    trend_sources: List[Dict[str, str]] = Field(default_factory=list)
+
+
+class TrendAgentSaveRequest(BaseModel):
+    focus_query: Optional[str] = ""
+    articles_scanned: int = 0
+    search_sources: List[Dict[str, Any]] = Field(default_factory=list)
+    majors: List[TrendDraftMajorItem] = Field(
+        ...,
+        description="Danh sách các ngành xu hướng đã được Admin duyệt để lưu vào CSDL",
+    )
 
 
 class TrendTierUpdateRequest(BaseModel):

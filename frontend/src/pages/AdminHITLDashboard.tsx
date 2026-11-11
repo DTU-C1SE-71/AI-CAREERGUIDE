@@ -474,9 +474,16 @@ export function AdminHITLDashboard() {
         body: formData,
       })
       if (!res.ok) {
-        throw new Error("Backend chưa phản hồi (cần chạy Backend cổng 8000 để lưu vào CSDL).")
+        const errBody = await res.json().catch(() => null)
+        throw new Error(
+          errBody?.detail ||
+            "Không thể lưu dữ liệu vào CSDL (cần kiểm tra Backend/PostgreSQL).",
+        )
       }
       const data = await res.json()
+      if (data.persisted_to_db === false) {
+        throw new Error("Backend chưa ghi được dữ liệu vào CSDL PostgreSQL.")
+      }
       const totalImported = data.total ?? previewMajors.length
 
       const newRecord: StagingRecord = {
@@ -491,8 +498,17 @@ export function AdminHITLDashboard() {
       }
       setRecords((prev) => [newRecord, ...prev])
       setSelectedId(newRecord.id)
-      setDbHealth((prev) => ({ ...prev, majors_count: totalImported }))
-      showToast(`Đã lưu ${totalImported} ngành vào CSDL!`)
+
+      const liveHealth = await apiRequest<DbHealthPayload | null>("/health/db", null)
+      if (liveHealth && liveHealth.majors_count !== undefined) {
+        setDbHealth(liveHealth)
+      } else {
+        setDbHealth((prev) => ({ ...prev, majors_count: totalImported }))
+      }
+
+      showToast(
+        `Đã lưu ${totalImported} ngành vào CSDL! (Thêm mới: ${data.inserted ?? 0}, Cập nhật: ${data.updated ?? 0})`,
+      )
       setPreviewFile(null)
       setPreviewMajors([])
       setParsedSheets([])
