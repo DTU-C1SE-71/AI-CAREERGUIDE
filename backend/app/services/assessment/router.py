@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_current_user, get_optional_current_user
 from app.models.identity import User
 from app.schemas.assessment import (
     RIASECAssessmentSubmit,
@@ -33,12 +33,18 @@ async def get_active_questions_alt(
 @router.post("/submit", response_model=AssessmentSubmissionResponse, status_code=status.HTTP_200_OK)
 async def submit_assessment_alt(
     payload: AssessmentSubmissionRequest,
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Submits student assessment responses (alias under /assessment prefix)."""
+    """Lưu bài đánh giá RIASEC & Nhận thức theo đúng user_id đang đăng nhập (hoặc tính toán không lưu DB cho khách)."""
     import uuid
-    mock_user_id = uuid.uuid4()
-    return await modular_assessment_service.process_assessment_submission(db, mock_user_id, payload)
+    target_user_id = current_user.id if current_user else uuid.uuid4()
+    return await modular_assessment_service.process_assessment_submission(
+        db,
+        target_user_id,
+        payload,
+        persist_to_db=(current_user is not None),
+    )
 
 
 

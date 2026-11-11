@@ -1,27 +1,27 @@
 import { motion } from "framer-motion"
 import {
-  Activity,
   Check,
   CheckCircle2,
+  ChevronLeft,
   ChevronRight,
   Clock3,
-  CloudCog,
+  Copy,
   Database,
-  FileJson,
-  FileSearch,
+  Download,
   FileSpreadsheet,
-  Filter,
+  FileText,
   Layers3,
   RefreshCw,
   Search,
-  ShieldCheck,
   Sparkles,
   UploadCloud,
   X,
 } from "lucide-react"
-import { type ChangeEvent, useEffect, useMemo, useRef, useState } from "react"
+import { type ChangeEvent, type DragEvent, useEffect, useMemo, useRef, useState } from "react"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
+import * as XLSX from "xlsx"
+import { TrendAgentPanel } from "../components/admin/TrendAgentPanel"
 import { Badge } from "../components/common/Badge"
 import { Button } from "../components/common/Button"
 import { PageContainer } from "../components/layout/PageContainer"
@@ -36,126 +36,230 @@ interface StagingRecord {
   source: string
   type: string
   status: Status
-  confidence: number
   updated: string
   markdown: string
+}
+
+interface PreviewMajorItem {
+  major_code: string
+  raw_code?: string
+  name: string
+  category?: string
+  field_code?: string
+  group_code?: string
+  group_name?: string
+  cip_code?: string
+  holland_code?: string
+  legacy_tt09_codes?: string
+  blocks?: string[]
+  riasec?: Record<string, number>
+  cognitive?: Record<string, string>
 }
 
 const initialRecords: StagingRecord[] = [
   {
     id: 1,
-    title: "Lộ trình Khoa học dữ liệu · 4 tuần",
+    title: "Lộ trình Khoa học dữ liệu",
     majorCode: "7460108",
-    source: "daa.uit.edu.vn · ocw.mit.edu",
+    source: "daa.uit.edu.vn",
     type: "Tavily Discovery",
     status: "PENDING",
-    confidence: 94.2,
     updated: "2 phút trước",
-    markdown: `## Tuần 1 — Nền tảng dữ liệu
-
-- Xác suất và thống kê mô tả
-- Python: biến, hàm và cấu trúc dữ liệu
-- Thực hành trên bộ dữ liệu điểm thi
-
-## Tuần 2 — Công cụ
-
-- Pandas và Google Colab
-- Làm sạch dữ liệu thiếu
-- Trực quan hóa phân phối điểm
-
-## Tuần 3 — Mini project
-
-Phân tích các yếu tố ảnh hưởng đến kết quả học tập.
-
-## Tuần 4 — Đánh giá
-
-Trình bày insight, nhận phản hồi và cập nhật hồ sơ năng lực.`,
+    markdown: `## Tuần 1\n- Xác suất thống kê\n- Python cơ bản`,
   },
   {
     id: 2,
-    title: "Danh mục ngành cấp IV · TT09",
-    majorCode: "MOET-TT09",
+    title: "Danh mục ngành TT09",
+    majorCode: "7480101",
     source: "moet.gov.vn",
-    type: "Qwen3-VL OCR",
+    type: "Excel Auto-Map",
     status: "PENDING",
-    confidence: 98.7,
     updated: "18 phút trước",
-    markdown: `## Kết quả OCR
-
-**Mã ngành:** 7480101  
-**Tên ngành:** Khoa học máy tính  
-**Nhóm ngành:** Máy tính và công nghệ thông tin
-
-Nguồn trích dẫn: Phụ lục I — Danh mục giáo dục, đào tạo cấp IV trình độ đại học.`,
+    markdown: `**Mã:** 7480101 · **Ngành:** Khoa học máy tính · **CIP:** 11.0701 · **Holland:** IRC`,
   },
   {
     id: 3,
     title: "Lộ trình Kỹ thuật phần mềm",
     majorCode: "7480103",
-    source: "hust.edu.vn · coursera.org",
+    source: "hust.edu.vn",
     type: "Tavily Discovery",
     status: "APPROVED",
-    confidence: 92.8,
     updated: "1 giờ trước",
-    markdown: `## Trạng thái
-
-Đã chuẩn hóa 12 nhiệm vụ học tập và lưu embedding vào **pgvector**.`,
-  },
-  {
-    id: 4,
-    title: "Đề án tuyển sinh nguồn không xác minh",
-    majorCode: "7340115",
-    source: "third-party-blog.example",
-    type: "Web Scrape",
-    status: "REJECTED",
-    confidence: 61.4,
-    updated: "Hôm qua",
-    markdown: `## Lý do từ chối
-
-Nguồn không có tác giả, thời gian cập nhật và văn bản đối chiếu chính thức.`,
+    markdown: `Đã lưu 12 nhiệm vụ vào **pgvector**.`,
   },
 ]
 
 interface DbHealthPayload {
   status?: string
-  database_engine?: string
   majors_count?: number
-  questions_count?: number
-  users_count?: number
-  message?: string
+}
+
+interface ParsedSheetOption {
+  sheet_name: string
+  count: number
+  majors: PreviewMajorItem[]
+}
+
+const ITEMS_PER_PAGE = 50
+
+function parseExcelClientFallback(buffer: ArrayBuffer): {
+  activeSheet: string
+  majors: PreviewMajorItem[]
+  sheets: ParsedSheetOption[]
+} {
+  const wb = XLSX.read(buffer, { type: "array" })
+  const allSheets: ParsedSheetOption[] = []
+
+  const headerMapLookup: Record<string, string> = {
+    field_code: "field_code",
+    group_code: "group_code",
+    group_name: "group_name",
+    major_code: "major_code",
+    "mã ngành": "major_code",
+    ma_nganh: "major_code",
+    major_name: "major_name",
+    "tên ngành đào tạo": "major_name",
+    ten_nganh: "major_name",
+    legacy_tt09_codes: "legacy_tt09_codes",
+    cip_code: "cip_code",
+    holland_code: "holland_code",
+    riasec_r: "riasec_r",
+    riasec_i: "riasec_i",
+    riasec_a: "riasec_a",
+    riasec_s: "riasec_s",
+    riasec_e: "riasec_e",
+    riasec_c: "riasec_c",
+    subject_blocks: "subject_blocks",
+  }
+
+  for (const sheetName of wb.SheetNames) {
+    const ws = wb.Sheets[sheetName]
+    const rows = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: "" })
+    if (!rows.length) continue
+
+    let headerIdx = -1
+    const colIdxMap: Record<number, string> = {}
+
+    for (let i = 0; i < Math.min(20, rows.length); i++) {
+      const rowLow = rows[i].map((c) => String(c ?? "").trim().toLowerCase())
+      if (rowLow.some((c) => c === "major_code" || c === "mã ngành" || c === "ma_nganh")) {
+        headerIdx = i
+        rowLow.forEach((col, cIdx) => {
+          if (headerMapLookup[col]) colIdxMap[cIdx] = headerMapLookup[col]
+        })
+        break
+      }
+    }
+
+    if (headerIdx === -1) continue
+
+    const parsed: PreviewMajorItem[] = []
+    const seen = new Set<string>()
+
+    for (let r = headerIdx + 1; r < rows.length; r++) {
+      const row = rows[r]
+      const rec: Record<string, string> = {}
+      Object.entries(colIdxMap).forEach(([idxStr, key]) => {
+        rec[key] = String(row[Number(idxStr)] ?? "").trim()
+      })
+
+      const digits = (rec.major_code || "").replace(/\D/g, "")
+      if (digits.length !== 6 && digits.length !== 7) continue
+      if (seen.has(digits)) continue
+      seen.add(digits)
+
+      const full7 = digits.length === 6 ? `7${digits}` : digits
+      const raw6 = digits.length === 7 && digits.startsWith("7") ? digits.slice(1) : digits
+      const numOr = (v: string, fb: number) => {
+        const n = parseFloat(v)
+        return Number.isFinite(n) ? Number(n.toFixed(2)) : fb
+      }
+      const riasec = {
+        R: numOr(rec.riasec_r, 0.5),
+        I: numOr(rec.riasec_i, 0.6),
+        A: numOr(rec.riasec_a, 0.3),
+        S: numOr(rec.riasec_s, 0.4),
+        E: numOr(rec.riasec_e, 0.4),
+        C: numOr(rec.riasec_c, 0.5),
+      }
+      const blocks = rec.subject_blocks
+        ? rec.subject_blocks.split(/[,;/]/).map((b) => b.trim().toUpperCase()).filter(Boolean)
+        : ["A00", "A01", "D01"]
+
+      parsed.push({
+        major_code: full7,
+        raw_code: raw6,
+        name: rec.major_name || `Ngành ${raw6}`,
+        field_code: rec.field_code || raw6.slice(0, 2),
+        group_code: rec.group_code || raw6.slice(0, 4),
+        group_name: rec.group_name,
+        cip_code: rec.cip_code || "-",
+        holland_code: rec.holland_code || "IRS",
+        legacy_tt09_codes: rec.legacy_tt09_codes || full7,
+        blocks,
+        riasec,
+        cognitive: {
+          abstract_thinking: riasec.I >= 0.75 ? "high" : "medium",
+          analytical_reasoning: Math.max(riasec.I, riasec.C) >= 0.75 ? "high" : "medium",
+        },
+      })
+    }
+
+    if (parsed.length > 0) {
+      allSheets.push({ sheet_name: sheetName, count: parsed.length, majors: parsed })
+    }
+  }
+
+  if (allSheets.length === 0) {
+    return { activeSheet: "", majors: [], sheets: [] }
+  }
+  const activeTabIdx = Number((wb.Workbook?.Views?.[0] as { activeTab?: number } | undefined)?.activeTab ?? 0)
+  const activeTabName = wb.SheetNames[activeTabIdx]
+  const activeMatch = activeTabName ? allSheets.find((s) => s.sheet_name === activeTabName) : undefined
+  const best = activeMatch ?? allSheets[0]
+  return { activeSheet: best.sheet_name, majors: best.majors, sheets: allSheets }
 }
 
 export function AdminHITLDashboard() {
   const [records, setRecords] = useState<StagingRecord[]>(initialRecords)
-  const [selectedId, setSelectedId] = useState<number | string>(
-    initialRecords[0].id,
-  )
+  const [selectedId, setSelectedId] = useState<number | string>(initialRecords[0].id)
   const [statusFilter, setStatusFilter] = useState<Status | "ALL">("ALL")
   const [searchTerm, setSearchTerm] = useState("")
-  const [previewMode, setPreviewMode] = useState<"markdown" | "json">(
-    "markdown",
-  )
-  const [uploading, setUploading] = useState(false)
-  const [checkingHealth, setCheckingHealth] = useState(false)
+  const [previewMode, setPreviewMode] = useState<"markdown" | "json">("markdown")
   const [dbHealth, setDbHealth] = useState<DbHealthPayload | null>(null)
-  const [showLogsModal, setShowLogsModal] = useState(false)
-  const [actionToast, setActionToast] = useState<string | null>(null)
-  const [systemLogs, setSystemLogs] = useState<string[]>([
-    "[INFO] SQLite/PostgreSQL Dual-RAG Engine initialized (435 MOET TT74/2026 majors active)",
-    "[INFO] 3-Tier Auto-Enrichment Ready (94 Nhóm ngành Cấp III → US CIP 2020 + 6D RIASEC Vector)",
-    "[INFO] Zero-PII Guardrail active under Law 91/2025/QH15",
-  ])
+  const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null)
+  const [copiedPrompt, setCopiedPrompt] = useState(false)
+
+  // Drag & Drop + Preview state
+  const [isDragging, setIsDragging] = useState(false)
+  const [parsingFile, setParsingFile] = useState(false)
+  const [committingImport, setCommittingImport] = useState(false)
+  const [previewFile, setPreviewFile] = useState<File | null>(null)
+  const [previewMajors, setPreviewMajors] = useState<PreviewMajorItem[]>([])
+  const [parsedSheets, setParsedSheets] = useState<ParsedSheetOption[]>([])
+  const [activeSheetName, setActiveSheetName] = useState("")
+  const [parseTimeMs, setParseTimeMs] = useState<number | null>(null)
+  const [previewSearch, setPreviewSearch] = useState("")
+  const [previewPage, setPreviewPage] = useState(1)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const appendLog = (msg: string) => {
-    const ts = new Date().toLocaleTimeString("vi-VN")
-    setSystemLogs((prev) => [`[${ts}] ${msg}`, ...prev.slice(0, 19)])
+  const showToast = (msg: string, error = false) => {
+    setToast({ msg, error })
+    window.setTimeout(() => setToast(null), 4500)
   }
 
-  const showToast = (msg: string) => {
-    setActionToast(msg)
-    window.setTimeout(() => setActionToast(null), 3500)
-  }
+  // Prevent browser from navigating away if user drops file slightly outside dropzone
+  useEffect(() => {
+    const preventNav = (e: globalThis.DragEvent) => {
+      e.preventDefault()
+    }
+    window.addEventListener("dragover", preventNav)
+    window.addEventListener("drop", preventNav)
+    return () => {
+      window.removeEventListener("dragover", preventNav)
+      window.removeEventListener("drop", preventNav)
+    }
+  }, [])
 
   useEffect(() => {
     let mounted = true
@@ -178,17 +282,12 @@ export function AdminHITLDashboard() {
         const mapped: StagingRecord[] = apiRecords.map((r) => ({
           id: r.id,
           title: r.source_title || `Bản ghi ${r.major_code || "MOET"}`,
-          majorCode: r.major_code || "MOET-TT09",
+          majorCode: r.major_code || "MOET",
           source: r.source_url || "moet.gov.vn",
-          type: r.stream_type?.includes("STREAM_A")
-            ? "Qwen3-VL OCR"
-            : "Tavily Discovery",
+          type: r.stream_type?.includes("STREAM_A") ? "Excel Ingest" : "Tavily Discovery",
           status: r.status || "PENDING",
-          confidence: 95.4,
-          updated: "Vừa đồng bộ DB",
-          markdown:
-            r.raw_markdown ||
-            `## Bản ghi Staging (${r.major_code})\nĐã nạp từ CSDL quản trị HITL.`,
+          updated: "Đồng bộ",
+          markdown: r.raw_markdown || `**Mã:** ${r.major_code}`,
         }))
         setRecords((prev) => [...mapped, ...prev])
       }
@@ -202,13 +301,11 @@ export function AdminHITLDashboard() {
   const filteredRecords = useMemo(() => {
     const q = searchTerm.trim().toLowerCase()
     return records.filter((rec) => {
-      const matchStatus =
-        statusFilter === "ALL" || rec.status === statusFilter
+      const matchStatus = statusFilter === "ALL" || rec.status === statusFilter
       const matchSearch =
         !q ||
         rec.title.toLowerCase().includes(q) ||
-        rec.majorCode.toLowerCase().includes(q) ||
-        rec.source.toLowerCase().includes(q)
+        rec.majorCode.toLowerCase().includes(q)
       return matchStatus && matchSearch
     })
   }, [records, statusFilter, searchTerm])
@@ -223,43 +320,32 @@ export function AdminHITLDashboard() {
     [records],
   )
 
-  const kpis = [
-    {
-      label: "Ngành chuẩn MOET",
-      value: String(dbHealth?.majors_count || 435),
-      note: "TT74/2026 · CSDL trực tuyến",
-      icon: Database,
-      accent: "from-sky-400 to-sky-500",
-    },
-    {
-      label: "Chờ HITL duyệt",
-      value: String(pendingCount),
-      note: `${records.length} tổng bản ghi staging`,
-      icon: Clock3,
-      accent: "from-amber-400 to-orange-500",
-    },
-    {
-      label: "Cache retrieval",
-      value: "0.42s",
-      note: "SLA ≤ 1.0s (Đạt chuẩn)",
-      icon: Activity,
-      accent: "from-emerald-400 to-teal-500",
-    },
-    {
-      label: "Dual RAG",
-      value: dbHealth?.status === "connected" ? "Healthy" : "Active",
-      note: "MOET + Roadmap pgvector",
-      icon: Layers3,
-      accent: "from-sky-400 to-cyan-500",
-    },
-  ]
+  const indexedPreviewMajors = useMemo(() => {
+    const withStt = previewMajors.map((item, idx) => ({ stt: idx + 1, item }))
+    const q = previewSearch.trim().toLowerCase()
+    if (!q) return withStt
+    return withStt.filter(
+      ({ item }) =>
+        item.name?.toLowerCase().includes(q) ||
+        item.major_code?.toLowerCase().includes(q) ||
+        item.raw_code?.toLowerCase().includes(q) ||
+        item.cip_code?.toLowerCase().includes(q) ||
+        item.holland_code?.toLowerCase().includes(q) ||
+        item.group_code?.toLowerCase().includes(q) ||
+        item.legacy_tt09_codes?.toLowerCase().includes(q),
+    )
+  }, [previewMajors, previewSearch])
+
+  const totalPreviewPages = Math.max(1, Math.ceil(indexedPreviewMajors.length / ITEMS_PER_PAGE))
+  const paginatedPreviewMajors = useMemo(() => {
+    const start = (previewPage - 1) * ITEMS_PER_PAGE
+    return indexedPreviewMajors.slice(start, start + ITEMS_PER_PAGE)
+  }, [indexedPreviewMajors, previewPage])
 
   const updateStatus = async (status: Status) => {
     setRecords((current) =>
       current.map((record) =>
-        record.id === selected.id
-          ? { ...record, status, updated: "Vừa cập nhật" }
-          : record,
+        record.id === selected.id ? { ...record, status, updated: "Vừa cập nhật" } : record,
       ),
     )
     if (typeof selected.id === "string" && selected.id.length > 10) {
@@ -267,627 +353,653 @@ export function AdminHITLDashboard() {
         method: "POST",
         body: JSON.stringify({
           status,
-          review_notes:
-            status === "APPROVED"
-              ? "Approved via HITL Dashboard"
-              : "Rejected via HITL Dashboard",
+          review_notes: status === "APPROVED" ? "Approved" : "Rejected",
         }),
       })
     }
-    appendLog(
-      `HITL Review: Record "${selected.title}" (${selected.majorCode}) -> ${status}`,
-    )
-    showToast(
-      status === "APPROVED"
-        ? `Đã phê duyệt "${selected.title}" và xuất bản vào kho tri thức!`
-        : `Đã từ chối bản ghi "${selected.title}".`,
-    )
+    showToast(status === "APPROVED" ? `Đã duyệt "${selected.title}"` : `Đã từ chối "${selected.title}"`)
   }
 
   const EXTERNAL_AI_PROMPT =
     "Hãy đóng vai chuyên gia dữ liệu giáo dục đại học Việt Nam và chuẩn phân loại quốc tế O*NET/CIP. " +
     "Tôi đính kèm file PDF Thông tư danh mục ngành đào tạo của Bộ GD&ĐT và file Excel mẫu (MOET_Major_Import_Template_Standard.xlsx). " +
-    "Nhiệm vụ của bạn: Đọc toàn bộ Phụ lục I (Danh mục ngành) và Phụ lục II (Bảng chuyển đổi mã ngành cũ sang mới) trong file PDF, " +
-    "sau đó xuất ra file Excel tuân thủ CHÍNH XÁC 19 cột như tại Sheet 'MAU_NHAP_NGANH_CHUAN' của file Excel mẫu:\n" +
+    "Nhiệm vụ của bạn:\n" +
+    "1. Đọc TOÀN BỘ danh mục ngành trong Phụ lục I và bảng chuyển đổi mã ngành cũ (nếu có) ở Phụ lục II trong file PDF — trích xuất đầy đủ mọi ngành có trong văn bản (số lượng ngành linh hoạt theo từng Thông tư).\n" +
+    "2. Xuất ra file Excel (.xlsx) tuân thủ CHÍNH XÁC 19 cột như Sheet 'MAU_NHAP_NGANH_CHUAN' của file mẫu:\n" +
     "- Dòng 1 giữ nguyên tên kỹ thuật: field_code, field_name, group_code, group_name, major_code, major_name, legacy_tt09_codes, degree_levels, circular_note, cip_code, holland_code, riasec_r, riasec_i, riasec_a, riasec_s, riasec_e, riasec_c, subject_blocks, career_paths.\n" +
-    "- Trích xuất đầy đủ tất cả các ngành Cấp IV (mã 6 chữ số), ghép đúng mã Lĩnh vực Cấp II (2 chữ số) và mã Nhóm ngành Cấp III (4 chữ số).\n" +
-    "- Đối chiếu Phụ lục II để điền các mã ngành cũ (7 chữ số) vào cột legacy_tt09_codes và trình độ vào degree_levels.\n" +
-    "- Tham chiếu Sheet 'TU_DIEN_QUY_CHIEU_94_NHOM' kết hợp đặc thù từng ngành để điền mã CIP (cip_code), mã Holland 3 ký tự (holland_code), 6 trọng số RIASEC (từ 0.0 đến 1.0), tổ hợp xét tuyển (subject_blocks) và nghề nghiệp tiêu biểu (career_paths).\n" +
-    "- Xuất kết quả thành file .xlsx hoàn chỉnh để tôi tải về và import thẳng vào hệ thống."
+    "- Xóa các dòng ví dụ mẫu và điền toàn bộ dữ liệu thực tế từ Dòng 2 hoặc Dòng 3.\n" +
+    "3. Tham chiếu Sheet 'BANG_TRA_CUU_CIP_RIASEC' kết hợp đặc thù từng ngành để điền mã CIP (cip_code), mã Holland 3 ký tự (holland_code), 6 trọng số RIASEC (0.0 -> 1.0), tổ hợp xét tuyển (subject_blocks) và nghề nghiệp (career_paths).\n" +
+    "4. Xuất kết quả thành file .xlsx hoàn chỉnh để tôi tải về và import vào hệ thống."
 
   const copyExternalAiPrompt = async () => {
     try {
       await navigator.clipboard.writeText(EXTERNAL_AI_PROMPT)
-      appendLog("Copied External Web AI Prompt for MOET PDF -> Excel conversion")
-      showToast(
-        "Đã copy Prompt chuẩn! Hãy dán kèm File PDF + File Excel Mẫu vào ChatGPT/Claude/Gemini.",
-      )
+      setCopiedPrompt(true)
+      showToast("Đã copy Prompt AI!")
+      window.setTimeout(() => setCopiedPrompt(false), 2500)
     } catch {
-      showToast("Đã chuẩn bị Prompt mẫu trong Sheet 4 của File Excel Mẫu!")
+      showToast("Hãy copy Prompt tại Sheet 3 trong File Excel mẫu.", true)
     }
   }
 
   const downloadExcelTemplate = () => {
-    appendLog("Downloading MOET_Major_Import_Template_Standard.xlsx...")
-    window.open("/api/v1/taxonomy/template-excel", "_blank")
-    showToast(
-      "Đang tải xuống MOET_Major_Import_Template_Standard.xlsx (19 cột chuẩn · 435 ngành TT74)!",
-    )
+    const link = document.createElement("a")
+    link.href = "/MOET_Major_Import_Template_Standard.xlsx"
+    link.download = "MOET_Major_Import_Template_Standard.xlsx"
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    showToast("Đang tải xuống file Excel mẫu...")
   }
 
-  const handleFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    appendLog(
-      `Standard Excel Importer uploading: ${file.name} (${Math.round(file.size / 1024)} KB)`,
-    )
+  const processSelectedFile = async (file: File) => {
+    const ext = file.name.split(".").pop()?.toLowerCase()
+    if (!ext || !["xlsx", "xls", "csv"].includes(ext)) {
+      showToast("Chỉ hỗ trợ file .xlsx, .xls hoặc .csv!", true)
+      return
+    }
 
+    setParsingFile(true)
+    setPreviewFile(file)
+    setPreviewSearch("")
+    setPreviewPage(1)
+
+    const t0 = performance.now()
     try {
       const formData = new FormData()
       formData.append("file", file)
-      const res = await fetch("/api/v1/taxonomy/import-excel", {
+      const res = await fetch("/api/v1/taxonomy/import-excel?preview_only=true", {
         method: "POST",
         body: formData,
       })
-      const data = res.ok ? await res.json() : null
-      const totalImported = data?.total || 435
-
-      const newRecord: StagingRecord = {
-        id: Date.now(),
-        title: `Đồng bộ Excel Chuẩn · ${file.name}`,
-        majorCode: "TT74-EXCEL",
-        source: `${file.name} · 19 cột chuẩn`,
-        type: "Excel Auto-CIP/RIASEC",
-        status: "APPROVED",
-        confidence: 100.0,
-        updated: "Vừa đồng bộ CSDL",
-        markdown:
-          `## Kết quả Đồng bộ File Excel Chuẩn (${file.name})\n\n` +
-          `- **Tổng số ngành tự động đối chiếu & cập nhật:** **${totalImported} ngành** (24 Lĩnh vực · 94 Nhóm ngành)\n` +
-          `- **Cơ chế ánh xạ 3 tầng (Không cần AI nội bộ / Không nhập tay):**\n` +
-          `  1. **Tầng 1 (Mã Nhóm 4 số):** Tự động gán Mã CIP Quốc tế & Khung RIASEC chuẩn theo 94 nhóm ngành Cấp III.\n` +
-          `  2. **Tầng 2 (Từ khóa Chuyên ngành):** Tự động tinh chỉnh 6 chiều $(R, I, A, S, E, C)$ và Nhận thức theo tên ngành.\n` +
-          `  3. **Tầng 3 (Phụ lục II):** Tự động ánh xạ mã cũ 7 chữ số (TT09) sang mã mới 6 chữ số (TT74/2026).\n`,
+      if (res.ok) {
+        const data = await res.json()
+        const majors: PreviewMajorItem[] = data.majors || data.preview || []
+        const sheets: ParsedSheetOption[] = data.sheets || []
+        if (majors.length > 0) {
+          setPreviewMajors(majors)
+          setParsedSheets(sheets)
+          setActiveSheetName(data.sheet_name || sheets[0]?.sheet_name || "Sheet 1")
+          setParseTimeMs(data.parse_ms ?? Math.round(performance.now() - t0))
+          showToast(`Đã đọc ${majors.length} ngành từ "${file.name}".`)
+          return
+        }
       }
-      setRecords((prev) => [newRecord, ...prev])
-      setSelectedId(newRecord.id)
-      setDbHealth((prev) => ({
-        ...prev,
-        majors_count: totalImported,
-      }))
-      appendLog(
-        `Excel Import completed: ${totalImported} majors auto-mapped (CIP + RIASEC) and synced to DB`,
-      )
-      showToast(
-        `Đã tự động đối chiếu CIP + RIASEC và đồng bộ ${totalImported} ngành từ "${file.name}" vào CSDL!`,
-      )
-    } catch {
-      showToast(
-        `Đã đọc và tự động đối chiếu mã CIP + RIASEC cho tệp "${file.name}"!`,
-      )
+      // Fallback: Parse directly in browser if backend is offline or unreachable
+      const buf = await file.arrayBuffer()
+      const localRes = parseExcelClientFallback(buf)
+      if (localRes.majors.length === 0) {
+        throw new Error("Không tìm thấy mã ngành hợp lệ (6 hoặc 7 số) trong file.")
+      }
+      setPreviewMajors(localRes.majors)
+      setParsedSheets(localRes.sheets)
+      setActiveSheetName(localRes.activeSheet)
+      setParseTimeMs(Math.round(performance.now() - t0))
+      showToast(`Đã đọc ${localRes.majors.length} ngành từ Sheet "${localRes.activeSheet}".`)
+    } catch (err) {
+      setPreviewFile(null)
+      setPreviewMajors([])
+      setParsedSheets([])
+      setActiveSheetName("")
+      setParseTimeMs(null)
+      showToast(err instanceof Error ? err.message : "Lỗi đọc file Excel.", true)
     } finally {
-      setUploading(false)
+      setParsingFile(false)
       if (fileInputRef.current) fileInputRef.current.value = ""
     }
   }
 
-  const runHealthCheck = async () => {
-    setCheckingHealth(true)
-    appendLog("Running full DB + Dual-RAG health check...")
-    try {
-      const res = await apiRequest<DbHealthPayload | null>("/health/db", null)
-      if (res) {
-        setDbHealth(res)
-        appendLog(
-          `DB Health OK: engine=${res.database_engine}, majors=${res.majors_count}, questions=${res.questions_count}`,
-        )
-        showToast(
-          `Health Check hoàn tất: CSDL (${res.majors_count} ngành, ${res.questions_count} câu hỏi) hoạt động tốt!`,
-        )
-      } else {
-        showToast("Health Check hoàn tất: Hệ thống hoạt động ổn định!")
-      }
-    } finally {
-      setCheckingHealth(false)
+  const handleSheetChange = (sheetName: string) => {
+    const found = parsedSheets.find((s) => s.sheet_name === sheetName)
+    if (found) {
+      setActiveSheetName(found.sheet_name)
+      setPreviewMajors(found.majors)
+      setPreviewPage(1)
+      showToast(`Đã chuyển sang Sheet "${found.sheet_name}" (${found.majors.length} ngành).`)
     }
   }
 
+  const confirmImportToDb = async () => {
+    if (!previewFile || previewMajors.length === 0) return
+    setCommittingImport(true)
+    try {
+      const formData = new FormData()
+      formData.append("file", previewFile)
+      const qs = new URLSearchParams({
+        preview_only: "false",
+        ...(activeSheetName ? { sheet_name: activeSheetName } : {}),
+      }).toString()
+      const res = await fetch(`/api/v1/taxonomy/import-excel?${qs}`, {
+        method: "POST",
+        body: formData,
+      })
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => null)
+        throw new Error(
+          errBody?.detail ||
+            "Không thể lưu dữ liệu vào CSDL (cần kiểm tra Backend/PostgreSQL).",
+        )
+      }
+      const data = await res.json()
+      if (data.persisted_to_db === false) {
+        throw new Error("Backend chưa ghi được dữ liệu vào CSDL PostgreSQL.")
+      }
+      const totalImported = data.total ?? previewMajors.length
+
+      const deactivatedNote =
+        data.deactivated && data.deactivated > 0
+          ? `, Tạm ẩn mã cũ: ${data.deactivated}`
+          : ""
+      const newRecord: StagingRecord = {
+        id: Date.now(),
+        title: `Import · ${previewFile.name}`,
+        majorCode: `${totalImported} ngành`,
+        source: `${previewFile.name} (${activeSheetName})`,
+        type: "Excel Auto-Map",
+        status: "APPROVED",
+        updated: "Vừa đồng bộ",
+        markdown: `Đã nạp **${totalImported} ngành** từ Sheet \`${activeSheetName}\` (Mới: ${data.inserted ?? 0}, Cập nhật: ${data.updated ?? totalImported}${deactivatedNote}).`,
+      }
+      setRecords((prev) => [newRecord, ...prev])
+      setSelectedId(newRecord.id)
+
+      const liveHealth = await apiRequest<DbHealthPayload | null>("/health/db", null)
+      if (liveHealth && liveHealth.majors_count !== undefined) {
+        setDbHealth(liveHealth)
+      } else {
+        setDbHealth((prev) => ({ ...prev, majors_count: totalImported }))
+      }
+
+      showToast(
+        `Đã lưu ${totalImported} ngành vào CSDL! (Thêm mới: ${data.inserted ?? 0}, Cập nhật: ${data.updated ?? 0}${deactivatedNote})`,
+      )
+      setPreviewFile(null)
+      setPreviewMajors([])
+      setParsedSheets([])
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Lỗi kết nối Backend.", true)
+    } finally {
+      setCommittingImport(false)
+    }
+  }
+
+  const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) processSelectedFile(file)
+  }
+
+  const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(true)
+  }
+
+  const handleDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    e.dataTransfer.dropEffect = "copy"
+    if (!isDragging) setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    if (e.currentTarget.contains(e.relatedTarget as Node)) return
+    setIsDragging(false)
+  }
+
+  const handleDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    e.stopPropagation()
+    setIsDragging(false)
+    const file = e.dataTransfer.files?.[0]
+    if (file) processSelectedFile(file)
+  }
+
   return (
-    <section className="min-h-screen py-7 sm:py-10">
-      <PageContainer className="max-w-[1500px]">
-        {actionToast && (
+    <section className="min-h-screen py-5">
+      <PageContainer className="max-w-[1450px]">
+        {toast && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-extrabold text-emerald-800 shadow-sm"
+            className={`mb-4 flex items-center justify-between gap-3 rounded-2xl border px-4 py-2.5 text-xs font-bold shadow-sm ${
+              toast.error
+                ? "border-rose-200 bg-rose-50 text-rose-800"
+                : "border-emerald-200 bg-emerald-50 text-emerald-800"
+            }`}
           >
             <span className="flex items-center gap-2">
-              <CheckCircle2 size={16} className="text-emerald-600" />
-              {actionToast}
+              <CheckCircle2
+                size={15}
+                className={toast.error ? "text-rose-600" : "text-emerald-600"}
+              />
+              {toast.msg}
             </span>
-            <button
-              onClick={() => setActionToast(null)}
-              className="text-emerald-700 hover:text-emerald-950"
-            >
+            <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100">
               <X size={14} />
             </button>
           </motion.div>
         )}
 
-        <div className="mb-8 flex flex-col justify-between gap-5 xl:flex-row xl:items-end">
-          <div>
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <Badge tone="indigo">
-                <ShieldCheck size={12} className="mr-1" />
-                System Governance
-              </Badge>
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[10px] font-extrabold text-emerald-700 ring-1 ring-emerald-200">
-                <i className="size-1.5 animate-pulse rounded-full bg-emerald-500" />
-                All systems operational
+        {/* Minimal Header */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
+            Quản trị Danh mục Ngành
+          </h1>
+
+          <div className="flex items-center gap-2.5">
+            <div className="flex items-center gap-2 rounded-xl border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm">
+              <Database size={14} className="text-sky-600" />
+              <span className="text-[11px] text-slate-500">CSDL:</span>
+              <span className="text-xs font-black text-slate-900">
+                {dbHealth?.majors_count !== undefined ? `${dbHealth.majors_count} ngành` : "--"}
               </span>
             </div>
-            <h1 className="text-3xl font-black tracking-tight text-slate-950 sm:text-4xl">
-              HITL & Knowledge Governance
-            </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-600">
-              Điều phối hai luồng tri thức, kiểm chứng nguồn và phê duyệt dữ
-              liệu trước khi embedding vào hệ thống Guidance RAG.
+            <div className="flex items-center gap-2 rounded-xl border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm">
+              <Clock3 size={14} className="text-amber-600" />
+              <span className="text-[11px] text-slate-500">Chờ duyệt:</span>
+              <span className="text-xs font-black text-amber-600">{pendingCount}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* 2 Compact Cards: Excel Template | AI Prompt */}
+        <div className="mb-4 grid gap-3 md:grid-cols-2">
+          <div className="glass-card flex items-center justify-between gap-3 rounded-2xl p-3.5">
+            <div className="flex items-center gap-3">
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500 text-white">
+                <FileSpreadsheet size={18} />
+              </span>
+              <div>
+                <h2 className="text-xs font-black text-slate-900">File Excel Mẫu (.xlsx)</h2>
+                <p className="text-[10px] text-slate-500">19 cột chuẩn · Kèm mô tả cách nhập từng cột</p>
+              </div>
+            </div>
+            <Button
+              onClick={downloadExcelTemplate}
+              icon={Download}
+              className="!min-h-8 !px-3.5 !py-1.5 !text-xs !bg-emerald-600 hover:!bg-emerald-700 shrink-0"
+            >
+              Tải mẫu
+            </Button>
+          </div>
+
+          <div className="glass-card flex items-center justify-between gap-3 rounded-2xl p-3.5">
+            <div className="flex items-center gap-3">
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-sky-500 text-white">
+                <Sparkles size={18} />
+              </span>
+              <div>
+                <h2 className="text-xs font-black text-slate-900">Prompt cho AI</h2>
+                <p className="text-[10px] text-slate-500">Chuyển PDF Thông tư → Excel</p>
+              </div>
+            </div>
+            <Button
+              variant={copiedPrompt ? "primary" : "secondary"}
+              onClick={copyExternalAiPrompt}
+              icon={copiedPrompt ? Check : Copy}
+              className="!min-h-8 !px-3.5 !py-1.5 !text-xs shrink-0"
+            >
+              {copiedPrompt ? "Đã Copy" : "Copy Prompt"}
+            </Button>
+          </div>
+        </div>
+
+        {/* AI Trend Hunter Agent Panel (Chạy thủ công khi Admin bấm nút) */}
+        <TrendAgentPanel onNotify={showToast} />
+
+        {/* Drag & Drop Excel Upload + Preview Table */}
+        <div className="glass-card mb-5 rounded-3xl p-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="hidden"
+            onChange={handleFileChange}
+          />
+
+          <div
+            role="button"
+            tabIndex={0}
+            onClick={() => fileInputRef.current?.click()}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click()
+            }}
+            onDragEnter={handleDragEnter}
+            onDragOver={handleDragOver}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+            className={`flex min-h-24 w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed p-4 text-center transition cursor-pointer select-none ${
+              isDragging
+                ? "border-sky-500 bg-sky-100/80 ring-4 ring-sky-200"
+                : "border-sky-200 bg-sky-50/40 hover:border-sky-400 hover:bg-sky-50/70"
+            }`}
+          >
+            <UploadCloud
+              size={22}
+              className={`pointer-events-none mb-1.5 transition ${
+                isDragging ? "text-sky-600 animate-bounce" : "text-sky-500"
+              }`}
+            />
+            <p className="pointer-events-none text-xs font-extrabold text-slate-700">
+              {parsingFile
+                ? "Đang phân tích file Excel..."
+                : isDragging
+                  ? "Thả file vào đây"
+                  : "Kéo thả file Excel (.xlsx, .csv) vào đây hoặc bấm chọn file"}
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="secondary"
-              icon={CloudCog}
-              onClick={() => setShowLogsModal((v) => !v)}
-            >
-              System logs ({systemLogs.length})
-            </Button>
-            <Button
-              icon={Sparkles}
-              loading={checkingHealth}
-              onClick={runHealthCheck}
-            >
-              Chạy health check
-            </Button>
-          </div>
-        </div>
 
-        {/* Live System Logs Drawer / Panel */}
-        {showLogsModal && (
-          <div className="mb-6 rounded-3xl border border-slate-800 bg-slate-950 p-5 text-xs text-slate-200 shadow-xl">
-            <div className="mb-3 flex items-center justify-between border-b border-slate-800 pb-2">
-              <span className="font-extrabold uppercase tracking-wider text-sky-400">
-                Nhật ký vận hành hệ thống (Real-time Audit Logs)
-              </span>
-              <button
-                onClick={() => setShowLogsModal(false)}
-                className="rounded-lg bg-slate-800 px-2.5 py-1 text-[10px] font-bold text-slate-300 hover:bg-slate-700"
-              >
-                Đóng
-              </button>
-            </div>
-            <div className="max-h-40 space-y-1.5 overflow-y-auto font-mono text-[11px] text-emerald-300">
-              {systemLogs.map((log, idx) => (
-                <div key={idx}>{log}</div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        <motion.div
-          className="mb-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4"
-          initial="hidden"
-          animate="visible"
-          variants={{ visible: { transition: { staggerChildren: 0.07 } } }}
-        >
-          {kpis.map((item) => (
-            <motion.div
-              key={item.label}
-              variants={{
-                hidden: { opacity: 0, y: 14 },
-                visible: { opacity: 1, y: 0 },
-              }}
-              whileHover={{ y: -4 }}
-              className="glass-card group relative overflow-hidden rounded-3xl p-5"
-            >
-              <div
-                className={`absolute -right-10 -top-10 size-32 rounded-full bg-gradient-to-br ${item.accent} opacity-10 blur-2xl transition group-hover:opacity-20`}
-              />
-              <div className="relative flex items-start justify-between">
-                <div>
-                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-slate-400">
-                    {item.label}
-                  </p>
-                  <p className="mt-3 text-3xl font-black text-slate-900">
-                    {item.value}
-                  </p>
-                  <p className="mt-1 text-[10px] font-semibold text-slate-500">
-                    {item.note}
-                  </p>
-                </div>
-                <span
-                  className={`grid size-11 place-items-center rounded-2xl bg-gradient-to-br ${item.accent} text-white shadow-lg`}
-                >
-                  <item.icon size={20} />
-                </span>
-              </div>
-            </motion.div>
-          ))}
-        </motion.div>
-
-        <div className="mb-6 grid gap-4 xl:grid-cols-2">
-          <motion.div
-            whileHover={{ y: -3 }}
-            className="glass-card overflow-hidden rounded-3xl p-5 sm:p-6"
-          >
-            <div className="flex items-start gap-4">
-              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-400 to-sky-500 text-white shadow-lg shadow-sky-200">
-                <FileSpreadsheet size={22} />
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-black">
-                    Nhập File Excel Ngành Đào Tạo (TT74/2026)
-                  </h2>
-                  <Badge tone="emerald">Auto CIP + RIASEC</Badge>
-                </div>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Chỉ cần tải lên file Excel (<code>.xlsx</code>) hoặc CSV danh
-                  mục ngành, hệ thống tự động đối chiếu 94 nhóm ngành Cấp III để
-                  gán mã CIP quốc tế, Vector RIASEC 6 chiều và mã cũ TT09.
-                </p>
-              </div>
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".xlsx,.xls,.csv"
-              className="hidden"
-              onChange={handleFileChange}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              className="mt-5 flex min-h-36 w-full flex-col items-center justify-center rounded-2xl border-2 border-dashed border-sky-200 bg-sky-50/40 p-5 text-center transition hover:border-sky-400 hover:bg-sky-50/60 cursor-pointer"
-            >
-              <span className="grid size-11 place-items-center rounded-2xl bg-white text-sky-600 shadow-sm">
-                <UploadCloud size={21} />
-              </span>
-              <p className="mt-3 text-xs font-extrabold text-slate-700">
-                {uploading
-                  ? "Đang đối chiếu CIP 2020 + RIASEC & nạp ngành học..."
-                  : "Bấm chọn file Excel (.xlsx / .csv) danh mục ngành để tự động nạp"}
-              </p>
-              <p className="mt-1 text-[10px] text-slate-400">
-                Tự động suy diễn Lĩnh vực (2 số) · Nhóm ngành (4 số) · CIP ·
-                Vector RIASEC · Không cần nhập tay
-              </p>
-            </button>
-          </motion.div>
-
-          <motion.div
-            whileHover={{ y: -3 }}
-            className="glass-card overflow-hidden rounded-3xl p-5 sm:p-6"
-          >
-            <div className="flex items-start gap-4">
-              <span className="grid size-12 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-400 to-cyan-500 text-white shadow-lg shadow-cyan-200">
-                <Layers3 size={22} />
-              </span>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h2 className="text-base font-black">
-                    Chuẩn File Excel Mẫu & Quy Trình Web AI Ngoài
-                  </h2>
-                  <Badge tone="indigo">Zero Manual Entry</Badge>
-                </div>
-                <p className="mt-1 text-xs leading-5 text-slate-500">
-                  Đã loại bỏ hoàn toàn phần AI tự nhập mã ngành thủ công. Khi có
-                  Thông tư mới, chỉ cần tải File Excel Mẫu + đính kèm PDF vào
-                  ChatGPT/Claude/Gemini để xuất file Excel chuẩn.
-                </p>
-              </div>
-            </div>
-            <div className="mt-5 rounded-2xl border border-white/80 bg-white/45 p-4">
-              <div className="grid gap-2.5 sm:grid-cols-2">
-                <Button
-                  onClick={downloadExcelTemplate}
-                  icon={FileSpreadsheet}
-                  className="w-full justify-center"
-                >
-                  Tải File Excel Mẫu Chuẩn (.xlsx)
-                </Button>
-                <Button
-                  variant="secondary"
-                  onClick={copyExternalAiPrompt}
-                  icon={Sparkles}
-                  className="w-full justify-center"
-                >
-                  Copy Prompt cho Web AI Ngoài
-                </Button>
-              </div>
-              <div className="mt-4 flex flex-wrap gap-2">
-                {[
-                  "Sheet 1: Mẫu nhập 19 cột",
-                  "Sheet 2: 435 Ngành TT74/2026",
-                  "Sheet 3: 94 Nhóm CIP + RIASEC",
-                  "Sheet 4: Prompt AI chuyển PDF → Excel",
-                ].map((tag) => (
-                  <span
-                    key={tag}
-                    className="rounded-full bg-sky-50 px-2.5 py-1 text-[9px] font-bold text-sky-600"
-                  >
-                    {tag}
+          {/* Preview Table */}
+          {previewMajors.length > 0 && (
+            <div className="mt-4 overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 bg-sky-50/80 p-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone="emerald">Tổng: {previewMajors.length} ngành</Badge>
+                  <span className="max-w-[200px] truncate text-xs font-bold text-slate-700">
+                    {previewFile?.name}
                   </span>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        </div>
-
-        <div className="glass-card overflow-hidden rounded-3xl">
-          <div className="flex flex-col justify-between gap-4 border-b border-white/70 p-5 sm:flex-row sm:items-center">
-            <div>
-              <div className="flex items-center gap-2">
-                <FileSearch size={18} className="text-sky-600" />
-                <h2 className="text-base font-black">HITL Staging Review</h2>
-              </div>
-              <p className="mt-1 text-[10px] text-slate-500">
-                Mọi bản ghi cần phê duyệt trước khi ghi vào knowledge base chính
-                thức.
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setStatusFilter("ALL")}
-                title="Hiển thị tất cả trạng thái"
-                className={`sidebar-icon-button ${
-                  statusFilter === "ALL" ? "ring-2 ring-sky-400" : ""
-                }`}
-              >
-                <Filter size={15} />
-              </button>
-              <div className="relative">
-                <Search
-                  size={14}
-                  className="absolute left-3 top-3 text-slate-400"
-                />
-                <input
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Tìm staging record..."
-                  className="h-10 rounded-xl border border-white/80 bg-white/60 pl-9 pr-3 text-[11px] outline-none focus:ring-2 focus:ring-sky-200"
-                />
-              </div>
-            </div>
-          </div>
-
-          <div className="grid min-h-[590px] xl:grid-cols-[420px_1fr]">
-            <div className="border-b border-white/70 xl:border-b-0 xl:border-r">
-              <div className="grid grid-cols-3 gap-1 border-b border-white/70 p-3">
-                {(["PENDING", "APPROVED", "REJECTED"] as Status[]).map(
-                  (status) => (
-                    <button
-                      key={status}
-                      type="button"
-                      onClick={() =>
-                        setStatusFilter((current) =>
-                          current === status ? "ALL" : status,
+                  {parsedSheets.length > 1 ? (
+                    <div className="flex flex-wrap items-center gap-1 rounded-xl bg-white p-1 border border-sky-200 shadow-2xs">
+                      {parsedSheets.map((s) => {
+                        const isActive = s.sheet_name === activeSheetName
+                        return (
+                          <button
+                            key={s.sheet_name}
+                            type="button"
+                            onClick={() => handleSheetChange(s.sheet_name)}
+                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition ${
+                              isActive
+                                ? "bg-sky-600 text-white shadow-xs"
+                                : "text-slate-600 hover:bg-sky-50 hover:text-sky-700"
+                            }`}
+                          >
+                            {s.sheet_name} ({s.count} ngành)
+                          </button>
                         )
-                      }
-                      className={`rounded-xl px-2 py-2 text-[9px] font-extrabold transition ${
-                        statusFilter === status
-                          ? "bg-sky-100 text-sky-700 ring-1 ring-sky-300"
-                          : "text-slate-500 hover:bg-white/70"
-                      }`}
+                      })}
+                    </div>
+                  ) : (
+                    activeSheetName && (
+                      <span className="rounded-md bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200">
+                        Sheet: {activeSheetName} ({previewMajors.length} ngành)
+                      </span>
+                    )
+                  )}
+                  {parseTimeMs !== null && (
+                    <span className="text-[10px] font-semibold text-slate-400">
+                      ({parseTimeMs}ms)
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="relative">
+                    <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                    <input
+                      value={previewSearch}
+                      onChange={(e) => {
+                        setPreviewSearch(e.target.value)
+                        setPreviewPage(1)
+                      }}
+                      placeholder="Tìm mã / tên / CIP..."
+                      className="h-8 w-44 rounded-lg border border-slate-200 bg-white pl-8 pr-2.5 text-xs outline-none focus:ring-2 focus:ring-sky-200"
+                    />
+                  </div>
+                  <Button
+                    variant="secondary"
+                    onClick={() => {
+                      setPreviewMajors([])
+                      setPreviewFile(null)
+                    }}
+                    className="!min-h-8 !px-3 !py-1 !text-xs"
+                  >
+                    Hủy
+                  </Button>
+                  <Button
+                    onClick={confirmImportToDb}
+                    loading={committingImport}
+                    icon={Check}
+                    className="!min-h-8 !px-4 !py-1 !text-xs"
+                  >
+                    Import {previewMajors.length} ngành vào CSDL
+                  </Button>
+                </div>
+              </div>
+
+              <div className="max-h-[420px] overflow-auto">
+                <table className="w-full border-collapse text-left text-[11px]">
+                  <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-extrabold uppercase text-slate-500 shadow-sm">
+                    <tr>
+                      <th className="border-b border-slate-200 px-2.5 py-2 text-center w-10">STT</th>
+                      <th className="border-b border-slate-200 px-2.5 py-2">Mã TT74</th>
+                      <th className="border-b border-slate-200 px-2.5 py-2">Mã TT09</th>
+                      <th className="border-b border-slate-200 px-2.5 py-2 min-w-[170px]">Tên ngành</th>
+                      <th className="border-b border-slate-200 px-2.5 py-2 text-center">Nhóm</th>
+                      <th className="border-b border-slate-200 px-2.5 py-2 text-center">CIP</th>
+                      <th className="border-b border-slate-200 px-2.5 py-2 text-center">Holland</th>
+                      <th className="border-b border-slate-200 px-2.5 py-2 min-w-[235px]">
+                        Vector RIASEC (R·I·A·S·E·C)
+                      </th>
+                      <th className="border-b border-slate-200 px-2.5 py-2">Khối thi</th>
+                      <th className="border-b border-slate-200 px-2.5 py-2">Nhận thức</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedPreviewMajors.map(({ stt, item }) => {
+                      const rv = item.riasec || {}
+                      const cog = item.cognitive || {}
+                      return (
+                        <tr key={`${stt}-${item.major_code}`} className="hover:bg-sky-50/40">
+                          <td className="px-2.5 py-1.5 text-center font-bold text-slate-500">{stt}</td>
+                          <td className="px-2.5 py-1.5 font-mono font-bold text-sky-700">
+                            {item.major_code}
+                          </td>
+                          <td
+                            className="max-w-[110px] truncate px-2.5 py-1.5 font-mono text-[10px] text-slate-500"
+                            title={item.legacy_tt09_codes}
+                          >
+                            {item.legacy_tt09_codes || "-"}
+                          </td>
+                          <td className="px-2.5 py-1.5 font-semibold text-slate-800">{item.name}</td>
+                          <td className="px-2.5 py-1.5 text-center font-mono text-slate-600">
+                            {item.group_code || "-"}
+                          </td>
+                          <td className="px-2.5 py-1.5 text-center font-mono font-bold text-emerald-700">
+                            {item.cip_code || "-"}
+                          </td>
+                          <td className="px-2.5 py-1.5 text-center">
+                            <span className="rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-indigo-700">
+                              {item.holland_code || "-"}
+                            </span>
+                          </td>
+                          <td className="px-2.5 py-1.5 font-mono text-[10px]">
+                            <div className="flex gap-1">
+                              {(["R", "I", "A", "S", "E", "C"] as const).map((dim) => (
+                                <span
+                                  key={dim}
+                                  className={`rounded px-1 py-0.5 ${
+                                    (rv[dim] ?? 0) >= 0.7
+                                      ? "bg-sky-100 font-bold text-sky-800"
+                                      : "bg-slate-100 text-slate-500"
+                                  }`}
+                                >
+                                  {dim}:{Number(rv[dim] ?? 0).toFixed(2)}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="px-2.5 py-1.5 font-mono text-[10px] font-semibold text-slate-700">
+                            {(item.blocks || []).join(", ")}
+                          </td>
+                          <td className="px-2.5 py-1.5 text-[10px] text-slate-500">
+                            {cog.abstract_thinking || "med"}/{cog.analytical_reasoning || "med"}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-600">
+                <span>
+                  {paginatedPreviewMajors.length} / {indexedPreviewMajors.length} ngành
+                </span>
+                {totalPreviewPages > 1 && (
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      disabled={previewPage <= 1}
+                      onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
+                      className="grid size-6 place-items-center rounded border border-slate-200 bg-white disabled:opacity-40"
                     >
-                      {status} ·{" "}
-                      {
-                        records.filter((record) => record.status === status)
-                          .length
-                      }
+                      <ChevronLeft size={13} />
                     </button>
-                  ),
+                    <span className="px-1.5 font-bold">
+                      {previewPage}/{totalPreviewPages}
+                    </span>
+                    <button
+                      type="button"
+                      disabled={previewPage >= totalPreviewPages}
+                      onClick={() => setPreviewPage((p) => Math.min(totalPreviewPages, p + 1))}
+                      className="grid size-6 place-items-center rounded border border-slate-200 bg-white disabled:opacity-40"
+                    >
+                      <ChevronRight size={13} />
+                    </button>
+                  </div>
                 )}
               </div>
-              <div className="max-h-[510px] divide-y divide-white/70 overflow-y-auto">
-                {filteredRecords.map((record) => (
+            </div>
+          )}
+        </div>
+
+        {/* Minimal HITL Review */}
+        <div className="glass-card overflow-hidden rounded-3xl">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/70 p-3.5">
+            <div className="flex items-center gap-2">
+              <Layers3 size={16} className="text-sky-600" />
+              <h2 className="text-sm font-black text-slate-900">Kiểm duyệt HITL</h2>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-xl bg-white/60 p-0.5 ring-1 ring-slate-200">
+                {(["ALL", "PENDING", "APPROVED", "REJECTED"] as (Status | "ALL")[]).map((st) => (
                   <button
-                    key={record.id}
+                    key={st}
                     type="button"
-                    onClick={() => setSelectedId(record.id)}
-                    className={`group flex w-full gap-3 p-4 text-left transition ${
-                      selected?.id === record.id
-                        ? "bg-sky-50/80"
-                        : "hover:bg-white/45"
+                    onClick={() => setStatusFilter(st)}
+                    className={`rounded-lg px-2 py-1 text-[10px] font-extrabold transition ${
+                      statusFilter === st ? "bg-sky-600 text-white" : "text-slate-500"
                     }`}
                   >
-                    <span
-                      className={`grid size-10 shrink-0 place-items-center rounded-xl ${
-                        record.type.includes("OCR")
-                          ? "bg-sky-100 text-sky-700"
-                          : "bg-cyan-100 text-cyan-700"
-                      }`}
-                    >
-                      {record.type.includes("OCR") ||
-                      record.type.includes("Excel") ? (
-                        <FileSpreadsheet size={18} />
-                      ) : (
-                        <Layers3 size={18} />
-                      )}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-xs font-extrabold text-slate-800">
-                          {record.title}
-                        </p>
-                        {record.status === "PENDING" && (
-                          <i className="size-1.5 shrink-0 rounded-full bg-amber-400" />
-                        )}
-                      </div>
-                      <p className="mt-1 truncate text-[9px] font-medium text-slate-400">
-                        {record.majorCode} · {record.source}
-                      </p>
-                      <div className="mt-2 flex items-center gap-2">
-                        <Badge
-                          tone={
-                            record.status === "APPROVED"
-                              ? "emerald"
-                              : record.status === "REJECTED"
-                                ? "rose"
-                                : "amber"
-                          }
-                        >
-                          {record.status}
-                        </Badge>
-                        <span className="text-[9px] text-slate-400">
-                          {record.confidence}% · {record.updated}
-                        </span>
-                      </div>
-                    </div>
-                    <ChevronRight
-                      size={15}
-                      className="mt-2 text-slate-300 transition-transform group-hover:translate-x-0.5"
-                    />
+                    {st === "ALL" ? "Tất cả" : st}
                   </button>
                 ))}
               </div>
+              <div className="relative">
+                <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                <input
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  placeholder="Tìm..."
+                  className="h-8 w-36 rounded-xl border border-slate-200 bg-white/80 pl-8 pr-2 text-xs outline-none"
+                />
+              </div>
             </div>
+          </div>
 
-            {selected && (
-              <div className="flex min-w-0 flex-col">
-                <div className="flex flex-col justify-between gap-4 border-b border-white/70 p-5 sm:flex-row sm:items-start">
-                  <div>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h3 className="text-base font-black text-slate-900">
-                        {selected.title}
-                      </h3>
+          <div className="grid min-h-[340px] lg:grid-cols-[310px_1fr]">
+            <div className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto border-b border-white/70 lg:border-b-0 lg:border-r">
+              {filteredRecords.map((record) => (
+                <button
+                  key={record.id}
+                  type="button"
+                  onClick={() => setSelectedId(record.id)}
+                  className={`flex w-full items-center gap-2.5 p-3 text-left transition ${
+                    selected?.id === record.id ? "bg-sky-50/90" : "hover:bg-white/50"
+                  }`}
+                >
+                  <FileText size={15} className="shrink-0 text-sky-600" />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-slate-800">{record.title}</p>
+                    <div className="mt-1 flex items-center gap-1.5">
                       <Badge
                         tone={
-                          selected.status === "APPROVED"
+                          record.status === "APPROVED"
                             ? "emerald"
-                            : selected.status === "REJECTED"
+                            : record.status === "REJECTED"
                               ? "rose"
                               : "amber"
                         }
                       >
-                        {selected.status}
+                        {record.status}
                       </Badge>
+                      <span className="text-[10px] text-slate-400">{record.majorCode}</span>
                     </div>
-                    <p className="mt-2 text-[10px] text-slate-500">
-                      {selected.type} · Confidence {selected.confidence}% ·{" "}
-                      {selected.source}
-                    </p>
                   </div>
-                  <div className="flex rounded-xl bg-white/60 p-1 ring-1 ring-white/80">
-                    <button
-                      type="button"
-                      onClick={() => setPreviewMode("markdown")}
-                      className={`rounded-lg px-3 py-1.5 text-[10px] font-bold ${
-                        previewMode === "markdown"
-                          ? "bg-white text-sky-700 shadow-sm"
-                          : "text-slate-400"
-                      }`}
-                    >
-                      Markdown
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setPreviewMode("json")}
-                      className={`rounded-lg px-3 py-1.5 text-[10px] font-bold ${
-                        previewMode === "json"
-                          ? "bg-white text-sky-700 shadow-sm"
-                          : "text-slate-400"
-                      }`}
-                    >
-                      JSONB
-                    </button>
-                  </div>
-                </div>
+                </button>
+              ))}
+            </div>
 
-                <div className="flex-1 p-5">
-                  <div className="mb-4 grid gap-3 sm:grid-cols-3">
-                    {[
-                      ["Schema", "roadmap.v2", FileJson],
-                      ["Citations", "4 verified", CheckCircle2],
-                      ["Vector chunks", "12 ready", Database],
-                    ].map(([label, value, Icon]) => (
-                      <div
-                        key={String(label)}
-                        className="rounded-2xl border border-white/80 bg-white/45 p-3"
+            {selected && (
+              <div className="flex min-w-0 flex-col justify-between">
+                <div className="p-4">
+                  <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5">
+                    <div>
+                      <h3 className="text-sm font-black text-slate-900">{selected.title}</h3>
+                      <p className="text-[10px] text-slate-400">
+                        {selected.majorCode} · {selected.source}
+                      </p>
+                    </div>
+                    <div className="flex rounded-lg bg-white/70 p-0.5 ring-1 ring-slate-200">
+                      <button
+                        type="button"
+                        onClick={() => setPreviewMode("markdown")}
+                        className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                          previewMode === "markdown" ? "bg-sky-600 text-white" : "text-slate-500"
+                        }`}
                       >
-                        <Icon size={15} className="text-sky-500" />
-                        <p className="mt-2 text-[9px] font-bold uppercase text-slate-400">
-                          {String(label)}
-                        </p>
-                        <p className="mt-0.5 text-xs font-extrabold text-slate-700">
-                          {String(value)}
-                        </p>
-                      </div>
-                    ))}
+                        Text
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setPreviewMode("json")}
+                        className={`rounded px-2 py-0.5 text-[10px] font-bold ${
+                          previewMode === "json" ? "bg-sky-600 text-white" : "text-slate-500"
+                        }`}
+                      >
+                        JSON
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="min-h-72 overflow-auto rounded-2xl border border-sky-200/80 bg-sky-50/80 p-5 text-slate-700 shadow-inner">
+                  <div className="max-h-[220px] overflow-auto rounded-2xl border border-sky-100 bg-sky-50/40 p-3.5 text-xs leading-5 text-slate-700">
                     {previewMode === "markdown" ? (
-                      <div className="admin-markdown text-xs leading-6">
-                        <Markdown remarkPlugins={[remarkGfm]}>
-                          {selected.markdown}
-                        </Markdown>
-                      </div>
+                      <Markdown remarkPlugins={[remarkGfm]}>{selected.markdown}</Markdown>
                     ) : (
-                      <pre className="text-[11px] leading-6 text-sky-800">
-                        {JSON.stringify(
-                          {
-                            major_code: selected.majorCode,
-                            title: selected.title,
-                            status: selected.status,
-                            source_type: selected.type,
-                            confidence: selected.confidence,
-                            chunks: 12,
-                            citation_domains: selected.source.split(" · "),
-                            pii_redacted: true,
-                          },
-                          null,
-                          2,
-                        )}
+                      <pre className="font-mono text-[11px] text-sky-900">
+                        {JSON.stringify(selected, null, 2)}
                       </pre>
                     )}
                   </div>
-
-                  <div className="mt-4 rounded-2xl border border-emerald-100 bg-emerald-50/60 p-4">
-                    <p className="flex items-center gap-2 text-[10px] font-extrabold uppercase tracking-widest text-emerald-700">
-                      <ShieldCheck size={14} />
-                      Source integrity check
-                    </p>
-                    <div className="mt-3 grid gap-2 text-[10px] text-slate-600 sm:grid-cols-3">
-                      {[
-                        "Domain authority verified",
-                        "PII scan passed",
-                        "Duplicate score: 0.08",
-                      ].map((item) => (
-                        <span key={item} className="flex items-center gap-1.5">
-                          <Check size={12} className="text-emerald-600" />
-                          {item}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
                 </div>
 
-                <div className="flex flex-col gap-3 border-t border-white/70 bg-white/25 p-4 sm:flex-row sm:justify-end">
+                <div className="flex items-center justify-end gap-2 border-t border-white/70 bg-white/40 p-3">
                   <Button
                     variant="secondary"
                     icon={RefreshCw}
                     onClick={() => updateStatus("REJECTED")}
+                    className="!min-h-8 !px-3.5 !text-xs"
                   >
-                    Từ chối / Yêu cầu quét lại
+                    Từ chối
                   </Button>
                   <Button
                     icon={Check}
                     onClick={() => updateStatus("APPROVED")}
+                    className="!min-h-8 !px-3.5 !text-xs"
                   >
-                    Phê duyệt & Lưu pgvector
+                    Phê duyệt
                   </Button>
                 </div>
               </div>

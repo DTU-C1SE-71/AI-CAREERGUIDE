@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.config import settings
+from app.core.llm_client import resolve_model_token_limits, clear_model_caps_cache
 from app.models.roadmap import MajorRoadmap
 from app.models.taxonomy import Major
 from app.models.vector import KnowledgeEmbedding
@@ -167,23 +168,25 @@ async def call_llm_for_personalization(
     )
     
     sanitized_prompt = sanitize_pii(prompt)
-    
+    token_limits = await resolve_model_token_limits()
+
     response = await client.chat.completions.create(
         model=settings.LLM_MODEL,
         messages=[
             {"role": "system", "content": "Bạn là chuyên gia tư vấn lộ trình học tập cá nhân hóa AI CareerGuide."},
             {"role": "user", "content": sanitized_prompt}
         ],
+        max_tokens=token_limits["max_output_tokens"],
         temperature=0.2
     )
     
-    content = response.choices[0].message.content or ""
+    content = (response.choices[0].message.content or "").strip()
     # Format fallback schedule wrapped with AI summary
     schedule = build_fallback_personalized_schedule(major_code, major_title, missing_skills, weekly_hours, milestones)
     
     return GuidancePersonalizationResponse(
         major_code=major_code,
-        personalization_summary=content[:300] if len(content) > 30 else f"Kế hoạch 4 tuần tập trung bổ trợ kỹ năng cho ngành {major_title}.",
+        personalization_summary=content[:4000] if len(content) > 30 else f"Kế hoạch 4 tuần tập trung bổ trợ kỹ năng cho ngành {major_title}.",
         schedule=schedule,
         is_fallback=False
     )
@@ -552,6 +555,7 @@ async def explain_recommendation_with_ai(
         async def _call_llm():
             import json
             import re
+            token_limits = await resolve_model_token_limits()
             resp = await client.chat.completions.create(
                 model=settings.LLM_MODEL,
                 messages=[
@@ -559,7 +563,7 @@ async def explain_recommendation_with_ai(
                     {"role": "user", "content": sanitized_prompt}
                 ],
                 temperature=0.2,
-                max_tokens=1800
+                max_tokens=token_limits["max_output_tokens"]
             )
             raw_text = (resp.choices[0].message.content or "").strip()
             # Strip reasoning/thinking tokens (<think>...</think>) if present
@@ -906,9 +910,9 @@ async def chat_with_career_counselor(
         else:
             sanitized_history.append({"role": "user", "content": sanitized_user_msg})
 
-        # Keep recent turns (up to 4 turns before user message)
-        if len(sanitized_history) > 5:
-            sanitized_history = sanitized_history[-5:]
+        # Giữ tối đa 20 lượt hội thoại gần nhất để tận dụng tối đa context window của mô hình
+        if len(sanitized_history) > 20:
+            sanitized_history = sanitized_history[-20:]
 
         # Guarantee the first message after system is always 'user'
         if sanitized_history and sanitized_history[0]["role"] != "user":
@@ -917,11 +921,12 @@ async def chat_with_career_counselor(
         messages = [{"role": "system", "content": system_instruction}] + sanitized_history
 
         async def _call_chat():
+            token_limits = await resolve_model_token_limits()
             resp = await client.chat.completions.create(
                 model=settings.LLM_MODEL,
                 messages=messages,
                 temperature=0.3,
-                max_tokens=2000
+                max_tokens=token_limits["max_output_tokens"]
             )
             raw = (resp.choices[0].message.content or "").strip()
             # Strip reasoning/thinking tokens (<think>...</think>) if present
@@ -1016,7 +1021,9 @@ def get_llm_status() -> LLMStatusResponse:
         base_url=settings.OPENAI_BASE_URL or "https://api.openai.com/v1",
         is_key_configured=bool(key and key.strip()),
         masked_key=masked,
-        embedding_model=settings.EMBEDDING_MODEL
+        embedding_model=settings.EMBEDDING_MODEL,
+        max_tokens=settings.LLM_MAX_TOKENS,
+        context_window=settings.LLM_MAX_CONTEXT_TOKENS,
     )
 
 
@@ -1059,12 +1066,13 @@ async def test_llm_connection(payload: LLMConnectionTestRequest) -> LLMConnectio
         client = AsyncOpenAI(**client_kwargs)
 
         try:
+            token_limits = await resolve_model_token_limits(api_key=key, base_url=base_url, model=model)
             response = await client.chat.completions.create(
                 model=model,
                 messages=[
                     {"role": "user", "content": "Xin chào, phản hồi ngắn gọn 1 từ: OK"}
                 ],
-                max_tokens=100,
+                max_tokens=min(2048, token_limits["max_output_tokens"]),
                 temperature=0.0
             )
             latency_ms = round((time.time() - start_time) * 1000, 1)
@@ -1133,4 +1141,5 @@ def update_llm_config(model: str = None, base_url: str = None, api_key: str = No
         settings.OPENAI_BASE_URL = base_url.strip()
     if api_key and api_key.strip():
         settings.OPENAI_API_KEY = api_key.strip()
+    clear_model_caps_cache()
     return get_llm_status()

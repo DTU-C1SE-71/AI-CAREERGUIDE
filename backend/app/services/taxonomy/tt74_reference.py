@@ -283,70 +283,120 @@ def auto_enrich_major_record(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def _parse_xlsx_bytes(file_bytes: bytes) -> List[List[str]]:
-    """Pure-Python reader for .xlsx files (supports inlineStr and sharedStrings)."""
+def _col_ref_to_idx(ref: str) -> int:
+    """Converts Excel cell reference like 'C5' or 'AA10' to 0-based column index."""
+    col_str = "".join(ch for ch in ref if ch.isalpha()).upper()
+    if not col_str:
+        return -1
+    idx = 0
+    for ch in col_str:
+        idx = idx * 26 + (ord(ch) - ord("A") + 1)
+    return idx - 1
+
+
+def _parse_single_sheet_xml(ws_bytes: bytes, shared_strings: List[str]) -> List[List[str]]:
+    ws_root = ET.fromstring(ws_bytes)
+    rows_parsed: List[List[str]] = []
+    for row_el in ws_root.iter():
+        if row_el.tag.endswith("}row") or row_el.tag == "row":
+            cell_map: Dict[int, str] = {}
+            seq_idx = 0
+            for c_el in row_el:
+                if not (c_el.tag.endswith("}c") or c_el.tag == "c"):
+                    continue
+                ref = c_el.attrib.get("r", "")
+                col_idx = _col_ref_to_idx(ref)
+                if col_idx < 0:
+                    col_idx = seq_idx
+                seq_idx = col_idx + 1
+
+                c_type = c_el.attrib.get("t", "")
+                val_str = ""
+                if c_type == "inlineStr":
+                    texts = [t.text or "" for t in c_el.iter() if t.tag.endswith("}t") or t.tag == "t"]
+                    val_str = "".join(texts)
+                else:
+                    v_el = next((ch for ch in c_el if ch.tag.endswith("}v") or ch.tag == "v"), None)
+                    if v_el is not None and v_el.text is not None:
+                        if c_type == "s":
+                            idx = int(v_el.text)
+                            val_str = shared_strings[idx] if 0 <= idx < len(shared_strings) else ""
+                        else:
+                            val_str = v_el.text
+                cell_map[col_idx] = val_str.strip()
+
+            if cell_map:
+                max_col = max(cell_map.keys())
+                row_vals = [cell_map.get(i, "") for i in range(max_col + 1)]
+                if any(row_vals):
+                    rows_parsed.append(row_vals)
+    return rows_parsed
+
+
+def _parse_xlsx_all_sheets(file_bytes: bytes) -> Tuple[List[Tuple[str, List[List[str]]]], int]:
+    """Reads all sheets from an .xlsx archive in tab order returning ((sheet_name, rows), active_tab_idx)."""
     with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+        names = set(zf.namelist())
         shared_strings: List[str] = []
-        if "xl/sharedStrings.xml" in zf.namelist():
+        if "xl/sharedStrings.xml" in names:
             ss_root = ET.fromstring(zf.read("xl/sharedStrings.xml"))
             for si in ss_root.iter():
                 if si.tag.endswith("}si") or si.tag == "si":
                     texts = [t.text or "" for t in si.iter() if t.tag.endswith("}t") or t.tag == "t"]
                     shared_strings.append("".join(texts))
 
-        # Prefer sheet2 (DU_LIEU_435_NGANH_TT74) if it has >50 rows, otherwise sheet1
-        sheet_files = [n for n in zf.namelist() if n.startswith("xl/worksheets/sheet") and n.endswith(".xml")]
-        sheet_files.sort()
+        rid_to_target: Dict[str, str] = {}
+        if "xl/_rels/workbook.xml.rels" in names:
+            rels_root = ET.fromstring(zf.read("xl/_rels/workbook.xml.rels"))
+            for rel in rels_root.iter():
+                if rel.tag.endswith("}Relationship") or rel.tag == "Relationship":
+                    rid = rel.attrib.get("Id", "")
+                    target = rel.attrib.get("Target", "").lstrip("/")
+                    if target and not target.startswith("xl/"):
+                        target = f"xl/{target}"
+                    if rid and target:
+                        rid_to_target[rid] = target
 
-        best_rows: List[List[str]] = []
-        for sf in sheet_files:
-            ws_root = ET.fromstring(zf.read(sf))
-            rows_parsed: List[List[str]] = []
-            for row_el in ws_root.iter():
-                if row_el.tag.endswith("}row") or row_el.tag == "row":
-                    row_vals: List[str] = []
-                    for c_el in row_el:
-                        if not (c_el.tag.endswith("}c") or c_el.tag == "c"):
-                            continue
-                        c_type = c_el.attrib.get("t", "")
-                        val_str = ""
-                        if c_type == "inlineStr":
-                            texts = [t.text or "" for t in c_el.iter() if t.tag.endswith("}t") or t.tag == "t"]
-                            val_str = "".join(texts)
-                        else:
-                            v_el = next((ch for ch in c_el if ch.tag.endswith("}v") or ch.tag == "v"), None)
-                            if v_el is not None and v_el.text is not None:
-                                if c_type == "s":
-                                    idx = int(v_el.text)
-                                    val_str = shared_strings[idx] if 0 <= idx < len(shared_strings) else ""
-                                else:
-                                    val_str = v_el.text
-                        row_vals.append(val_str.strip())
-                    if any(row_vals):
-                        rows_parsed.append(row_vals)
-            if len(rows_parsed) > len(best_rows):
-                best_rows = rows_parsed
-        return best_rows
+        ordered_sheets: List[Tuple[str, str]] = []
+        active_tab_idx = 0
+        if "xl/workbook.xml" in names:
+            wb_root = ET.fromstring(zf.read("xl/workbook.xml"))
+            for el in wb_root.iter():
+                if el.tag.endswith("}workbookView") or el.tag == "workbookView":
+                    try:
+                        active_tab_idx = int(el.attrib.get("activeTab", "0"))
+                    except ValueError:
+                        active_tab_idx = 0
+                    break
+            for sh in wb_root.iter():
+                if sh.tag.endswith("}sheet") or sh.tag == "sheet":
+                    sh_name = sh.attrib.get("name", "Sheet")
+                    # Find r:id attribute regardless of namespace prefix
+                    rid = ""
+                    for ak, av in sh.attrib.items():
+                        if ak == "id" or ak.endswith("}id"):
+                            rid = av
+                            break
+                    target = rid_to_target.get(rid, "")
+                    if target in names:
+                        ordered_sheets.append((sh_name, target))
+
+        if not ordered_sheets:
+            sheet_files = sorted(n for n in names if n.startswith("xl/worksheets/sheet") and n.endswith(".xml"))
+            ordered_sheets = [(f"Sheet {i + 1}", sf) for i, sf in enumerate(sheet_files)]
+
+        results: List[Tuple[str, List[List[str]]]] = []
+        for sh_name, sf in ordered_sheets:
+            rows = _parse_single_sheet_xml(zf.read(sf), shared_strings)
+            results.append((sh_name, rows))
+        return results, active_tab_idx
 
 
-def parse_excel_or_csv_majors(file_bytes: bytes, filename: str = "upload.xlsx") -> List[Dict[str, Any]]:
-    """
-    Parses an uploaded .xlsx or .csv file into standardized, auto-enriched major dictionaries.
-    Supports both the 19-column Standard Template and raw MOET Excel tables.
-    """
-    fname_low = filename.lower()
-    if fname_low.endswith(".xlsx"):
-        raw_rows = _parse_xlsx_bytes(file_bytes)
-    else:
-        text = file_bytes.decode("utf-8-sig", errors="replace")
-        reader = csv.reader(io.StringIO(text))
-        raw_rows = [[cell.strip() for cell in r] for r in reader if any(cell.strip() for cell in r)]
-
+def _extract_majors_from_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]:
     if not raw_rows:
         return []
 
-    # Locate header row
-    header_idx = 0
+    header_idx = -1
     header_map: Dict[int, str] = {}
     known_headers = {
         "field_code": "field_code", "mã lv": "field_code", "ma_linh_vuc": "field_code",
@@ -375,6 +425,9 @@ def parse_excel_or_csv_majors(file_bytes: bytes, filename: str = "upload.xlsx") 
                     header_map[c_i] = known_headers[col_name]
             break
 
+    if header_idx == -1:
+        return []
+
     enriched_majors: List[Dict[str, Any]] = []
     seen_codes = set()
 
@@ -386,14 +439,66 @@ def parse_excel_or_csv_majors(file_bytes: bytes, filename: str = "upload.xlsx") 
 
         m_code_candidate = str(row_dict.get("major_code", "")).strip()
         digits = re.sub(r"\D", "", m_code_candidate)
-        # Skip description rows or non-6/7-digit major rows
         if len(digits) not in (6, 7):
             continue
         if digits in seen_codes:
             continue
         seen_codes.add(digits)
 
-        enriched = auto_enrich_major_record(row_dict)
-        enriched_majors.append(enriched)
+        enriched_majors.append(auto_enrich_major_record(row_dict))
 
     return enriched_majors
+
+
+def parse_excel_or_csv_sheets(
+    file_bytes: bytes,
+    filename: str = "upload.xlsx",
+    preferred_sheet: Optional[str] = None,
+) -> Tuple[str, List[Dict[str, Any]], List[Dict[str, Any]]]:
+    """
+    Returns (active_sheet_name, active_majors, all_sheets_summary_with_majors).
+    Only sheets containing valid major columns/rows are included.
+    """
+    fname_low = filename.lower()
+    if fname_low.endswith(".xlsx"):
+        sheets_raw, active_tab_idx = _parse_xlsx_all_sheets(file_bytes)
+        parsed_sheets: List[Dict[str, Any]] = []
+        active_tab_sheet_name = (
+            sheets_raw[active_tab_idx][0] if 0 <= active_tab_idx < len(sheets_raw) else None
+        )
+        for sh_name, rows in sheets_raw:
+            majors = _extract_majors_from_rows(rows)
+            if majors:
+                parsed_sheets.append({
+                    "sheet_name": sh_name,
+                    "count": len(majors),
+                    "majors": majors,
+                })
+        if not parsed_sheets:
+            return ("Sheet 1", [], [])
+
+        selected = None
+        if preferred_sheet:
+            selected = next((s for s in parsed_sheets if s["sheet_name"] == preferred_sheet), None)
+        if not selected and active_tab_sheet_name:
+            selected = next((s for s in parsed_sheets if s["sheet_name"] == active_tab_sheet_name), None)
+        if not selected:
+            selected = parsed_sheets[0]
+
+        return (
+            selected["sheet_name"],
+            selected["majors"],
+            [{"sheet_name": s["sheet_name"], "count": s["count"], "majors": s["majors"]} for s in parsed_sheets],
+        )
+    else:
+        text = file_bytes.decode("utf-8-sig", errors="replace")
+        reader = csv.reader(io.StringIO(text))
+        raw_rows = [[cell.strip() for cell in r] for r in reader if any(cell.strip() for cell in r)]
+        majors = _extract_majors_from_rows(raw_rows)
+        return ("CSV", majors, [{"sheet_name": "CSV", "count": len(majors), "majors": majors}] if majors else [])
+
+
+def parse_excel_or_csv_majors(file_bytes: bytes, filename: str = "upload.xlsx") -> List[Dict[str, Any]]:
+    """Backward-compatible wrapper returning majors from the primary/largest sheet."""
+    _, majors, _ = parse_excel_or_csv_sheets(file_bytes, filename)
+    return majors

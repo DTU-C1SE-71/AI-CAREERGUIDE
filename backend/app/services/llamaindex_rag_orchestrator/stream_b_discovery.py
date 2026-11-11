@@ -118,6 +118,9 @@ async def extract_roadmap_with_llm(
     if settings.OPENAI_API_KEY:
         try:
             from openai import AsyncOpenAI
+            from app.core.llm_client import resolve_model_token_limits
+
+            token_limits = await resolve_model_token_limits()
             client_kwargs = {"api_key": settings.OPENAI_API_KEY}
             if settings.OPENAI_BASE_URL:
                 client_kwargs["base_url"] = settings.OPENAI_BASE_URL
@@ -126,7 +129,7 @@ async def extract_roadmap_with_llm(
             prompt = (
                 f"Bạn là chuyên gia giáo dục đại học chuẩn hóa chương trình đào tạo theo Thông tư 09/2022/TT-BGDĐT.\n"
                 f"Hãy phân tích tài liệu sau đây để trích xuất lộ trình học tập chuẩn hóa cho ngành {major_title} (Mã ngành: {major_code}).\n\n"
-                f"Nội dung tài liệu nguồn:\n{scraped_content[:8000]}\n\n"
+                f"Nội dung tài liệu nguồn:\n{scraped_content[:token_limits['max_context_chars']]}\n\n"
                 f"Yêu cầu:\n"
                 f"- Trích xuất danh sách prerequisite_knowledge (kiến thức tiên quyết THPT/đại cương).\n"
                 f"- Trích xuất danh sách target_skills (kỹ năng cốt lõi đạt được).\n"
@@ -141,6 +144,7 @@ async def extract_roadmap_with_llm(
                     {"role": "user", "content": prompt}
                 ],
                 response_format=ExtractedRoadmapPayload,
+                max_tokens=token_limits["max_output_tokens"],
                 temperature=0.0
             )
             parsed = response.choices[0].message.parsed
@@ -342,7 +346,7 @@ async def discover_and_stage_roadmap(
         status=StagingStatus.PENDING,
         major_code=major_code,
         content_hash=content_hash,
-        raw_content=scraped_content[:15000],
+        raw_content=scraped_content[:60000],
         extracted_payload=payload_dump,
         source_title=source_title,
         source_url=source_url,

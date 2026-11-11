@@ -2,13 +2,12 @@ import { Badge } from "../common/Badge"
 
 export function FeasibilityBadge({
   value = "TARGET",
+  label,
 }: {
   value?: "TARGET" | "REACH" | string
+  label?: string
 }) {
   const isTarget = (value || "").toUpperCase().includes("TARGET")
-  return (
-    <Badge tone={isTarget ? "emerald" : "slate"}>
-      {isTarget ? "Khả thi cao" : "Thử thách"}
-    </Badge>
-  )
+  const text = label || (isTarget ? "Khả thi cao" : "Thử thách")
+  return <Badge tone={isTarget ? "emerald" : "slate"}>{text}</Badge>
 }

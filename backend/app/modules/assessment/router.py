@@ -4,6 +4,8 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
+from app.core.dependencies import get_optional_current_user
+from app.models.identity import User
 from app.modules.assessment import service
 from app.modules.assessment.schemas import (
     AssessmentQuestionSetResponse,
@@ -41,18 +43,19 @@ async def get_active_questions(
 )
 async def submit_assessment(
     payload: AssessmentSubmissionRequest,
+    current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Receives student Likert responses and cognitive choices.
-    Executes 100% deterministic mathematical scoring to compute:
-    1. 6-Dimensional normalized Holland vector V_student = [R, I, A, S, E, C] in range [0.0, 1.0].
-    2. 8-Dimensional cognitive preference trait codes.
-    3. Awards gamification XP and persists submission audit trail.
+    Nhận đáp án Likert và nhận thức từ học sinh, chấm điểm toán học tất định và lưu cho user đang đăng nhập.
     """
-    # Demo/Fallback user id if unauthenticated or offline
-    mock_user_id = uuid.uuid4()
-    return await service.process_assessment_submission(db, mock_user_id, payload)
+    target_user_id = current_user.id if current_user else uuid.uuid4()
+    return await service.process_assessment_submission(
+        db,
+        target_user_id,
+        payload,
+        persist_to_db=(current_user is not None),
+    )
 
 
 @router.post(

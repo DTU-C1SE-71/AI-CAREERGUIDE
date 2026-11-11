@@ -104,7 +104,7 @@ async def db_health_check():
         async for db in get_db():
             if not db:
                 return {"status": "offline", "message": "Database session unavailable"}
-            majors_count = (await db.execute(text("SELECT COUNT(*) FROM majors;"))).scalar()
+            majors_count = (await db.execute(text("SELECT COUNT(*) FROM majors WHERE is_active = true;"))).scalar()
             questions_count = (await db.execute(text("SELECT COUNT(*) FROM assessment_questions;"))).scalar()
             users_count = (await db.execute(text("SELECT COUNT(*) FROM users;"))).scalar()
             return {

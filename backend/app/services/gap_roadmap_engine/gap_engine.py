@@ -7,6 +7,9 @@ SUBJECT_MASTERY_THRESHOLDS = {
         "SKILL_PRE_LOGIC_DISCRETE": 7.5,
         "SKILL_PRE_STAT_BASIC": 7.5
     },
+    "Vật lý": {
+        "SKILL_PRE_PHYSICS_MECH": 8.0
+    },
     "Vật lí": {
         "SKILL_PRE_PHYSICS_MECH": 8.0
     },
