@@ -73,9 +73,9 @@ Bổ sung các cụm nghề đa dạng vào `CAREER_SYNONYM_CLUSTERS` trong `asp
 | File | Vai trò & Điểm chạm chính |
 |------|---------------------------|
 | `backend/app/services/recommender/aspiration_agent.py` | Agent đối chiếu nghề mơ ước: Cụm từ khóa mở rộng, chống bịa điểm `NEED_ACADEMIC_DATA`, bộ lọc an toàn `_is_safe_llm_verdict` |
-| `backend/app/services/recommender/engine.py` | Động cơ tuyển sinh 3 trụ cột: Hỗ trợ `has_academic_data=False` → tier `UNKNOWN`, không suy đoán điểm khối |
-| `backend/app/services/recommender/service.py` | Luồng tính điểm recommender: Loại bỏ việc gán cứng `21.5đ`, trả về `UNKNOWN` khi chưa có học bạ |
-| `backend/tests/test_scoring_and_gap_engine.py` | Bộ test backend: Thêm `test_aspiration_no_grades_returns_need_academic_data_and_unknown_tier` và `test_aspiration_expanded_career_clusters` |
+| `backend/app/services/recommender/engine.py` | Động cơ tuyển sinh 3 trụ cột: Trọng số thích ứng động (`compute_adaptive_weights`), giải thích XAI tinh gọn 3 câu (`build_compact_xai_explanation`), hỗ trợ `has_academic_data=False` → tier `UNKNOWN` |
+| `backend/app/services/recommender/service.py` | Luồng tính điểm recommender: Tích hợp Adaptive Weighting theo chiến lược nguyện vọng và đặc thù nhóm ngành, sinh giải thích XAI súc tích |
+| `backend/tests/test_scoring_and_gap_engine.py` | Bộ test backend: Bổ sung `TestAdaptiveWeightingAndCompactXAI` (7 bài test kiểm định trọng số động và XAI tinh gọn) |
 | `frontend/src/types/assessment.ts` | TypeScript types: Cập nhật `feasibility_tier` (`UNKNOWN`) và `alignment_status` (`NEED_ACADEMIC_DATA`) |
 | `frontend/src/components/xai/AspirationAlignmentCard.tsx` | UI thẻ đối chiếu nguyện vọng: Hiển thị badge Amber `"Chưa có điểm"` và tone màu tương ứng |
 | `backend/app/services/taxonomy/trend_agent.py` | Agent tìm kiếm xu hướng thị trường 2026, quota tối thiểu 3 ngành/nhóm, lưu CSDL |
@@ -93,7 +93,7 @@ Toàn bộ các cổng kiểm định chất lượng đều đạt chuẩn tuy�
 1. **Pytest Backend:**
    ```bash
    $env:ENVIRONMENT="test"; py -3 -m pytest backend/tests -v
-   # Kết quả: 106/106 passed (100%), bao gồm cả 16 test cho major_insight
+   # Kết quả: 113/113 passed (100%), bao gồm cả 7 bài test Adaptive Weighting & Compact XAI
    ```
 2. **Arena Skill Unit Tests:**
    ```bash
@@ -103,7 +103,7 @@ Toàn bộ các cổng kiểm định chất lượng đều đạt chuẩn tuy�
 3. **Frontend Production Build:**
    ```bash
    npm --prefix frontend run build
-   # Kết quả: tsc -b && vite build thành công (3.13s), không có lỗi TypeScript
+   # Kết quả: tsc -b && vite build thành công (1.48s), không có lỗi TypeScript
    ```
 4. **Database Health & Active Majors:**
    - PostgreSQL đang lưu trữ chính xác **435 ngành hoạt động** theo TT74/2026/TT-BGDĐT.

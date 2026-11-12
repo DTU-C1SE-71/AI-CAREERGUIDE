@@ -455,26 +455,123 @@ def calculate_cognitive_preference_match(
     return round(max(0.0, min(1.0, score)), 4)
 
 
+# ==========================================
+# SOLUTION A: ADAPTIVE DYNAMIC WEIGHTING & COMPACT XAI
+# ==========================================
+
+GROUPS = ("riasec", "academic", "cognitive")
+BASE_WEIGHTS = {"riasec": 0.45, "academic": 0.35, "cognitive": 0.20}
+STRATEGY_MULTIPLIERS = {
+    "balanced": {"riasec": 1.0, "academic": 1.0, "cognitive": 1.0},
+    "safe_admission": {"riasec": 0.90, "academic": 1.25, "cognitive": 0.95},
+    "passion": {"riasec": 1.25, "academic": 0.90, "cognitive": 0.95},
+}
+
+
+def compute_adaptive_weights(
+    has_academic_scores: bool = True,
+    strategy: str = "balanced",
+    category: str = "",
+    custom_weights: Optional[Dict[str, float]] = None,
+    base_riasec: float = 0.45,
+    base_academic: float = 0.35,
+    base_preference: float = 0.20,
+) -> Dict[str, float]:
+    """
+    Tính toán trọng số thích ứng tự động (Adaptive Dynamic Weighting):
+    1. Khi học sinh chưa có điểm (has_academic_scores=False):
+       - Loại bỏ hoàn toàn trụ cột academic khỏi tử số và mẫu số.
+       - Tự động tái chuẩn hóa: w_riasec ≈ 0.6923, w_preference ≈ 0.3077 (tổng luôn = 1.0).
+       - Ngăn chặn hoàn toàn việc sinh điểm học thuật giả hay suy đoán bừa bãi.
+    2. Khi có điểm học tập:
+       - Áp dụng hệ số điều chỉnh chiến lược (an toàn đậu đại học vs đam mê bứt phá).
+       - Tinh chỉnh theo đặc thù nhóm ngành (Y Dược/Kỹ thuật tăng học thuật; Nghệ thuật/Thiết kế tăng sở thích).
+    3. Ràng buộc bảo toàn: Tổng 3 trọng số luôn được chuẩn hóa đúng 1.0.
+    """
+    if custom_weights:
+        total = sum(custom_weights.values())
+        if total > 0:
+            return {
+                "w_riasec": round(custom_weights.get("w_riasec", base_riasec) / total, 4),
+                "w_academic": round(custom_weights.get("w_academic", base_academic) / total, 4),
+                "w_preference": round(custom_weights.get("w_preference", base_preference) / total, 4),
+            }
+
+    strat_key = (strategy or "balanced").lower().strip()
+    if any(k in strat_key for k in ("an toàn", "safe", "target")):
+        strat = STRATEGY_MULTIPLIERS["safe_admission"]
+    elif any(k in strat_key for k in ("đam mê", "bứt phá", "passion", "reach")):
+        strat = STRATEGY_MULTIPLIERS["passion"]
+    else:
+        strat = STRATEGY_MULTIPLIERS.get(strat_key, STRATEGY_MULTIPLIERS["balanced"])
+
+    cat_low = (category or "").lower()
+    p_riasec = 1.0
+    p_academic = 1.0
+    p_pref = 1.0
+
+    if any(k in cat_low for k in ("sức khỏe", "y dược", "máy tính", "bán dẫn", "kỹ thuật")):
+        p_academic = 1.15
+    elif any(k in cat_low for k in ("nghệ thuật", "thiết kế", "báo chí", "ngôn ngữ", "nhân văn")):
+        p_riasec = 1.15
+
+    raw: Dict[str, float] = {}
+    raw["riasec"] = base_riasec * strat["riasec"] * p_riasec
+    if has_academic_scores:
+        raw["academic"] = base_academic * strat["academic"] * p_academic
+    else:
+        raw["academic"] = 0.0
+    raw["cognitive"] = base_preference * strat["cognitive"] * p_pref
+
+    total = sum(raw.values())
+    if total <= 0:
+        return {"w_riasec": 0.45, "w_academic": 0.35, "w_preference": 0.20}
+
+    return {
+        "w_riasec": round(raw["riasec"] / total, 4),
+        "w_academic": round(raw["academic"] / total, 4),
+        "w_preference": round(raw["cognitive"] / total, 4),
+    }
+
+
 def calculate_3pillar_hybrid_score(
     score_riasec: float,
     score_academic: float,
     score_preference: float,
     w_riasec: float = 0.45,
     w_academic: float = 0.35,
-    w_preference: float = 0.20
+    w_preference: float = 0.20,
+    has_academic_scores: Optional[bool] = None,
+    strategy: str = "balanced",
+    category: str = "",
 ) -> Tuple[float, Dict[str, float]]:
     """
-    Holistic 3-Pillar Weighted Hybrid Model:
+    Holistic 3-Pillar Adaptive Hybrid Model:
     Score_Major = w_RIASEC * Score_RIASEC + w_Academic * Score_Academic + w_Preference * Score_Preference
-    Constraint: w_RIASEC + w_Academic + w_Preference = 1.0 (auto-normalized if needed)
+    
+    Hỗ trợ cả trọng số cố định truyền thống và cơ chế trọng số thích ứng tự động:
+    - Khi has_academic_scores=False: Tự động tính adaptive weights (loại bỏ academic, tái chuẩn hóa tổng 1.0).
+    - Luôn bảo toàn ràng buộc: w_RIASEC + w_Academic + w_Preference = 1.0 tuyệt đối.
     """
-    total_w = w_riasec + w_academic + w_preference
-    if total_w <= 0.0 or abs(total_w - 1.0) > 1e-6:
-        # Normalize weights to sum exactly to 1.0
-        norm_factor = total_w if total_w > 0 else 1.0
-        w_riasec = w_riasec / norm_factor
-        w_academic = w_academic / norm_factor
-        w_preference = w_preference / norm_factor
+    if has_academic_scores is False:
+        adaptive = compute_adaptive_weights(
+            has_academic_scores=False,
+            strategy=strategy,
+            category=category,
+            base_riasec=w_riasec,
+            base_academic=w_academic,
+            base_preference=w_preference,
+        )
+        w_riasec = adaptive["w_riasec"]
+        w_academic = adaptive["w_academic"]
+        w_preference = adaptive["w_preference"]
+    else:
+        total_w = w_riasec + w_academic + w_preference
+        if total_w <= 0.0 or abs(total_w - 1.0) > 1e-6:
+            norm_factor = total_w if total_w > 0 else 1.0
+            w_riasec = w_riasec / norm_factor
+            w_academic = w_academic / norm_factor
+            w_preference = w_preference / norm_factor
 
     score = (
         w_riasec * score_riasec +
@@ -491,6 +588,59 @@ def calculate_3pillar_hybrid_score(
     return round(score_clamped, 4), weights_dict
 
 
+def build_compact_xai_explanation(
+    major_name: str,
+    score_riasec: float,
+    score_academic: float,
+    score_pref: float,
+    best_block: Optional[str] = None,
+    admission_band: str = "UNKNOWN",
+    has_academic_scores: bool = True,
+) -> str:
+    """
+    Tạo đoạn giải thích XAI súc tích đúng 3 câu, thân thiện và dễ hiểu cho học sinh THPT:
+    1. Vì sao hợp: Nêu bật trụ cột mạnh nhất (Sở thích Holland, Năng lực học tập, hay Tư duy nhận thức).
+    2. Khả năng trúng tuyển: Phân tầng tuyển sinh theo khối thi (hoặc nhắc chưa có điểm).
+    3. Cần chú ý / Lời khuyên: Chỉ ra trụ cột/môn cần cải thiện để nâng cao cơ hội.
+    """
+    components = {
+        "riasec": score_riasec,
+        "academic": score_academic if has_academic_scores else 0.0,
+        "cognitive": score_pref,
+    }
+    labels = {
+        "riasec": "thiên hướng sở thích và tính cách nghề nghiệp",
+        "academic": f"nền tảng điểm số học tập khối {best_block or 'xét tuyển'}",
+        "cognitive": "năng lực tư duy và phong cách học tập",
+    }
+
+    eval_comps = {k: v for k, v in components.items() if (has_academic_scores or k != "academic")}
+    best_pillar = max(eval_comps, key=eval_comps.get)
+    why = f"Ngành {major_name} rất phù hợp với bạn nhờ {labels[best_pillar]} nổi bật."
+
+    if not has_academic_scores or admission_band == "UNKNOWN":
+        chance = f"Khả năng trúng tuyển khối {best_block or 'xét tuyển'}: Chưa đủ dữ liệu điểm để ước lượng."
+    elif admission_band == "SAFE":
+        chance = f"Khả năng trúng tuyển khối {best_block or 'xét tuyển'}: Tương đối an toàn dựa trên điểm chuẩn tham chiếu."
+    elif admission_band in ("MATCH", "TARGET"):
+        chance = f"Khả năng trúng tuyển khối {best_block or 'xét tuyển'}: Vừa sức trong tầm điểm của bạn."
+    elif admission_band == "REACH":
+        chance = f"Khả năng trúng tuyển khối {best_block or 'xét tuyển'}: Cần bứt phá thêm điểm số để chắc suất."
+    else:
+        chance = f"Khả năng trúng tuyển khối {best_block or 'xét tuyển'}: Đang được phân tích."
+
+    if not has_academic_scores:
+        advice = "Bạn hãy nhập điểm học bạ hoặc điểm thi thử để nhận đánh giá khả năng trúng tuyển chính xác hơn."
+    else:
+        weakest_pillar = min(components, key=components.get)
+        if components[weakest_pillar] < 0.65:
+            advice = f"Bạn nên tập trung cải thiện thêm {labels[weakest_pillar]} để nâng cao cơ hội."
+        else:
+            advice = "Bạn đang có nền tảng rất vững để tự tin theo đuổi ngành này."
+
+    return f"{why} {chance} {advice}"
+
+
 def generate_xai_top_supporting_factors(
     major_name: str,
     score_riasec: float,
@@ -500,12 +650,16 @@ def generate_xai_top_supporting_factors(
     best_block: Optional[str],
     score_pref: float,
     student_pref: Dict[str, Any],
-    major_attr: Dict[str, Any]
+    major_attr: Dict[str, Any],
+    admission_band: str = "UNKNOWN",
+    has_academic_scores: bool = True,
 ) -> Tuple[List[str], str]:
     """
     Generates deterministic, explainable AI (XAI) top supporting factors
     WITHOUT ANY NON-DETERMINISTIC LLM.
-    Identifies top matching dimensions and returns structured insights.
+    Returns:
+    - supporting_factors: Detailed bullet points for breakdown cards.
+    - summary_explanation: Compact, 3-sentence user-friendly explanation.
     """
     supporting_factors: List[str] = []
 
@@ -538,7 +692,11 @@ def generate_xai_top_supporting_factors(
         )
 
     # 2. Academic Analysis
-    if score_academic >= 0.75:
+    if not has_academic_scores:
+        supporting_factors.append(
+            "Chưa có dữ liệu điểm học thuật: Đề xuất ưu tiên dựa trên thiên hướng sở thích và tư duy logic."
+        )
+    elif score_academic >= 0.75:
         supporting_factors.append(
             f"Năng lực học thuật vượt trội: Khối xét tuyển {best_block or 'thế mạnh'} đạt phân vị {round(score_academic * 100, 1)}% chuẩn hóa toàn quốc."
         )
@@ -563,11 +721,14 @@ def generate_xai_top_supporting_factors(
             f"Độ thích ứng phong cách tư duy đạt {round(score_pref * 100, 1)}% qua các tiêu chí tư duy logic và giải quyết vấn đề."
         )
 
-    summary_explanation = (
-        f"Ngành {major_name} được đề xuất dựa trên mô hình lai 3 trụ cột tất định: "
-        f"Sở thích Holland ({round(score_riasec * 100, 1)}%), "
-        f"Năng lực khối thi {best_block or 'xét tuyển'} ({round(score_academic * 100, 1)}%) "
-        f"và Độ hòa hợp nhận thức ({round(score_pref * 100, 1)}%)."
+    summary_explanation = build_compact_xai_explanation(
+        major_name=major_name,
+        score_riasec=score_riasec,
+        score_academic=score_academic,
+        score_pref=score_pref,
+        best_block=best_block,
+        admission_band=admission_band,
+        has_academic_scores=has_academic_scores,
     )
 
     return supporting_factors, summary_explanation

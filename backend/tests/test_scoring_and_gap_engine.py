@@ -11,6 +11,8 @@ from app.services.recommender.engine import (
     calculate_cognitive_preference_match,
     calculate_3pillar_hybrid_score,
     generate_xai_top_supporting_factors,
+    compute_adaptive_weights,
+    build_compact_xai_explanation,
     RIASEC_DIMENSIONS,
 )
 from app.services.gap_roadmap_engine.gap_engine import (
@@ -1408,6 +1410,83 @@ class TestExcelBulkImportPersistence:
         assert res["deactivated"] == 1
         assert res["total"] == 1
         db.commit.assert_awaited_once()
+
+
+# =========================================================================
+# ADAPTIVE WEIGHTING & COMPACT XAI TESTS (ARENA WINNING DESIGN)
+# =========================================================================
+
+class TestAdaptiveWeightingAndCompactXAI:
+    def test_adaptive_weights_when_missing_academic_scores(self):
+        # Khi học sinh chưa nhập điểm, academic = 0, riasec + preference = 1.0
+        weights = compute_adaptive_weights(has_academic_scores=False)
+        assert weights["w_academic"] == 0.0
+        assert round(weights["w_riasec"] + weights["w_preference"], 4) == 1.0
+        assert weights["w_riasec"] > 0.60
+        assert weights["w_preference"] > 0.25
+
+    def test_adaptive_weights_safe_admission_strategy(self):
+        # Chiến lược an toàn tăng trọng số học thuật
+        weights = compute_adaptive_weights(has_academic_scores=True, strategy="safe_admission")
+        assert round(sum(weights.values()), 4) == 1.0
+        assert weights["w_academic"] > 0.40
+
+    def test_adaptive_weights_passion_strategy(self):
+        # Chiến lược đam mê tăng trọng số RIASEC
+        weights = compute_adaptive_weights(has_academic_scores=True, strategy="passion")
+        assert round(sum(weights.values()), 4) == 1.0
+        assert weights["w_riasec"] > 0.50
+
+    def test_adaptive_weights_category_multipliers(self):
+        # Ngành sức khỏe / kỹ thuật tăng học thuật
+        tech_weights = compute_adaptive_weights(has_academic_scores=True, category="Kỹ thuật máy tính")
+        art_weights = compute_adaptive_weights(has_academic_scores=True, category="Mỹ thuật đồ họa")
+        assert tech_weights["w_academic"] > art_weights["w_academic"]
+        assert art_weights["w_riasec"] > tech_weights["w_riasec"]
+
+    def test_hybrid_score_with_missing_academic_scores(self):
+        # Tính điểm khi không có điểm học thuật
+        score, weights = calculate_3pillar_hybrid_score(
+            score_riasec=0.85,
+            score_academic=0.0,
+            score_preference=0.75,
+            has_academic_scores=False,
+        )
+        assert weights["w_academic"] == 0.0
+        assert round(weights["w_riasec"] + weights["w_preference"], 4) == 1.0
+        # Điểm tổng hợp không bị tụt vì điểm học thuật 0.0
+        assert score > 0.80
+
+    def test_compact_xai_explanation_structure_and_clarity(self):
+        # Kiểm tra giải thích 3 câu gọn gàng không biệt ngữ toán học
+        expl = build_compact_xai_explanation(
+            major_name="Khoa học máy tính",
+            score_riasec=0.90,
+            score_academic=0.82,
+            score_pref=0.85,
+            best_block="A00",
+            admission_band="TARGET",
+            has_academic_scores=True,
+        )
+        assert "Khoa học máy tính" in expl
+        assert "A00" in expl
+        assert "Vừa sức" in expl
+        # 3 câu (kết thúc bằng dấu chấm)
+        sentences = [s.strip() for s in expl.split(".") if s.strip()]
+        assert len(sentences) == 3
+
+    def test_compact_xai_explanation_when_missing_scores(self):
+        expl = build_compact_xai_explanation(
+            major_name="Thiết kế đồ họa",
+            score_riasec=0.95,
+            score_academic=0.0,
+            score_pref=0.80,
+            admission_band="UNKNOWN",
+            has_academic_scores=False,
+        )
+        assert "Thiết kế đồ họa" in expl
+        assert "Chưa đủ dữ liệu điểm" in expl
+        assert "nhập điểm" in expl.lower()
 
 
 
