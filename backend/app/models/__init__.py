@@ -6,6 +6,7 @@ Includes all entities across the 6 modular services:
 - assessment: StudentAssessment, StudentGrade, StudentDiagnosticTest
 - recommender: RecommendationHistory
 - roadmap: MajorRoadmap, StudentRoadmapProgress
+- insight: MajorInsight, StudentSkillInsight
 - staging: StagingRecord, StagingStreamType, StagingStatus
 - vector: KnowledgeEmbedding
 """
@@ -34,6 +35,7 @@ from app.models.assessment import (
 )
 from app.models.recommender import RecommendationHistory
 from app.models.roadmap import MajorRoadmap, StudentRoadmapProgress
+from app.models.insight import MajorInsight, StudentSkillInsight
 from app.models.staging import StagingRecord, StagingStreamType, StagingStatus
 from app.models.vector import KnowledgeEmbedding
 
@@ -61,6 +63,8 @@ __all__ = [
     "RecommendationHistory",
     "MajorRoadmap",
     "StudentRoadmapProgress",
+    "MajorInsight",
+    "StudentSkillInsight",
     "StagingRecord",
     "StagingStreamType",
     "StagingStatus",

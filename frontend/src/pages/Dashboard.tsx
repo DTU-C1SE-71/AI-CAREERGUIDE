@@ -22,6 +22,7 @@ import { Card } from "../components/common/Card"
 import { PageContainer } from "../components/layout/PageContainer"
 import { RiasecRadarChart } from "../components/visualization/RiasecRadarChart"
 import { AspirationAlignmentCard } from "../components/xai/AspirationAlignmentCard"
+import { SkillAnalysisCard } from "../components/xai/SkillAnalysisCard"
 import { TrendBadge } from "../components/xai/TrendBadge"
 import { TwoTierFunnelRecommendation } from "../components/xai/TwoTierFunnelRecommendation"
 import { useAuth } from "../context/AuthContext"
@@ -36,6 +37,7 @@ import type {
   AspirationAnalysisPayload,
   CareerAspirationInput,
 } from "../types/assessment"
+import type { StudentSkillAnalysis } from "../types/insight"
 import type { FunnelRecommendationData, Major } from "../types/major"
 import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
 
@@ -453,6 +455,9 @@ export function Dashboard() {
   const [selectedCategory, setSelectedCategory] = useState("ALL")
   const [showAllCatalog, setShowAllCatalog] = useState(false)
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false)
+  const [skillAnalysis, setSkillAnalysis] =
+    useState<StudentSkillAnalysis | null>(null)
+  const [skillLoading, setSkillLoading] = useState(false)
   const catalogRef = useRef<HTMLDivElement>(null)
   const reportTopRef = useRef<HTMLDivElement>(null)
 
@@ -510,6 +515,82 @@ export function Dashboard() {
     assessment.cognitive,
     assessment.scores,
     assessment.aspiration,
+  ])
+
+  // Agent "Phân tích kỹ năng": ưu/nhược điểm học tập + kỹ năng cần bổ sung
+  // (cache theo hồ sơ năng lực ở backend nên chỉ tốn AI lần đầu).
+  useEffect(() => {
+    if (!hasCompletedAssessment) {
+      setSkillAnalysis(null)
+      setSkillLoading(false)
+      return
+    }
+
+    let mounted = true
+    const riasecScores: Record<string, number> = {}
+    for (const dim of ["R", "I", "A", "S", "E", "C"]) {
+      const vals: number[] = []
+      for (let i = 1; i <= 5; i++) {
+        const v = assessment.answers?.[`${dim}${i}`]
+        if (typeof v === "number" && v > 0) vals.push(v)
+      }
+      if (vals.length > 0) {
+        const avg = vals.reduce((a, b) => a + b, 0) / vals.length
+        riasecScores[dim] = Number((avg / 5).toFixed(2))
+      }
+    }
+
+    const gradesBySubject: Record<string, number> = Object.fromEntries(
+      (assessment.scores || []).map((s) => [s.subject, s.score]),
+    )
+
+    // Không có dữ liệu bài test thực tế (chỉ có lịch sử cũ) → không chấm điểm
+    if (
+      Object.keys(riasecScores).length === 0 &&
+      Object.keys(gradesBySubject).length === 0
+    ) {
+      setSkillLoading(false)
+      return
+    }
+
+    setSkillLoading(true)
+    apiRequest<StudentSkillAnalysis | null>(
+      "/major-insights/student-skills",
+      null,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          major_code: data?.majors?.[0]?.code,
+          riasec_scores:
+            Object.keys(riasecScores).length > 0 ? riasecScores : undefined,
+          grades_by_subject:
+            Object.keys(gradesBySubject).length > 0 ? gradesBySubject : undefined,
+          cognitive_preferences:
+            Object.keys(assessment.cognitive || {}).length > 0
+              ? assessment.cognitive
+              : undefined,
+          aspiration: assessment.aspiration || undefined,
+        }),
+      },
+    )
+      .then((res) => {
+        if (mounted && res) setSkillAnalysis(res)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (mounted) setSkillLoading(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [
+    hasCompletedAssessment,
+    assessment.answers,
+    assessment.scores,
+    assessment.cognitive,
+    assessment.aspiration,
+    data?.majors,
   ])
 
   const handleUpdateAspiration = (nextAspiration: CareerAspirationInput) => {
@@ -1009,6 +1090,10 @@ export function Dashboard() {
               onUpdateAspiration={handleUpdateAspiration}
               isAnalyzing={isAnalyzingAspiration}
             />
+
+            <div className="mb-6">
+              <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
+            </div>
 
             {/* Clean 2-Column Layout: Single Left Profile Card + Right 2-Tier Funnel */}
             <div className="grid gap-6 lg:grid-cols-[.82fr_1.18fr]">

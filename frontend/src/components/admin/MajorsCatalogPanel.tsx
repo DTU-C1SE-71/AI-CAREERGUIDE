@@ -72,6 +72,7 @@ export function MajorsCatalogPanel({
   const [trendFilter, setTrendFilter] = useState<TrendFilter>("ALL")
   const [page, setPage] = useState(1)
   const [expandedCode, setExpandedCode] = useState<string | null>(null)
+  const [insightBusy, setInsightBusy] = useState<string | null>(null)
 
   const loadCatalog = useCallback(async () => {
     setLoading(true)
@@ -150,6 +151,50 @@ export function MajorsCatalogPanel({
   const resetPage = () => {
     setPage(1)
     setExpandedCode(null)
+  }
+
+  /** Admin: sinh lại / xoá cache nội dung đào tạo của một ngành. */
+  const handleInsightCache = async (
+    majorCode: string,
+    action: "regenerate" | "delete",
+  ) => {
+    const token = readStorage<string | null>("career-guide:token", null)
+    if (!token) {
+      onNotify?.("Vui lòng đăng nhập bằng tài khoản ADMIN để thực hiện.", true)
+      return
+    }
+
+    setInsightBusy(`${action}:${majorCode}`)
+    try {
+      const res = await fetch(
+        `/api/v1/major-insights/${majorCode}${action === "regenerate" ? "/regenerate" : ""}`,
+        {
+          method: action === "regenerate" ? "POST" : "DELETE",
+          headers: { Authorization: `Bearer ${token}` },
+        },
+      )
+      const body: unknown = await res.json().catch(() => null)
+      if (!res.ok) {
+        const detail = (body as { detail?: string } | null)?.detail
+        throw new Error(detail || `Thao tác thất bại (HTTP ${res.status}).`)
+      }
+      if (action === "regenerate") {
+        const isAi = Boolean((body as { is_ai_generated?: boolean } | null)?.is_ai_generated)
+        onNotify?.(
+          `Đã sinh lại nội dung đào tạo ngành ${majorCode} ${isAi ? "bằng AI" : "từ dữ liệu dựng sẵn"}.`,
+        )
+      } else {
+        const message = (body as { message?: string } | null)?.message
+        onNotify?.(message || `Đã xoá cache nội dung đào tạo ngành ${majorCode}.`)
+      }
+    } catch (err) {
+      onNotify?.(
+        err instanceof Error ? err.message : "Không thực hiện được thao tác.",
+        true,
+      )
+    } finally {
+      setInsightBusy(null)
+    }
   }
 
   const hasActiveFilter =
@@ -486,6 +531,35 @@ export function MajorsCatalogPanel({
                                       </div>
                                     )}
                                   </div>
+                                </div>
+                                <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-sky-200/70 pt-2.5">
+                                  <p className="mr-auto text-[10px] font-extrabold uppercase text-slate-500">
+                                    Agent nội dung đào tạo (cache AI)
+                                  </p>
+                                  <Button
+                                    variant="secondary"
+                                    icon={RefreshCw}
+                                    onClick={() =>
+                                      void handleInsightCache(major.major_code, "regenerate")
+                                    }
+                                    loading={
+                                      insightBusy === `regenerate:${major.major_code}`
+                                    }
+                                    className="!min-h-7 !px-2.5 !py-1 !text-[10px]"
+                                  >
+                                    Sinh lại nội dung
+                                  </Button>
+                                  <Button
+                                    variant="secondary"
+                                    icon={X}
+                                    onClick={() =>
+                                      void handleInsightCache(major.major_code, "delete")
+                                    }
+                                    loading={insightBusy === `delete:${major.major_code}`}
+                                    className="!min-h-7 !px-2.5 !py-1 !text-[10px]"
+                                  >
+                                    Xoá cache
+                                  </Button>
                                 </div>
                               </td>
                             </tr>
