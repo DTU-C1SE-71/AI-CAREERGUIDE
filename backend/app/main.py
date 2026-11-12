@@ -10,6 +10,7 @@ from app.services.recommender import router as recommender_router
 from app.services.taxonomy import router as taxonomy_router
 from app.services.gap_roadmap_engine import router as roadmap_router
 from app.services.llamaindex_rag_orchestrator import router as rag_governance_router
+from app.services.major_insight import router as major_insight_router
 
 
 @asynccontextmanager
@@ -73,6 +74,7 @@ app.include_router(recommender_router, prefix=settings.API_V1_STR)
 app.include_router(taxonomy_router, prefix=settings.API_V1_STR)
 app.include_router(roadmap_router, prefix=settings.API_V1_STR)
 app.include_router(rag_governance_router, prefix=settings.API_V1_STR)
+app.include_router(major_insight_router, prefix=settings.API_V1_STR)
 
 # Direct /api prefix aliases for frontend apiRequest routes
 if settings.API_V1_STR != "/api":
@@ -83,6 +85,7 @@ if settings.API_V1_STR != "/api":
     app.include_router(taxonomy_router, prefix="/api")
     app.include_router(roadmap_router, prefix="/api")
     app.include_router(rag_governance_router, prefix="/api")
+    app.include_router(major_insight_router, prefix="/api")
 
 
 @app.get("/health", tags=["Health & Status"])

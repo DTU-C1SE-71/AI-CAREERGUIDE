@@ -3,10 +3,7 @@ import {
   ArrowRight,
   Bookmark,
   BookmarkCheck,
-  BookOpenCheck,
-  BriefcaseBusiness,
   CircleCheck,
-  GraduationCap,
   Loader2,
 } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -17,12 +14,15 @@ import { PageContainer } from "../components/layout/PageContainer"
 import { ExplanationBox } from "../components/xai/ExplanationBox"
 import { FeasibilityBadge } from "../components/xai/FeasibilityBadge"
 import { GapAnalysisCard } from "../components/xai/GapAnalysisCard"
+import { MajorInfoCards } from "../components/xai/MajorInfoCards"
+import { SkillAnalysisCard } from "../components/xai/SkillAnalysisCard"
 import { TrendBadge } from "../components/xai/TrendBadge"
 import { MOET_435_MAJORS } from "../data/moetMajors435"
 import { useAssessment } from "../hooks/useAssessment"
 import { apiRequest } from "../services/api"
 import { majors as fallbackMajors } from "../services/mockData"
 import { readStorage, writeStorage } from "../services/storage"
+import type { MajorInsight, StudentSkillAnalysis } from "../types/insight"
 import type { Major } from "../types/major"
 import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
 
@@ -70,6 +70,11 @@ export function MajorDetail() {
     )
   })
   const [taxDetail, setTaxDetail] = useState<TaxonomyMajorDetail | null>(null)
+  const [majorInsight, setMajorInsight] = useState<MajorInsight | null>(null)
+  const [skillAnalysis, setSkillAnalysis] =
+    useState<StudentSkillAnalysis | null>(null)
+  const [insightLoading, setInsightLoading] = useState(false)
+  const [skillLoading, setSkillLoading] = useState(false)
   const [loading, setLoading] = useState(false)
   const [aiExplaining, setAiExplaining] = useState(false)
   const [aiExplanationText, setAiExplanationText] = useState<string | null>(
@@ -88,6 +93,10 @@ export function MajorDetail() {
     setLoading(true)
     setAiExplaining(true)
     setAiExplanationText(null)
+    setMajorInsight(null)
+    setSkillAnalysis(null)
+    setInsightLoading(true)
+    setSkillLoading(false)
 
     const localMatch = fallbackMajors.find(
       (item) => item.id === id || item.code === id,
@@ -191,7 +200,47 @@ export function MajorDetail() {
         if (mounted) setLoading(false)
       })
 
-    // 2. Automatically call AI Explanation API on page entry
+    // 2. Agent "Phân tích ngành": nội dung đào tạo + vị trí nghề nghiệp (cache-first)
+    apiRequest<MajorInsight | null>(`/major-insights/${codeToLookup}`, null)
+      .then((insight) => {
+        if (mounted && insight) setMajorInsight(insight)
+      })
+      .finally(() => {
+        if (mounted) setInsightLoading(false)
+      })
+
+    // 3. Agent "Phân tích kỹ năng": ưu/nhược điểm học tập + kỹ năng cần bổ sung
+    if (hasUserAssessment) {
+      setSkillLoading(true)
+      apiRequest<StudentSkillAnalysis | null>(
+        "/major-insights/student-skills",
+        null,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            major_code: codeToLookup,
+            riasec_scores:
+              Object.keys(riasecScores).length > 0 ? riasecScores : undefined,
+            grades_by_subject:
+              Object.keys(gradesBySubject).length > 0
+                ? gradesBySubject
+                : undefined,
+            cognitive_preferences:
+              Object.keys(assessment.cognitive || {}).length > 0
+                ? assessment.cognitive
+                : undefined,
+          }),
+        },
+      )
+        .then((analysis) => {
+          if (mounted && analysis) setSkillAnalysis(analysis)
+        })
+        .finally(() => {
+          if (mounted) setSkillLoading(false)
+        })
+    }
+
+    // 4. Automatically call AI Explanation API on page entry
     apiRequest<AIExplanationApiPayload | null>(
       "/rag-governance/explain-recommendation",
       null,
@@ -291,21 +340,14 @@ export function MajorDetail() {
     window.dispatchEvent(new Event("saved-roadmaps-updated"))
   }
 
-  const careerText =
-    taxDetail?.careers && taxDetail.careers.length > 0
-      ? taxDetail.careers
-          .map((c) => (typeof c === "string" ? c : c.title_vi))
-          .join(", ")
-      : "Kỹ sư chuyên môn, Chuyên viên phân tích, R&D, Quản lý dự án."
-
   const blockText =
-    taxDetail?.subject_blocks && taxDetail.subject_blocks.length > 0
-      ? taxDetail.subject_blocks.join(", ")
-      : "A00, A01, D01, D07"
+    majorInsight?.subject_blocks && majorInsight.subject_blocks.length > 0
+      ? majorInsight.subject_blocks.join(", ")
+      : taxDetail?.subject_blocks && taxDetail.subject_blocks.length > 0
+        ? taxDetail.subject_blocks.join(", ")
+        : "A00, A01, D01, D07"
 
-  const studyDescription =
-    taxDetail?.description ||
-    "Chương trình đào tạo kết hợp kiến thức nền tảng, kỹ năng thực hành và dự án thực tế."
+  const skillCardVisible = skillLoading || Boolean(skillAnalysis)
 
   return (
     <section className="py-10">
@@ -415,30 +457,18 @@ export function MajorDetail() {
               loading={aiExplaining}
             />
             <GapAnalysisCard gaps={major.gaps} />
+            {skillCardVisible && (
+              <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
+            )}
           </div>
 
           <div className="space-y-4">
-            {[
-              [GraduationCap, "Nội dung đào tạo", studyDescription],
-              [BriefcaseBusiness, "Vị trí nghề nghiệp", careerText],
-              [BookOpenCheck, "Tổ hợp xét tuyển", blockText],
-            ].map(([Icon, title, text]) => (
-              <Card key={String(title)} className="rounded-3xl p-5">
-                <div className="flex gap-3">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-sky-500/12 text-sky-600">
-                    <Icon size={19} />
-                  </span>
-                  <div>
-                    <h3 className="text-sm font-extrabold text-slate-900">
-                      {String(title)}
-                    </h3>
-                    <p className="mt-1 text-xs leading-5 text-slate-600">
-                      {String(text)}
-                    </p>
-                  </div>
-                </div>
-              </Card>
-            ))}
+            <MajorInfoCards
+              training={majorInsight?.training_content || null}
+              careers={majorInsight?.career_positions || []}
+              subjectBlocks={blockText}
+              loading={insightLoading}
+            />
           </div>
         </div>
 
