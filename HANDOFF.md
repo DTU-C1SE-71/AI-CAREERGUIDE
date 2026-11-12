@@ -81,6 +81,9 @@ Bổ sung các cụm nghề đa dạng vào `CAREER_SYNONYM_CLUSTERS` trong `asp
 | `backend/app/services/taxonomy/trend_agent.py` | Agent tìm kiếm xu hướng thị trường 2026, quota tối thiểu 3 ngành/nhóm, lưu CSDL |
 | `frontend/src/components/admin/TrendAgentPanel.tsx` | Giao diện Admin chạy/duyệt/lưu ngành xu hướng 2026 vào PostgreSQL |
 | `frontend/src/components/admin/MajorsCatalogPanel.tsx` | Bảng tra cứu danh mục 435 ngành TT74 & trạng thái xu hướng cho Admin |
+| `backend/app/services/major_insight/` | Cụm Agent phân tích chuyên sâu ngành: nội dung đào tạo, vị trí nghề nghiệp, phân tích ưu/nhược điểm học tập sinh viên |
+| `frontend/src/components/xai/MajorInfoCards.tsx` & `SkillAnalysisCard.tsx` | Thẻ hiển thị chuyên sâu thông tin ngành và đánh giá kỹ năng cá nhân hóa tại trang chi tiết ngành |
+| `.agents/skills/arena/` | Tournament skill `arena`: Thi đấu phân loại giải pháp AI đa tác nhân với số lượng tác nhân tinh gọn (Mặc định 8, Quick 4, Wave 4) |
 
 ---
 
@@ -89,15 +92,20 @@ Bổ sung các cụm nghề đa dạng vào `CAREER_SYNONYM_CLUSTERS` trong `asp
 Toàn bộ các cổng kiểm định chất lượng đều đạt chuẩn tuyệt đối:
 1. **Pytest Backend:**
    ```bash
-   py -3 -m pytest backend/tests -v
-   # Kết quả: 90/90 passed (100%), không có lỗi hồi quy
+   $env:ENVIRONMENT="test"; py -3 -m pytest backend/tests -v
+   # Kết quả: 106/106 passed (100%), bao gồm cả 16 test cho major_insight
    ```
-2. **Frontend Production Build:**
+2. **Arena Skill Unit Tests:**
+   ```bash
+   py -3 .agents/skills/arena/test_bracket.py
+   # Kết quả: 29/29 passed (100%), kiểm thử chuẩn xác giải đấu 8 tác nhân & 4 tác nhân quick
+   ```
+3. **Frontend Production Build:**
    ```bash
    npm --prefix frontend run build
-   # Kết quả: tsc -b && vite build thành công (2.25s), không có lỗi TypeScript
+   # Kết quả: tsc -b && vite build thành công (3.13s), không có lỗi TypeScript
    ```
-3. **Database Health & Active Majors:**
+4. **Database Health & Active Majors:**
    - PostgreSQL đang lưu trữ chính xác **435 ngành hoạt động** theo TT74/2026/TT-BGDĐT.
    - 81 ngành được gán nhãn xu hướng vĩ mô 2026 phủ kín 23/23 nhóm ngành.
 
@@ -109,10 +117,13 @@ Toàn bộ các cổng kiểm định chất lượng đều đạt chuẩn tuy�
 # 1. Chạy toàn bộ test suite backend
 $env:ENVIRONMENT="test"; py -3 -m pytest backend/tests -v
 
-# 2. Build kiểm tra TypeScript và bundle Frontend
+# 2. Chạy test suite của arena skill
+py -3 .agents/skills/arena/test_bracket.py
+
+# 3. Build kiểm tra TypeScript và bundle Frontend
 npm --prefix frontend run build
 
-# 3. Kiểm tra trạng thái CSDL và API sức khỏe
+# 4. Kiểm tra trạng thái CSDL và API sức khỏe
 Invoke-RestMethod -Uri "http://localhost:8000/api/health/db"
 Invoke-RestMethod -Uri "http://localhost:8000/api/v1/taxonomy/trend-agent/status"
 ```
