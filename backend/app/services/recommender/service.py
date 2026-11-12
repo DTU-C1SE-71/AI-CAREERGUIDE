@@ -312,14 +312,17 @@ async def calculate_3pillar_recommendations(
         # --- TRỤ CỘT 3 (20%): Thiên hướng nhận thức ---
         score_pref = calculate_asymmetric_cognitive_fit(student_pref, major.cognitive_attributes)
 
-        # --- ĐIỂM TỔNG HỢP 3 TRỤ CỘT ---
+        # --- ĐIỂM TỔNG HỢP 3 TRỤ CỘT (THÍCH ỨNG ĐỘNG) ---
         overall_score, weights_dict = calculate_3pillar_hybrid_score(
             score_riasec=score_riasec,
             score_academic=score_academic,
             score_preference=score_pref,
             w_riasec=w_riasec,
             w_academic=w_academic,
-            w_preference=w_pref
+            w_preference=w_pref,
+            has_academic_scores=has_any_grades,
+            strategy=getattr(payload, "aspiration_direction", "balanced") or "balanced",
+            category=getattr(major, "category", "") or "",
         )
 
         # --- PHÂN TÍCH LỖ HỔNG KỸ NĂNG ---
@@ -373,7 +376,7 @@ async def calculate_3pillar_recommendations(
             has_academic_data=has_any_grades,
         )
 
-        # --- GIẢI THÍCH XAI TẤT ĐỊNH ---
+        # --- GIẢI THÍCH XAI TẤT ĐỊNH & TINH GỌN ---
         top_factors, summary_expl = generate_xai_top_supporting_factors(
             major_name=major.name,
             score_riasec=score_riasec,
@@ -383,7 +386,9 @@ async def calculate_3pillar_recommendations(
             best_block=best_block,
             score_pref=score_pref,
             student_pref=student_pref,
-            major_attr=major.cognitive_attributes
+            major_attr=major.cognitive_attributes,
+            admission_band=feasibility["feasibility_tier"],
+            has_academic_scores=has_any_grades,
         )
 
         if feasibility["feasibility_tier"] == "REACH":
