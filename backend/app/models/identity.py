@@ -23,6 +23,10 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    gender: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Nam, Nữ, Khác
+    grade_level: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # Lớp 10, Lớp 11, Lớp 12, Đã tốt nghiệp THPT
+    school_class: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)  # VD: 12A1
+    school_name: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)  # VD: THPT Chuyên
     role: Mapped[UserRole] = mapped_column(
         Enum(UserRole, name="user_role_enum"), default=UserRole.STUDENT, nullable=False
     )

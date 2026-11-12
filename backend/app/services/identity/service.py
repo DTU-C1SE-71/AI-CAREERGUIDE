@@ -13,7 +13,8 @@ from app.schemas.identity import (
     TokenResponse,
     UserResponse,
     UserConsentCreate,
-    GoogleLoginRequest
+    GoogleLoginRequest,
+    UserProfileUpdateRequest,
 )
 
 
@@ -42,6 +43,10 @@ async def register_user(db: AsyncSession, payload: UserRegisterRequest) -> User:
         email=payload.email,
         hashed_password=hashed_pwd,
         full_name=payload.full_name,
+        gender=str(payload.gender or "Khác").strip(),
+        grade_level=str(payload.grade_level or "Lớp 12").strip(),
+        school_class=payload.school_class.strip() if payload.school_class else None,
+        school_name=payload.school_name.strip() if payload.school_name else None,
         role=UserRole.STUDENT,
         is_active=True
     )
@@ -60,6 +65,31 @@ async def register_user(db: AsyncSession, payload: UserRegisterRequest) -> User:
     db.add(initial_consent)
     await db.commit()
 
+    return user
+
+
+async def update_user_profile(db: AsyncSession, user_id: uuid.UUID, payload: UserProfileUpdateRequest) -> User:
+    query = select(User).where(User.id == user_id)
+    result = await db.execute(query)
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+    if payload.full_name is not None:
+        user.full_name = payload.full_name.strip()
+    if payload.gender is not None:
+        user.gender = payload.gender.strip()
+    if payload.grade_level is not None:
+        user.grade_level = payload.grade_level.strip()
+    if payload.school_class is not None:
+        user.school_class = payload.school_class.strip() if payload.school_class else None
+    if payload.school_name is not None:
+        user.school_name = payload.school_name.strip() if payload.school_name else None
+
+    await db.commit()
+    await db.refresh(user)
     return user
 
 

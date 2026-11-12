@@ -1488,6 +1488,88 @@ class TestAdaptiveWeightingAndCompactXAI:
         assert "Chưa đủ dữ liệu điểm" in expl
         assert "nhập điểm" in expl.lower()
 
+    def test_format_block_with_subjects_mapping(self):
+        from app.services.recommender.engine import format_block_with_subjects
+        assert "Toán, Vật lý, Hóa học" in format_block_with_subjects("A00")
+        assert "Ngữ văn, Lịch sử, Địa lý" in format_block_with_subjects("C00")
+        assert "Toán, Ngữ văn, Tiếng Anh" in format_block_with_subjects("D01")
+        assert "Toán, Vật lý, Hóa học" in format_block_with_subjects("Khối A00")
+        assert format_block_with_subjects("A00", include_prefix=False).startswith("A00 (")
+
+    @pytest.mark.asyncio
+    async def test_cross_block_aspiration_agent_explanation(self):
+        import uuid
+        from app.services.recommender.aspiration_agent import analyze_career_aspiration
+        from app.schemas.recommender import MajorRecommendationItem
+
+        # Kịch bản trong thực tế của học sinh:
+        # - Khối điểm cao nhất: C00 (Ngữ văn, Lịch sử, Địa lý) đạt 24.9đ
+        # - Ngành đề xuất: Kỹ thuật ô tô xét tuyển khối A00 (Toán, Vật lý, Hóa học) đạt 20.1đ, chuẩn ~18đ
+        mock_major = MajorRecommendationItem(
+            rank=1,
+            major_id=uuid.uuid4(),
+            major_code="7520130",
+            major_name="Kỹ thuật ô tô",
+            category="Kỹ thuật & Công nghệ",
+            overall_score=0.88,
+            score_riasec=0.89,
+            score_academic=0.94,
+            score_preference=0.72,
+            best_matching_block="A00",
+            best_block_score=20.1,
+            benchmark_cutoff=18.0,
+            score_gap=2.1,
+            score_breakdown={},
+            explanation="Ngành Kỹ thuật ô tô rất phù hợp.",
+            feasibility_tier="TARGET",
+            feasibility_label="Khả thi cao",
+            constraint_passed=True,
+            constraint_violations=[],
+            admission_advice="Đủ điểm an toàn",
+            summary_explanation="Ngành Kỹ thuật ô tô rất phù hợp.",
+            supporting_factors=[],
+            is_trending=True,
+            trend_tier="TIER_1",
+            trend_label="Xu hướng Bậc 1",
+            trend_priority=1,
+            market_trend_compatibility=0.85,
+        )
+
+        best_block_stats = {
+            "block": "Khối C00 (Ngữ văn, Lịch sử, Địa lý)",
+            "block_code": "C00",
+            "raw_sum": 24.9,
+            "z_score": "+1.01",
+            "percentile": "Top 20%",
+            "has_academic_data": True,
+        }
+
+        res = await analyze_career_aspiration(
+            aspiration_data={"dream_job": ""},
+            student_riasec={"R": 0.70, "A": 0.65, "C": 0.60, "I": 0.40, "S": 0.35, "E": 0.30},
+            best_block_stats=best_block_stats,
+            all_ranked_majors=[mock_major],
+            enable_llm=False,
+        )
+
+        verdict = res["agent_verdict"]
+        takeaways = res["key_takeaways"]
+
+        # Phải giải thích rõ: Khối C00 là điểm cao nhất, nhưng ngành xét A00 và A00 vẫn vượt chuẩn tham chiếu
+        assert "C00" in verdict
+        assert "A00" in verdict
+        assert "Ngữ văn, Lịch sử, Địa lý" in verdict
+        assert "Toán, Vật lý, Hóa học" in verdict
+        assert "Kỹ thuật ô tô" in verdict
+
+        # Takeaways cũng phải nêu rõ đối chiếu tổ hợp xét tuyển kèm tên môn học
+        joined_takeaways = " ".join(takeaways)
+        assert "C00" in joined_takeaways
+        assert "A00" in joined_takeaways
+        assert "Ngữ văn, Lịch sử, Địa lý" in joined_takeaways
+        assert "Toán, Vật lý, Hóa học" in joined_takeaways
+
+
 
 
 

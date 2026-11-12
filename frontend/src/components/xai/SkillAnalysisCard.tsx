@@ -20,6 +20,28 @@ const PRIORITY_LABEL: Record<string, string> = {
   LOW: "Bổ trợ",
 }
 
+function formatSkillSummary(summary: unknown): string {
+  if (!summary) return ""
+  if (Array.isArray(summary)) {
+    return summary.filter(Boolean).map((s) => String(s).trim()).join(" ")
+  }
+  if (typeof summary === "string") {
+    const trimmed = summary.trim()
+    if (trimmed.startsWith("[") && trimmed.endsWith("]")) {
+      try {
+        const parsed = JSON.parse(trimmed.replace(/'/g, '"'))
+        if (Array.isArray(parsed)) {
+          return parsed.filter(Boolean).map((s) => String(s).trim()).join(" ")
+        }
+      } catch {
+        return trimmed.slice(1, -1).replace(/['"]/g, "").trim()
+      }
+    }
+    return trimmed
+  }
+  return String(summary)
+}
+
 export function SkillAnalysisCard({
   data,
   loading = false,
@@ -47,7 +69,7 @@ export function SkillAnalysisCard({
       {data ? (
         <>
           <p className="rounded-2xl bg-sky-500/8 px-4 py-3 text-xs font-semibold leading-5 text-slate-700">
-            {data.summary}
+            {formatSkillSummary(data.summary)}
           </p>
 
           <div className="mt-4 grid gap-4 sm:grid-cols-2">

@@ -4,13 +4,15 @@ import {
   ArrowRight,
   BrainCircuit,
   Check,
+  GraduationCap,
   LoaderCircle,
   LockKeyhole,
   Mail,
+  School,
   User as UserIcon,
 } from "lucide-react"
 import { type FormEvent, useState } from "react"
-import { useNavigate } from "react-router"
+import { useNavigate, useSearchParams } from "react-router"
 import { Button } from "../components/common/Button"
 import { useAuth } from "../context/AuthContext"
 import { authPost } from "../services/api"
@@ -128,8 +130,13 @@ function GoogleSignInButton({
 }
 
 export function Login() {
-  const [isRegister, setIsRegister] = useState(false)
+  const [searchParams] = useSearchParams()
+  const [isRegister, setIsRegister] = useState(() => searchParams.get("tab") === "register")
   const [fullName, setFullName] = useState("")
+  const [gender, setGender] = useState<string>("Nam")
+  const [gradeLevel, setGradeLevel] = useState<string>("Lớp 12")
+  const [schoolClass, setSchoolClass] = useState("")
+  const [schoolName, setSchoolName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [loading, setLoading] = useState(false)
@@ -148,6 +155,10 @@ export function Login() {
     const userEmail = data.user?.email || email.trim()
     const userName =
       data.user?.full_name || fullName.trim() || userEmail.split("@")[0]
+    const userGender = (data.user as any)?.gender || gender
+    const userGradeLevel = (data.user as any)?.grade_level || gradeLevel
+    const userSchoolClass = (data.user as any)?.school_class || schoolClass
+    const userSchoolName = (data.user as any)?.school_name || schoolName
 
     login(
       mappedRole,
@@ -156,7 +167,11 @@ export function Login() {
         name: userName,
         email: userEmail,
         role: mappedRole,
-        grade: 12,
+        gender: userGender,
+        grade_level: userGradeLevel,
+        school_class: userSchoolClass,
+        school_name: userSchoolName,
+        grade: userGradeLevel === "Lớp 11" ? 11 : 12,
       },
       data.access_token,
     )
@@ -184,6 +199,14 @@ export function Login() {
         setErrorMsg("Vui lòng nhập họ và tên tối thiểu 2 ký tự.")
         return
       }
+      if (!gender || !gender.trim()) {
+        setErrorMsg("Vui lòng chọn giới tính (không được phép để trống).")
+        return
+      }
+      if (!gradeLevel || !gradeLevel.trim()) {
+        setErrorMsg("Vui lòng chọn lớp bạn đang học hoặc đã tốt nghiệp (không được phép để trống).")
+        return
+      }
       if (password.length < 8) {
         setErrorMsg("Mật khẩu cần tối thiểu 8 ký tự theo chuẩn bảo mật.")
         return
@@ -197,6 +220,10 @@ export function Login() {
           email: trimmedEmail,
           password,
           full_name: fullName.trim(),
+          gender,
+          grade_level: gradeLevel,
+          school_class: schoolClass.trim() || undefined,
+          school_name: schoolName.trim() || undefined,
           role: "STUDENT",
         })
       }
@@ -368,25 +395,119 @@ export function Login() {
 
             <form className="mt-6 space-y-4" onSubmit={submit}>
               {isRegister && (
-                <label className="block">
-                  <span className="mb-2 block text-xs font-bold text-slate-600">
-                    Họ và tên
-                  </span>
-                  <div className="relative">
-                    <UserIcon
-                      size={17}
-                      className="absolute left-4 top-3.5 text-slate-400"
-                    />
-                    <input
-                      required
-                      type="text"
-                      placeholder="Nhập họ và tên của bạn"
-                      value={fullName}
-                      onChange={(e) => setFullName(e.target.value)}
-                      className="h-12 w-full rounded-xl border border-sky-200 bg-white/80 pl-11 pr-4 text-sm outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
-                    />
+                <>
+                  <label className="block">
+                    <span className="mb-2 block text-xs font-bold text-slate-700">
+                      Họ và tên <span className="text-rose-500">*</span>
+                    </span>
+                    <div className="relative">
+                      <UserIcon
+                        size={17}
+                        className="absolute left-4 top-3.5 text-slate-400"
+                      />
+                      <input
+                        required
+                        type="text"
+                        placeholder="Nhập họ và tên đầy đủ của bạn"
+                        value={fullName}
+                        onChange={(e) => setFullName(e.target.value)}
+                        className="h-12 w-full rounded-xl border border-sky-200 bg-white/80 pl-11 pr-4 text-sm outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                      />
+                    </div>
+                  </label>
+
+                  {/* Giới tính (Bắt buộc) */}
+                  <div className="block">
+                    <span className="mb-2 block text-xs font-bold text-slate-700">
+                      Giới tính <span className="text-rose-500">*</span>
+                    </span>
+                    <div className="grid grid-cols-3 gap-2">
+                      {(["Nam", "Nữ", "Khác"] as const).map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => setGender(g)}
+                          className={`flex h-11 items-center justify-center rounded-xl border text-xs font-bold transition-all ${
+                            gender === g
+                              ? "border-sky-500 bg-sky-50 text-sky-700 shadow-xs ring-2 ring-sky-500/20"
+                              : "border-slate-200 bg-white/80 text-slate-600 hover:border-sky-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                </label>
+
+                  {/* Hiện đang học lớp mấy (Bắt buộc) */}
+                  <div className="block">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-700">
+                        Hiện đang học lớp mấy <span className="text-rose-500">*</span>
+                      </span>
+                      <span className="text-[10px] text-slate-500">
+                        Hỗ trợ cá nhân hóa đề xuất AI
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                      {(["Lớp 10", "Lớp 11", "Lớp 12", "Đã tốt nghiệp cấp 3"] as const).map((lvl) => (
+                        <button
+                          key={lvl}
+                          type="button"
+                          onClick={() => setGradeLevel(lvl)}
+                          className={`flex h-11 items-center justify-center rounded-xl border px-2 text-center text-xs font-bold transition-all ${
+                            gradeLevel === lvl
+                              ? "border-sky-500 bg-sky-50 text-sky-700 shadow-xs ring-2 ring-sky-500/20"
+                              : "border-slate-200 bg-white/80 text-slate-600 hover:border-sky-200 hover:bg-slate-50"
+                          }`}
+                        >
+                          {lvl}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Thông tin lớp & trường học (Tùy chọn) */}
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-bold text-slate-700">
+                        Lớp học
+                      </span>
+                      <div className="relative">
+                        <GraduationCap
+                          size={17}
+                          className="absolute left-4 top-3.5 text-slate-400"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Ví dụ: 12A1"
+                          value={schoolClass}
+                          onChange={(e) => setSchoolClass(e.target.value)}
+                          className="h-12 w-full rounded-xl border border-sky-200 bg-white/80 pl-11 pr-4 text-sm outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                        />
+                      </div>
+                    </label>
+
+                    <label className="block">
+                      <span className="mb-2 block text-xs font-bold text-slate-700">
+                        Trường THPT
+                      </span>
+                      <div className="relative">
+                        <School
+                          size={17}
+                          className="absolute left-4 top-3.5 text-slate-400"
+                        />
+                        <input
+                          type="text"
+                          placeholder="Ví dụ: THPT Chuyên Lê Hồng Phong"
+                          value={schoolName}
+                          onChange={(e) => setSchoolName(e.target.value)}
+                          className="h-12 w-full rounded-xl border border-sky-200 bg-white/80 pl-11 pr-4 text-sm outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                        />
+                      </div>
+                    </label>
+                  </div>
+                </>
               )}
 
               <label className="block">

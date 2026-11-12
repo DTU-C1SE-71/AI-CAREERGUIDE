@@ -3,7 +3,7 @@ import time
 import uuid
 
 logger = logging.getLogger(__name__)
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -36,6 +36,8 @@ from app.services.recommender.engine import (
     normalize_grades_dict,
     normalize_student_cognitive_traits,
     build_radar_and_block_summary,
+    calculate_market_trend_compatibility,
+    CROSS_FIELD_SUBSTITUTION_MAP,
 )
 
 # Backwards compatibility aliases
@@ -102,6 +104,151 @@ class _MajorSeedAdapter:
             for b in raw_blocks
         ]
         self.major_skills = []
+
+
+def apply_constrained_diversity_reranking(
+    scored_items: List[MajorRecommendationItem],
+    top_k: int = 10,
+    has_academic_scores: bool = True,
+    target_trending_top5: int = 1,
+    target_trending_top10: int = 2,
+) -> List[MajorRecommendationItem]:
+    """
+    Bộ điều phối Đa dạng hóa Vị trí Có Ràng buộc (Constrained Diversity & Horizon Expansion Gate):
+    1. Bảo toàn Đam mê cốt lõi (Ranks 1-3).
+    2. Đảm bảo chắc chắn có ngành xu hướng:
+       - Nếu top_k >= 10: Tối thiểu 1 ngành xu hướng trong Top 5, 2 ngành xu hướng trong Top 10.
+       - Nếu 5 <= top_k < 10: Tối thiểu 1 ngành xu hướng trong Top 5.
+       - Nếu 2 <= top_k < 5: Tối thiểu 1 ngành xu hướng tại slot top_k.
+    3. Tìm kiếm ứng viên 2 cấp (Two-Level Search): tìm trong pool TARGET trước, nếu thiếu thì tìm trên toàn danh mục scored_items.
+    4. Bảo toàn nguyên vẹn 100% nhãn tuyển sinh trung thực, tuyệt đối không che giấu trạng thái REACH.
+    5. Khử trùng lặp tuyệt đối (Zero Duplication) và an toàn với has_academic_scores = False.
+    """
+    if not scored_items or top_k <= 0:
+        return []
+
+    # 1. Xác định Pool khả thi hợp lệ
+    if has_academic_scores:
+        eligible_pool = [it for it in scored_items if it.feasibility_tier in ("TARGET", "MATCH", "SAFE")]
+        pool = list(eligible_pool if len(eligible_pool) >= top_k else scored_items)
+    else:
+        eligible_pool = [it for it in scored_items if it.feasibility_tier != "REACH"]
+        pool = list(eligible_pool if len(eligible_pool) >= top_k else scored_items)
+
+    # 2. Sắp xếp tự nhiên theo Feasibility, RankScore, OverallScore, RIASEC
+    def _rank_key(item: MajorRecommendationItem):
+        f_tier = 1 if (item.feasibility_tier in ("TARGET", "MATCH", "SAFE") or (not has_academic_scores and item.feasibility_tier == "UNKNOWN")) else 0
+        breakdown = item.score_breakdown or {}
+        boost = breakdown.get("trend_priority_boost", breakdown.get("trend_rank_boost", 0.0))
+        rank_score = round(item.overall_score + boost, 6)
+        return (f_tier, rank_score, item.overall_score, item.score_riasec)
+
+    pool.sort(key=_rank_key, reverse=True)
+    result = list(pool[:max(top_k * 2, 20)])
+    if not result:
+        result = list(pool)
+
+    def _calculate_candidate_horizon_fit(candidate: MajorRecommendationItem, core_majors: List[MajorRecommendationItem]) -> Tuple[int, float]:
+        max_pathway_tier = 0
+        if core_majors:
+            for core in core_majors:
+                rel = are_majors_related_pathway(core.major_code, candidate.major_code)
+                if rel > max_pathway_tier:
+                    max_pathway_tier = rel
+        affinity = 0.70 * candidate.score_riasec + 0.30 * candidate.score_preference
+        composite_metric = (max_pathway_tier * 0.25) + (affinity * 0.50) + (candidate.overall_score * 0.25)
+        return max_pathway_tier, composite_metric
+
+    def _find_best_trending_candidate(exclude_codes: set, core_reference: List[MajorRecommendationItem]) -> Optional[MajorRecommendationItem]:
+        best_cand = None
+        best_rel_tier = -1
+        best_metric = -1.0
+
+        for cand in pool:
+            if not cand.is_trending or cand.major_code in exclude_codes:
+                continue
+            if has_academic_scores and cand.feasibility_tier not in ("TARGET", "MATCH", "SAFE"):
+                continue
+            if not has_academic_scores and cand.feasibility_tier == "REACH":
+                continue
+
+            rel_tier, metric = _calculate_candidate_horizon_fit(cand, core_reference)
+            if (rel_tier > best_rel_tier) or (rel_tier == best_rel_tier and metric > best_metric):
+                best_rel_tier = rel_tier
+                best_metric = metric
+                best_cand = cand
+
+        if best_cand is not None:
+            return best_cand
+
+        for cand in scored_items:
+            if not cand.is_trending or cand.major_code in exclude_codes:
+                continue
+            if has_academic_scores and cand.feasibility_tier not in ("TARGET", "MATCH", "SAFE"):
+                continue
+            if not has_academic_scores and cand.feasibility_tier == "REACH":
+                continue
+
+            rel_tier, metric = _calculate_candidate_horizon_fit(cand, core_reference)
+            if (rel_tier > best_rel_tier) or (rel_tier == best_rel_tier and metric > best_metric):
+                best_rel_tier = rel_tier
+                best_metric = metric
+                best_cand = cand
+
+        return best_cand
+
+    # 3. Xử lý Ràng buộc Top 5
+    effective_top5_slot = min(4, top_k - 1) if top_k >= 2 else 0
+    top5_window_size = min(5, top_k)
+
+    if top_k >= 2:
+        current_trending = sum(1 for it in result[:top5_window_size] if it.is_trending)
+        if current_trending < target_trending_top5:
+            core_majors = result[:effective_top5_slot]
+            existing_core_codes = {it.major_code for it in core_majors}
+            best_cand_5 = _find_best_trending_candidate(existing_core_codes, core_majors)
+
+            if best_cand_5 is not None:
+                result = [it for it in result if it.major_code != best_cand_5.major_code]
+                insert_idx = min(effective_top5_slot, len(result))
+                result.insert(insert_idx, best_cand_5)
+
+    # 4. Xử lý Ràng buộc Top 10
+    if top_k >= 10:
+        top10_trending = sum(1 for it in result[:10] if it.is_trending)
+        if top10_trending < target_trending_top10:
+            core_top10 = result[:9]
+            existing_top10_codes = {it.major_code for it in core_top10}
+            best_cand_10 = _find_best_trending_candidate(existing_top10_codes, result[:3])
+
+            if best_cand_10 is not None:
+                result = [it for it in result if it.major_code != best_cand_10.major_code]
+                insert_idx_10 = min(9, len(result))
+                result.insert(insert_idx_10, best_cand_10)
+
+    # 5. Khử trùng lặp & Gán Rank 1-based
+    seen_major_codes = set()
+    final_output: List[MajorRecommendationItem] = []
+    for item in result:
+        if item.major_code in seen_major_codes:
+            continue
+        seen_major_codes.add(item.major_code)
+        final_output.append(item)
+        if len(final_output) == top_k:
+            break
+
+    if len(final_output) < top_k:
+        for item in pool:
+            if item.major_code not in seen_major_codes:
+                seen_major_codes.add(item.major_code)
+                final_output.append(item)
+                if len(final_output) == top_k:
+                    break
+
+    for idx, item in enumerate(final_output, start=1):
+        item.rank = idx
+
+    return final_output
 
 
 async def calculate_3pillar_recommendations(
@@ -389,6 +536,15 @@ async def calculate_3pillar_recommendations(
             major_attr=major.cognitive_attributes,
             admission_band=feasibility["feasibility_tier"],
             has_academic_scores=has_any_grades,
+            trend_tier=trend_info["trend_tier"] or "NONE",
+            trend_label=trend_info["trend_label"] or "",
+        )
+
+        trend_compat = calculate_market_trend_compatibility(
+            trend_tier=trend_info["trend_tier"],
+            score_riasec=score_riasec,
+            score_pref=score_pref,
+            overall_score=overall_score,
         )
 
         if feasibility["feasibility_tier"] == "REACH":
@@ -424,7 +580,9 @@ async def calculate_3pillar_recommendations(
                 "score_preference": score_pref,
                 "admitted_blocks_evaluated": block_breakdown,
                 "feasibility": feasibility,
-                "trend_priority_boost": get_trend_rank_boost(trend_info["trend_tier"], overall_score),
+                "trend_priority_boost": trend_compat["rank_boost"],
+                "trend_compat_score": trend_compat["trend_compat_score"],
+                "affinity": trend_compat["affinity"],
             },
             top_supporting_factors=top_factors,
             competency_gaps=overall_gaps[:5],
@@ -498,27 +656,15 @@ async def calculate_3pillar_recommendations(
             best_sub.admission_advice = sub_msg
             best_sub.top_supporting_factors.insert(0, sub_msg)
 
-    # Luôn ưu tiên sắp xếp các ngành ĐẠT ràng buộc (TARGET) trước các ngành bị chặn (REACH),
-    # đồng thời ưu tiên các ngành Xu hướng theo bậc (Bậc 1 > Bậc 2 > Bậc 3 > Thường)
-    final_pool = eligible_targets if len(eligible_targets) >= payload.top_k else scored_items
-    final_pool.sort(
-        key=lambda item: (
-            1 if item.feasibility_tier == "TARGET" else 0,
-            1 if item.major_code in substituted_codes else 0,
-            round(item.overall_score + get_trend_rank_boost(item.trend_tier, item.overall_score), 6),
-            item.trend_priority,
-            item.overall_score,
-            item.score_academic,
-            item.score_riasec
-        ),
-        reverse=True
+    # Phân tầng đa dạng hóa vị trí & Đảm bảo ngành xu hướng (Constrained Diversity Gate)
+    has_academic = has_any_grades and any(v is not None and v > 0 for v in norm_raw_grades.values())
+    top_results = apply_constrained_diversity_reranking(
+        scored_items=scored_items,
+        top_k=payload.top_k,
+        has_academic_scores=has_academic,
+        target_trending_top5=1,
+        target_trending_top10=2,
     )
-
-    # Gán thứ hạng 1-based và cắt theo top_k
-    top_results: List[MajorRecommendationItem] = []
-    for idx, item in enumerate(final_pool[:payload.top_k], start=1):
-        item.rank = idx
-        top_results.append(item)
 
     # Lưu lịch sử đề xuất cho người dùng đã đăng nhập
     generated_now = datetime.now(timezone.utc)
@@ -602,8 +748,9 @@ def build_two_tier_funnel_payload(
             items,
             key=lambda m: (
                 1 if m.feasibility_tier == "TARGET" else 0,
-                round(m.overall_score + get_trend_rank_boost(m.trend_tier, m.overall_score), 6),
+                1 if m.is_trending else 0,
                 m.trend_priority,
+                round(m.overall_score + get_trend_rank_boost(m.trend_tier, m.overall_score), 6),
                 m.overall_score,
                 m.score_riasec,
             ),
@@ -613,23 +760,20 @@ def build_two_tier_funnel_payload(
         target_cnt = sum(1 for m in items if m.feasibility_tier == "TARGET")
         avg_score = sum(m.overall_score for m in sample_top) / len(sample_top)
         max_trend_boost = max(
-            (
-                get_trend_rank_boost(m.trend_tier, m.overall_score)
-                for m in sample_top
-                if m.feasibility_tier == "TARGET"
-            ),
+            (get_trend_rank_boost(m.trend_tier, m.overall_score) for m in sample_top),
             default=0.0,
         )
         max_trend_pri = max(
-            (m.trend_priority for m in sample_top if m.feasibility_tier == "TARGET"),
+            (m.trend_priority for m in sample_top),
             default=0,
         )
+        trend_field_bonus = 0.08 if max_trend_pri == 3 else (0.04 if max_trend_pri == 2 else 0.0)
         tier1_fields.append({
             "field_name": cat_name.title() if cat_name.isupper() else cat_name,
             "raw_category": cat_name,
             "icon": _resolve_field_icon(cat_name),
             "match": int(round(avg_score * 100)),
-            "rank_score": avg_score + (max_trend_boost * 0.45),
+            "rank_score": avg_score + (max_trend_boost * 1.2) + trend_field_bonus,
             "max_trend_priority": max_trend_pri,
             "majors_count": len(items),
             "eligible_count": target_cnt,
@@ -637,9 +781,15 @@ def build_two_tier_funnel_payload(
             "majors": sample_top,
         })
 
-    # Ưu tiên các lĩnh vực có ngành đạt chuẩn trước, sau đó xét % phù hợp + ưu tiên ngành xu hướng
+    # Ưu tiên các lĩnh vực có ngành đạt chuẩn trước, sau đó xét ưu tiên ngành xu hướng và % phù hợp
     tier1_fields.sort(
-        key=lambda f: (1 if f["has_eligible"] else 0, round(f["rank_score"], 4), f["max_trend_priority"], f["match"]),
+        key=lambda f: (
+            1 if f["has_eligible"] else 0,
+            f["max_trend_priority"] >= 2,
+            round(f["rank_score"], 4),
+            f["max_trend_priority"],
+            f["match"]
+        ),
         reverse=True,
     )
     selected_tier1 = tier1_fields[:top_fields]

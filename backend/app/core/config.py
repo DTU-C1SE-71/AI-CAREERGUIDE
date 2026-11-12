@@ -1,6 +1,6 @@
 from typing import List, Union
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 
 class Settings(BaseSettings):
@@ -44,15 +44,16 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str = "http://localhost:5173/login/callback"
 
     # AI & Embedding Services
+    XKIRO_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
     OPENAI_BASE_URL: str = "https://api.xkiro.com/v1"
     XAI_API_KEY: str = ""
     XAI_BASE_URL: str = "https://api.xkiro.com/v1"
-    VISION_LLM_MODEL: str = "mistralai/mistral-large-2512"
+    VISION_LLM_MODEL: str = "mistralai/mistral-medium-3.5"
     TAVILY_API_KEY: str = ""
     EMBEDDING_MODEL: str = "text-embedding-3-small"
     EMBEDDING_DIMENSION: int = 1536
-    LLM_MODEL: str = "mistralai/mistral-large-2512"
+    LLM_MODEL: str = "mistralai/mistral-medium-3.5"
     LLM_MAX_TOKENS: int = 128000
     LLM_MAX_CONTEXT_TOKENS: int = 272000
     LLM_MAX_CONTEXT_CHARS: int = 240000
@@ -117,6 +118,15 @@ class Settings(BaseSettings):
         ]
 
 
+
+
+    @model_validator(mode="after")
+    def sync_api_keys(self) -> "Settings":
+        if not self.OPENAI_API_KEY and self.XKIRO_API_KEY:
+            self.OPENAI_API_KEY = self.XKIRO_API_KEY
+        if not self.XKIRO_API_KEY and self.OPENAI_API_KEY:
+            self.XKIRO_API_KEY = self.OPENAI_API_KEY
+        return self
 
 
 settings = Settings()

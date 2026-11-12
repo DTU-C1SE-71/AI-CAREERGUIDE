@@ -667,7 +667,20 @@ async def _generate_skill_analysis_with_ai(
     if not data:
         return None
 
-    summary = str(data.get("summary") or "").strip()
+    raw_summary = data.get("summary")
+    if isinstance(raw_summary, list):
+        summary = " ".join(str(s).strip() for s in raw_summary if s).strip()
+    elif isinstance(raw_summary, str) and raw_summary.strip().startswith("[") and raw_summary.strip().endswith("]"):
+        try:
+            parsed = json.loads(raw_summary.strip().replace("'", '"'))
+            if isinstance(parsed, list):
+                summary = " ".join(str(s).strip() for s in parsed if s).strip()
+            else:
+                summary = raw_summary.strip()
+        except Exception:
+            summary = raw_summary.strip().strip("[]'\"").strip()
+    else:
+        summary = str(raw_summary or "").strip()
     if not summary:
         return None
 

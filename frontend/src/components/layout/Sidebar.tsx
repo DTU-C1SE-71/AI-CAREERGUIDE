@@ -15,12 +15,14 @@ import {
   Settings,
   ShieldCheck,
   Sparkles,
+  UserCheck,
   X,
 } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
 import { type ReactNode, useState } from "react"
 import { Link, NavLink, useNavigate } from "react-router"
 import { useAuth } from "../../context/AuthContext"
+import { UserProfileModal } from "../profile/UserProfileModal"
 
 interface SidebarProps {
   collapsed: boolean
@@ -98,6 +100,7 @@ function SidebarBody({
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
+  const [showProfileModal, setShowProfileModal] = useState(false)
 
   const handleQuickSearch = () => {
     onNavigate?.()
@@ -290,12 +293,19 @@ function SidebarBody({
                     : "w-full"
                 }`}
               >
-                <div className="flex items-center gap-2.5 border-b border-slate-100 pb-2.5">
+                <div
+                  onClick={() => {
+                    setShowSettingsMenu(false)
+                    setShowProfileModal(true)
+                  }}
+                  className="flex cursor-pointer items-center gap-2.5 rounded-xl border-b border-slate-100 p-1 pb-2.5 transition hover:bg-sky-50/50"
+                  title="Nhấn để xem & chỉnh sửa hồ sơ"
+                >
                   <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 text-xs font-black text-white shadow-sm">
                     {user.name.slice(0, 2).toUpperCase()}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-extrabold text-slate-900">
+                    <p className="truncate text-xs font-extrabold text-slate-900 hover:text-sky-700">
                       {user.name}
                     </p>
                     <p className="truncate text-[10px] font-medium text-slate-500">
@@ -309,6 +319,18 @@ function SidebarBody({
                 </div>
 
                 <div className="space-y-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSettingsMenu(false)
+                      setShowProfileModal(true)
+                    }}
+                    className="flex w-full items-center gap-2 rounded-xl bg-sky-50/80 px-2.5 py-2 text-left text-[11px] font-extrabold text-sky-800 transition hover:bg-sky-100 hover:text-sky-900"
+                  >
+                    <UserCheck size={14} className="text-sky-600" />
+                    <span>Xem & Chỉnh sửa hồ sơ</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
@@ -398,15 +420,21 @@ function SidebarBody({
                       {user.role === "admin" ? "Quản trị viên · Xem hồ sơ" : "Học sinh · Xem hồ sơ"}
                     </p>
                   </div>
-                  <span
-                    title="Tùy chọn hồ sơ"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowSettingsMenu(false)
+                      setShowProfileModal(true)
+                    }}
+                    title="Xem & Chỉnh sửa hồ sơ"
                     className="group grid size-8 place-items-center rounded-xl text-slate-400 hover:bg-white hover:text-sky-600"
                   >
                     <Settings
                       size={15}
                       className="transition-transform group-hover:rotate-45"
                     />
-                  </span>
+                  </button>
                 </>
               )}
             </div>
@@ -424,6 +452,12 @@ function SidebarBody({
           </Link>
         )}
       </div>
+
+      {/* Profile Viewing & Editing Modal */}
+      <UserProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
     </div>
   )
 }

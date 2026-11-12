@@ -13,7 +13,6 @@ import { Card } from "../components/common/Card"
 import { PageContainer } from "../components/layout/PageContainer"
 import { ExplanationBox } from "../components/xai/ExplanationBox"
 import { FeasibilityBadge } from "../components/xai/FeasibilityBadge"
-import { GapAnalysisCard } from "../components/xai/GapAnalysisCard"
 import { MajorInfoCards } from "../components/xai/MajorInfoCards"
 import { SkillAnalysisCard } from "../components/xai/SkillAnalysisCard"
 import { TrendBadge } from "../components/xai/TrendBadge"
@@ -24,6 +23,7 @@ import { majors as fallbackMajors } from "../services/mockData"
 import { readStorage, writeStorage } from "../services/storage"
 import type { MajorInsight, StudentSkillAnalysis } from "../types/insight"
 import type { Major } from "../types/major"
+import { formatBlockWithSubjects } from "../utils"
 import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
 
 interface TaxonomyMajorDetail {
@@ -340,12 +340,14 @@ export function MajorDetail() {
     window.dispatchEvent(new Event("saved-roadmaps-updated"))
   }
 
-  const blockText =
+  const rawBlocks =
     majorInsight?.subject_blocks && majorInsight.subject_blocks.length > 0
-      ? majorInsight.subject_blocks.join(", ")
+      ? majorInsight.subject_blocks
       : taxDetail?.subject_blocks && taxDetail.subject_blocks.length > 0
-        ? taxDetail.subject_blocks.join(", ")
-        : "A00, A01, D01, D07"
+        ? taxDetail.subject_blocks
+        : ["A00", "A01", "D01", "D07"]
+
+  const blockText = rawBlocks.map((b) => formatBlockWithSubjects(b, { short: true })).join(" · ")
 
   const skillCardVisible = skillLoading || Boolean(skillAnalysis)
 
@@ -398,7 +400,7 @@ export function MajorDetail() {
                 />
                 {major.best_matching_block && major.best_block_score != null && (
                   <span className="rounded-full border border-sky-200 bg-sky-50/90 px-2.5 py-0.5 text-[11px] font-extrabold text-sky-700">
-                    {major.best_matching_block}: {major.best_block_score}đ
+                    {formatBlockWithSubjects(major.best_matching_block, { short: true, includePrefix: false })}: {major.best_block_score}đ
                     {major.benchmark_cutoff ? ` / ~${major.benchmark_cutoff}đ` : ""}
                   </span>
                 )}
@@ -456,7 +458,6 @@ export function MajorDetail() {
               content={aiExplanationText || major.explanation}
               loading={aiExplaining}
             />
-            <GapAnalysisCard gaps={major.gaps} />
             {skillCardVisible && (
               <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
             )}

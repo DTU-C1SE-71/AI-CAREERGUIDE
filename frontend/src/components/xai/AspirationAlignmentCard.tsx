@@ -17,6 +17,7 @@ import type {
   AspirationMajorBrief,
   CareerAspirationInput,
 } from "../../types/assessment"
+import { formatBlockWithSubjects } from "../../utils"
 import { TrendBadge } from "./TrendBadge"
 
 const QUICK_ASPIRATION_CHIPS = [
@@ -111,7 +112,7 @@ function MajorBriefTile({
           {major.benchmark_cutoff != null && (
             <span className="rounded-md bg-slate-100/90 px-2 py-0.5">
               {major.best_matching_block
-                ? `Khối ${major.best_matching_block} (${major.best_block_score ?? "—"}đ)`
+                ? `${formatBlockWithSubjects(major.best_matching_block, { short: true })} (${major.best_block_score ?? "—"}đ)`
                 : "Tổ hợp"}{" "}
               · Chuẩn ~{major.benchmark_cutoff}đ
             </span>
@@ -257,7 +258,7 @@ export function AspirationAlignmentCard({
                   <strong className="text-sky-700">
                     {analysis.holland_code}
                   </strong>{" "}
-                  ({analysis.best_block_summary})
+                  · {formatBlockWithSubjects(analysis.best_block_summary, { short: true })}
                 </span>
               )}
             </div>

@@ -7,12 +7,15 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
+  LayoutDashboard,
   Loader2,
+  LockKeyhole,
   RotateCcw,
   Sliders,
+  Sparkles,
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate } from "react-router"
+import { useNavigate, useSearchParams } from "react-router"
 import {
   AcademicInputForm,
   HIGH_SCHOOL_SUBJECTS,
@@ -26,6 +29,7 @@ import {
 } from "../components/assessment/OnetSwipeCardVisual"
 import { Button } from "../components/common/Button"
 import { PageContainer } from "../components/layout/PageContainer"
+import { useAuth } from "../context/AuthContext"
 import {
   defaultCognitiveQuestions,
   type CognitiveQuestionItem,
@@ -108,8 +112,14 @@ const defaultRiasecFallback: QuestionItem[] = CANONICAL_30_CODES.map(
 )
 
 export function AssessmentWizard() {
-  const { assessment, update, reset, recordCompletedAttempt } = useAssessment()
+  const { user, token } = useAuth()
+  const { assessment, history, update, reset, recordCompletedAttempt } = useAssessment()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const [sessionStarted, setSessionStarted] = useState<boolean>(
+    () => searchParams.get("new") === "true",
+  )
+  const [cardScale, setCardScale] = useState<"normal" | "large">("large")
   const [step, setStep] = useState<number>(assessment.step || 1)
   const [scores, setScores] = useState<Record<string, number>>(() => {
     const mapped = Object.fromEntries(
@@ -601,6 +611,140 @@ export function AssessmentWizard() {
     navigate("/dashboard")
   }
 
+  // 1. CỔNG XÁC THỰC: Chưa đăng nhập => Tuyệt đối không cho phép làm bài trắc nghiệm
+  if (!user || !token) {
+    return (
+      <section className="relative flex min-h-[75vh] items-center justify-center py-12 overflow-x-clip">
+        <PageContainer className="relative z-10 max-w-lg">
+          <div className="rounded-3xl border border-white/80 bg-white/70 p-8 text-center shadow-[0_20px_50px_rgba(14,165,233,0.12)] backdrop-blur-2xl">
+            <div className="mx-auto mb-5 grid size-16 place-items-center rounded-2xl border border-sky-200 bg-sky-50 text-sky-600 shadow-inner">
+              <LockKeyhole className="size-8" />
+            </div>
+            <span className="inline-block rounded-full border border-sky-200 bg-sky-50/80 px-3 py-1 text-[11px] font-extrabold uppercase tracking-wider text-sky-700">
+              Yêu cầu đăng nhập tài khoản
+            </span>
+            <h2 className="mt-3 text-2xl font-black text-slate-900 sm:text-3xl">
+              Đăng nhập để làm bài trắc nghiệm
+            </h2>
+            <p className="mt-3 text-sm font-medium leading-relaxed text-slate-600">
+              Để hệ thống AI lưu trữ kết quả, đối chiếu học lực Z-Score chuẩn Bộ GD&ĐT và đồng bộ hồ sơ hướng nghiệp, bạn cần đăng nhập tài khoản trước khi thực hiện.
+            </p>
+            <div className="mt-6 flex flex-col gap-3 sm:flex-row">
+              <Button
+                type="button"
+                className="flex-1"
+                icon={ArrowRight}
+                onClick={() => navigate("/login")}
+              >
+                Đăng nhập ngay
+              </Button>
+              <button
+                type="button"
+                onClick={() => navigate("/login?tab=register")}
+                className="flex-1 rounded-xl border border-slate-200 bg-white/80 py-3 text-xs font-bold text-slate-700 backdrop-blur-md transition hover:border-sky-300 hover:bg-slate-50 hover:text-sky-700"
+              >
+                Đăng ký tài khoản
+              </button>
+            </div>
+          </div>
+        </PageContainer>
+      </section>
+    )
+  }
+
+  // 2. CỔNG CHỌN ĐỐI VỚI TÀI KHOẢN ĐÃ CÓ BÀI TRẮC NGHIỆM:
+  // Giao diện chào rộng rãi, nổi bật, bỏ mã holland, bỏ chữ nhỏ, có nút quay lại
+  const hasCompletedAttempt = Boolean(assessment.completed || history.length > 0)
+  if (hasCompletedAttempt && !sessionStarted) {
+    return (
+      <section className="relative flex min-h-[80vh] items-center justify-center py-8 sm:py-14 overflow-x-clip">
+        <PageContainer className="relative z-10 w-full max-w-4xl">
+          {/* Nút quay lại trang phía ngoài (Dashboard) */}
+          <div className="mb-6 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={() => navigate("/dashboard")}
+              className="inline-flex items-center gap-2 rounded-2xl border border-white/90 bg-white/75 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700 hover:shadow-md"
+            >
+              <ArrowLeft className="size-4 text-sky-600" />
+              <span>Quay lại Dashboard</span>
+            </button>
+          </div>
+
+          <div className="rounded-3xl border border-white/85 bg-white/85 p-8 sm:p-12 shadow-[0_24px_60px_rgba(14,165,233,0.14)] backdrop-blur-2xl">
+            {/* Header chào mừng phóng to rõ ràng */}
+            <div className="flex items-center gap-4 sm:gap-5">
+              <div className="grid size-14 sm:size-16 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-md">
+                <Sparkles className="size-7 sm:size-8" />
+              </div>
+              <div>
+                <h1 className="text-2xl sm:text-3xl lg:text-4xl font-black tracking-tight text-slate-900">
+                  Chào {user.name || "bạn"}, bạn muốn làm gì tiếp theo?
+                </h1>
+                <p className="mt-2 text-sm sm:text-base font-semibold text-slate-600">
+                  Hệ thống đã ghi nhận hồ sơ đánh giá của bạn. Bạn có thể xem lại kết quả phân tích hoặc thực hiện một bài trắc nghiệm mới.
+                </p>
+              </div>
+            </div>
+
+            {/* 2 Lựa chọn Lớn, Trực quan, Rõ Ràng */}
+            <div className="mt-8 sm:mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard")}
+                className="group flex flex-col justify-between rounded-3xl border border-sky-200/90 bg-gradient-to-br from-white via-sky-50/50 to-sky-100/40 p-6 sm:p-8 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-sky-400 hover:shadow-lg"
+              >
+                <div>
+                  <div className="mb-5 grid size-14 place-items-center rounded-2xl bg-sky-600 text-white shadow-md transition group-hover:scale-110">
+                    <LayoutDashboard className="size-7" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-sky-700">
+                    Xem bài trắc nghiệm đã làm
+                  </h3>
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
+                    Xem lại toàn bộ kết quả phân tích 3 trụ cột, phễu ngành đề xuất và đối chiếu nguyện vọng AI của bạn.
+                  </p>
+                </div>
+                <div className="mt-6 flex items-center gap-2 text-sm font-black text-sky-700">
+                  <span>Mở Dashboard kết quả</span>
+                  <ArrowRight className="size-4 transition group-hover:translate-x-1.5" />
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  reset()
+                  setStep(1)
+                  setCardIndex(0)
+                  setCogIndex(0)
+                  setSessionStarted(true)
+                }}
+                className="group flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white/90 p-6 sm:p-8 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-sky-300 hover:bg-slate-50/90 hover:shadow-lg"
+              >
+                <div>
+                  <div className="mb-5 grid size-14 place-items-center rounded-2xl border border-slate-200 bg-slate-100 text-slate-700 shadow-sm transition group-hover:border-sky-200 group-hover:bg-sky-50 group-hover:text-sky-700 group-hover:scale-110">
+                    <RotateCcw className="size-7" />
+                  </div>
+                  <h3 className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-sky-700">
+                    Bắt đầu làm trắc nghiệm mới
+                  </h3>
+                  <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
+                    Làm lại từ đầu bộ câu hỏi đánh giá hành vi O*NET để cập nhật lại thiên hướng sở thích và định hướng mới nhất.
+                  </p>
+                </div>
+                <div className="mt-6 flex items-center gap-2 text-sm font-black text-slate-700 group-hover:text-sky-700">
+                  <span>Bắt đầu làm bài</span>
+                  <ArrowRight className="size-4 transition group-hover:translate-x-1.5" />
+                </div>
+              </button>
+            </div>
+          </div>
+        </PageContainer>
+      </section>
+    )
+  }
+
   return (
     <section className="relative py-4 sm:py-6 overflow-x-clip">
       {/* Ambient Animated Liquid Glass Background Orbs */}
@@ -623,8 +767,33 @@ export function AssessmentWizard() {
         className="pointer-events-none absolute right-1/4 top-28 h-72 w-72 rounded-full bg-cyan-300/20 blur-3xl"
       />
 
-      {/* Constrained Container Width: max-w-2xl for balanced desktop/laptop proportions */}
-      <PageContainer className="relative z-10 max-w-2xl">
+      {/* Scalable Container: Fluid Responsive Width up to max-w-4xl */}
+      <PageContainer className={`relative z-10 transition-all duration-200 ${cardScale === "large" ? "max-w-3xl lg:max-w-4xl" : "max-w-2xl lg:max-w-3xl"}`}>
+        {/* Top Header: Prominent Back Button & Scale Toggle */}
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => navigate("/dashboard")}
+            className="inline-flex items-center gap-2 rounded-2xl border border-white/90 bg-white/75 px-4 py-2 text-xs sm:text-sm font-extrabold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700 hover:shadow-sm"
+          >
+            <ArrowLeft className="size-4 text-sky-600" />
+            <span>Quay lại Dashboard</span>
+          </button>
+
+          <div className="flex items-center gap-2">
+            <span className="hidden sm:inline text-xs font-bold text-slate-500">
+              Kích thước giao diện:
+            </span>
+            <button
+              type="button"
+              onClick={() => setCardScale((prev) => (prev === "large" ? "normal" : "large"))}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/85 bg-white/70 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700"
+            >
+              <span>{cardScale === "large" ? "Thu nhỏ (Vừa)" : "Phóng to (Lớn)"}</span>
+            </button>
+          </div>
+        </div>
+
         {/* Top Liquid Glass Step Bar */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
           {/* 4 Main Steps */}
@@ -736,8 +905,8 @@ export function AssessmentWizard() {
             {step1Mode === "swipe" && (
               <>
                 {/* Compact Progress Track */}
-                <div className="mx-auto flex max-w-md items-center gap-3 px-1">
-                  <div className="h-2 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
+                <div className={`mx-auto flex items-center gap-3 px-1 transition-all duration-200 ${cardScale === "large" ? "max-w-xl lg:max-w-2xl" : "max-w-md"}`}>
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
                     <motion.div
                       animate={{
                         width: `${Math.round(
@@ -748,13 +917,13 @@ export function AssessmentWizard() {
                       className="h-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-cyan-500"
                     />
                   </div>
-                  <span className="text-xs font-black text-sky-900 sm:text-sm">
+                  <span className="text-xs sm:text-sm font-black text-sky-900">
                     {totalRiasecAnswered}/30
                   </span>
                 </div>
 
-                {/* Vertical Card Stage: Constrained max-w-xl with side navigation */}
-                <div className="relative mx-auto flex max-w-xl items-center justify-center gap-2.5">
+                {/* Vertical Card Stage: Responsive Stage */}
+                <div className={`relative mx-auto flex w-full items-center justify-center gap-3 sm:gap-4 transition-all duration-200 ${cardScale === "large" ? "max-w-3xl" : "max-w-xl"}`}>
                   {/* Left Arrow Button (Previous Question) */}
                   <motion.button
                     type="button"
@@ -763,13 +932,13 @@ export function AssessmentWizard() {
                     disabled={cardIndex === 0}
                     onClick={goToPrevCard}
                     aria-label="Câu trước"
-                    className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white disabled:opacity-30"
+                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30"
                   >
-                    <ChevronLeft className="size-5" />
+                    <ChevronLeft className="size-6" />
                   </motion.button>
 
                   {/* Unified Vertical Bento Card (Illustration + Question + 5 Emoticon Ratings) */}
-                  <div className="relative w-full max-w-md">
+                  <div className={`relative w-full transition-all duration-200 ${cardScale === "large" ? "max-w-2xl" : "max-w-md"}`}>
                     {/* Subtle Stacked Depth Card Behind */}
                     <div className="pointer-events-none absolute inset-x-4 -bottom-2.5 top-4 rounded-3xl border border-white/60 bg-white/35 backdrop-blur-xl" />
 
@@ -781,6 +950,7 @@ export function AssessmentWizard() {
                         total={ONET_MINI_IP_ITEMS.length}
                         selectedValue={currentCardValue}
                         direction={slideDirection}
+                        cardScale={cardScale}
                         onRate={rateCurrentCard}
                         onNext={goToNextCard}
                         onPrev={goToPrevCard}
@@ -796,9 +966,9 @@ export function AssessmentWizard() {
                     disabled={cardIndex >= ONET_MINI_IP_ITEMS.length - 1}
                     onClick={goToNextCard}
                     aria-label="Câu tiếp theo"
-                    className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white disabled:opacity-30"
+                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30"
                   >
-                    <ChevronRight className="size-5" />
+                    <ChevronRight className="size-6" />
                   </motion.button>
                 </div>
               </>
@@ -1167,6 +1337,7 @@ function VerticalQuestionCard({
   total,
   selectedValue,
   direction,
+  cardScale = "large",
   onRate,
   onNext,
   onPrev,
@@ -1176,6 +1347,7 @@ function VerticalQuestionCard({
   total: number
   selectedValue?: number
   direction: number
+  cardScale?: "normal" | "large"
   onRate: (value: number) => void
   onNext: () => void
   onPrev: () => void
@@ -1183,6 +1355,8 @@ function VerticalQuestionCard({
   const x = useMotionValue(0)
   const rotate = useTransform(x, [-200, 200], [-4, 4])
   const scaleDrag = useTransform(x, [-200, 0, 200], [0.98, 1, 0.98])
+
+  const isLarge = cardScale === "large"
 
   return (
     <motion.div
@@ -1223,7 +1397,9 @@ function VerticalQuestionCard({
         damping: 28,
         mass: 0.85,
       }}
-      className="relative flex flex-col cursor-grab active:cursor-grabbing select-none overflow-hidden rounded-3xl border border-white/90 bg-white/65 p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_48px_rgba(14,165,233,0.14)] backdrop-blur-2xl"
+      className={`relative flex flex-col cursor-grab active:cursor-grabbing select-none overflow-hidden rounded-3xl border border-white/90 bg-white/75 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_48px_rgba(14,165,233,0.14)] backdrop-blur-2xl transition-all duration-200 ${
+        isLarge ? "p-6 sm:p-8 lg:p-9" : "p-5 sm:p-6"
+      }`}
     >
       {/* Specular Top Reflection */}
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
@@ -1232,35 +1408,49 @@ function VerticalQuestionCard({
       <QuestionIllustrationFrame item={item} index={index} total={total} />
 
       {/* 2. Question Content (Balanced Typography & Spacing) */}
-      <div className="my-5 text-center px-1">
-        <h2 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 leading-snug">
+      <div className={`my-4 sm:my-6 text-center px-1`}>
+        <h2
+          className={`font-black tracking-tight text-slate-900 leading-snug transition-all ${
+            isLarge
+              ? "text-xl sm:text-2xl lg:text-3xl"
+              : "text-lg sm:text-xl"
+          }`}
+        >
           {item.titleVi}
         </h2>
       </div>
 
-      {/* 3. Compact 5-Level Rating Emoticons inside the Vertical Card Bottom */}
-      <div className="grid grid-cols-5 gap-2 pt-3 border-t border-sky-100/80">
+      {/* 3. 5-Level Rating Emoticons inside the Vertical Card Bottom */}
+      <div className="grid grid-cols-5 gap-2 sm:gap-3 pt-4 border-t border-sky-100/80">
         {ONET_REACTION_SCALE.map((btn) => {
           const active = selectedValue === btn.value
           return (
             <motion.button
               key={btn.value}
               type="button"
-              whileHover={{ y: -2, scale: 1.04 }}
+              whileHover={{ y: -2, scale: 1.05 }}
               whileTap={{ scale: 0.94 }}
               transition={{ type: "spring", stiffness: 400, damping: 22 }}
               onClick={(e) => {
                 e.stopPropagation()
                 onRate(btn.value)
               }}
-              className={`flex flex-col items-center justify-center rounded-2xl border py-2.5 px-1.5 text-center transition-all duration-200 ${
+              className={`flex flex-col items-center justify-center rounded-2xl border text-center transition-all duration-200 ${
+                isLarge ? "py-3 sm:py-4 px-1.5 sm:px-2.5" : "py-2 px-1"
+              } ${
                 active
                   ? "border-sky-400 bg-gradient-to-b from-sky-500 to-cyan-500 text-white shadow-[0_8px_20px_rgba(14,165,233,0.3)] scale-[1.03]"
-                  : "border-white/90 bg-white/75 text-slate-700 shadow-xs hover:border-sky-300 hover:bg-white"
+                  : "border-white/90 bg-white/80 text-slate-700 shadow-xs hover:border-sky-300 hover:bg-white"
               }`}
             >
-              <span className="text-2xl leading-none">{btn.emoji}</span>
-              <span className="mt-1.5 text-[11px] sm:text-xs font-extrabold tracking-tight leading-tight">
+              <span className={isLarge ? "text-2xl sm:text-3xl leading-none" : "text-xl leading-none"}>
+                {btn.emoji}
+              </span>
+              <span
+                className={`mt-1.5 font-extrabold tracking-tight leading-tight ${
+                  isLarge ? "text-xs sm:text-sm" : "text-[11px]"
+                }`}
+              >
                 {btn.label}
               </span>
             </motion.button>

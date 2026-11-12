@@ -3,21 +3,89 @@ import { ChevronRight, Layers, Target } from "lucide-react"
 import { useState } from "react"
 import { Link } from "react-router"
 import type { FunnelRecommendationData, Major } from "../../types/major"
+import { formatBlockWithSubjects } from "../../utils"
 import { Card } from "../common/Card"
 import { FeasibilityBadge } from "./FeasibilityBadge"
 import { TrendBadge } from "./TrendBadge"
 
 interface TwoTierFunnelProps {
   funnelData: FunnelRecommendationData
+  isLoading?: boolean
 }
 
 export function TwoTierFunnelRecommendation({
   funnelData,
+  isLoading = false,
 }: TwoTierFunnelProps) {
   const fields = funnelData.tier1_fields || []
   const [selectedFieldIndex, setSelectedFieldIndex] = useState<number | "ALL">(
     0,
   )
+
+  if (isLoading) {
+    return (
+      <div className="space-y-5 animate-pulse">
+        <div>
+          <div className="mb-3 flex items-center justify-between">
+            <div className="h-4 w-32 rounded-lg bg-sky-100" />
+            <div className="h-4 w-16 rounded-lg bg-slate-100" />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            {[1, 2, 3].map((i) => (
+              <div
+                key={i}
+                className="rounded-3xl border border-white/80 bg-white/50 p-4 backdrop-blur-xl"
+              >
+                <div className="mb-2 flex items-center justify-between">
+                  <div className="size-6 rounded-full bg-slate-200" />
+                  <div className="h-5 w-10 rounded-md bg-sky-100" />
+                </div>
+                <div className="h-4 w-24 rounded-md bg-slate-200" />
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="space-y-3.5 pt-1">
+          <div className="h-4 w-28 rounded-lg bg-slate-200" />
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="rounded-3xl border border-white/80 bg-white/60 p-5 backdrop-blur-xl"
+            >
+              <div className="flex gap-4">
+                <div className="size-10 rounded-2xl bg-slate-200" />
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-40 rounded-md bg-slate-200" />
+                  <div className="h-3 w-56 rounded-md bg-slate-100" />
+                  <div className="h-6 w-full rounded-xl bg-slate-100" />
+                </div>
+              </div>
+            </div>
+          ))}
+          <p className="text-center text-xs font-bold text-sky-700/80">
+            AI đang phân tích và tính toán danh mục ngành đề xuất...
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (fields.length === 0) {
+    return (
+      <div className="rounded-3xl border border-dashed border-slate-200/90 bg-white/60 p-8 text-center backdrop-blur-md">
+        <div className="mx-auto mb-3 grid size-12 place-items-center rounded-2xl bg-sky-50 text-sky-600">
+          <Layers className="size-6" />
+        </div>
+        <h4 className="text-sm font-extrabold text-slate-800">
+          Chưa có dữ liệu ngành đề xuất
+        </h4>
+        <p className="mt-1 text-xs text-slate-500">
+          Hệ thống AI sẽ tính toán và đề xuất các ngành phù hợp nhất sau khi bạn hoàn thành bài trắc nghiệm hướng nghiệp.
+        </p>
+      </div>
+    )
+  }
 
   const displayedFields =
     selectedFieldIndex === "ALL"
@@ -130,7 +198,7 @@ export function TwoTierFunnelRecommendation({
                                 />
                                 {major.best_matching_block && major.best_block_score != null && (
                                   <span className="rounded-lg border border-sky-200/80 bg-sky-50/80 px-2 py-0.5 text-[10px] font-extrabold text-sky-700">
-                                    {major.best_matching_block}: {major.best_block_score}đ
+                                    {formatBlockWithSubjects(major.best_matching_block, { short: true, includePrefix: false })}: {major.best_block_score}đ
                                     {major.benchmark_cutoff ? ` / ~${major.benchmark_cutoff}đ` : ""}
                                   </span>
                                 )}

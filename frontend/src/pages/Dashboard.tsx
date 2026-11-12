@@ -39,6 +39,7 @@ import type {
 } from "../types/assessment"
 import type { StudentSkillAnalysis } from "../types/insight"
 import type { FunnelRecommendationData, Major } from "../types/major"
+import { formatBlockWithSubjects } from "../utils"
 import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
 
 interface BestBlockStatsPayload {
@@ -715,14 +716,14 @@ export function Dashboard() {
     const g = (subj: string) =>
       typeof sm[subj] === "number" && Number.isFinite(sm[subj]) ? sm[subj] : 0
     const blocks = [
-      { name: "Khối A00", sum: g("Toán") + g("Vật lý") + g("Hóa học") },
-      { name: "Khối A01", sum: g("Toán") + g("Vật lý") + g("Tiếng Anh") },
-      { name: "Khối B00", sum: g("Toán") + g("Hóa học") + g("Sinh học") },
-      { name: "Khối C00", sum: g("Ngữ văn") + g("Lịch sử") + g("Địa lý") },
-      { name: "Khối D01", sum: g("Toán") + g("Ngữ văn") + g("Tiếng Anh") },
-      { name: "Khối D07", sum: g("Toán") + g("Hóa học") + g("Tiếng Anh") },
-      { name: "Khối D14", sum: g("Ngữ văn") + g("Lịch sử") + g("Tiếng Anh") },
-      { name: "Khối D15", sum: g("Ngữ văn") + g("Địa lý") + g("Tiếng Anh") },
+      { name: "Khối A00 (Toán, Vật lý, Hóa học)", sum: g("Toán") + g("Vật lý") + g("Hóa học") },
+      { name: "Khối A01 (Toán, Vật lý, Tiếng Anh)", sum: g("Toán") + g("Vật lý") + g("Tiếng Anh") },
+      { name: "Khối B00 (Toán, Hóa học, Sinh học)", sum: g("Toán") + g("Hóa học") + g("Sinh học") },
+      { name: "Khối C00 (Ngữ văn, Lịch sử, Địa lý)", sum: g("Ngữ văn") + g("Lịch sử") + g("Địa lý") },
+      { name: "Khối D01 (Toán, Ngữ văn, Tiếng Anh)", sum: g("Toán") + g("Ngữ văn") + g("Tiếng Anh") },
+      { name: "Khối D07 (Toán, Hóa học, Tiếng Anh)", sum: g("Toán") + g("Hóa học") + g("Tiếng Anh") },
+      { name: "Khối D14 (Ngữ văn, Lịch sử, Tiếng Anh)", sum: g("Ngữ văn") + g("Lịch sử") + g("Tiếng Anh") },
+      { name: "Khối D15 (Ngữ văn, Địa lý, Tiếng Anh)", sum: g("Ngữ văn") + g("Địa lý") + g("Tiếng Anh") },
     ].sort((a, b) => b.sum - a.sum)
 
     const best = blocks[0]
@@ -831,7 +832,7 @@ export function Dashboard() {
             match: totalMatch,
             feasibility: isEligible ? ("TARGET" as const) : ("REACH" as const),
             feasibility_label: isEligible ? "Khả thi cao" : "Thử thách",
-            best_matching_block: bestBlockStats.block.replace("Khối ", ""),
+            best_matching_block: bestBlockStats.block.replace("Khối ", "").split(" ")[0].trim(),
             best_block_score: studentBestSum,
             benchmark_cutoff: m.minCutoff,
             constraint_passed: isEligible,
@@ -877,8 +878,11 @@ export function Dashboard() {
     if (data?.funnel?.tier1_fields && data.funnel.tier1_fields.length > 0) {
       return data.funnel
     }
-    return displayedFunnel
-  }, [data?.funnel, displayedFunnel])
+    return {
+      tier1_fields: [],
+      all_majors: [],
+    }
+  }, [data?.funnel])
 
   const categories = useMemo(() => {
     const set = new Set<string>()
@@ -1083,20 +1087,8 @@ export function Dashboard() {
               </div>
             )}
 
-            {/* AI Aspiration Alignment Agent Summary Card */}
-            <AspirationAlignmentCard
-              analysis={data?.aspirationAnalysis ?? null}
-              currentAspiration={assessment.aspiration}
-              onUpdateAspiration={handleUpdateAspiration}
-              isAnalyzing={isAnalyzingAspiration}
-            />
-
-            <div className="mb-6">
-              <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
-            </div>
-
-            {/* Clean 2-Column Layout: Single Left Profile Card + Right 2-Tier Funnel */}
-            <div className="grid gap-6 lg:grid-cols-[.82fr_1.18fr]">
+            {/* 1. Hồ sơ RIASEC & Phễu Ngành đề xuất 2 tầng */}
+            <div className="mb-6 grid gap-6 lg:grid-cols-[.82fr_1.18fr]">
               {/* Left Column: Single Unified Profile Card */}
               <div>
                 <Card className="rounded-3xl p-6">
@@ -1137,7 +1129,7 @@ export function Dashboard() {
                     <div className="flex items-center gap-2.5">
                       <GraduationCap size={17} className="text-sky-600" />
                       <span className="text-xs font-extrabold text-slate-800">
-                        {bestBlockStats.block}
+                        {formatBlockWithSubjects(bestBlockStats.block, { short: true })}
                         {bestBlockStats.rawSum ? ` · ${bestBlockStats.rawSum}đ` : ""}
                       </span>
                     </div>
@@ -1155,8 +1147,24 @@ export function Dashboard() {
 
               {/* Right Column: 2-Tier Recommendation Funnel */}
               <div>
-                <TwoTierFunnelRecommendation funnelData={activeFunnel} />
+                <TwoTierFunnelRecommendation
+                  funnelData={activeFunnel}
+                  isLoading={isAnalyzingAspiration || (!data?.funnel && hasCompletedAssessment)}
+                />
               </div>
+            </div>
+
+            {/* 2. AI Đối chiếu nguyện vọng */}
+            <AspirationAlignmentCard
+              analysis={data?.aspirationAnalysis ?? null}
+              currentAspiration={assessment.aspiration}
+              onUpdateAspiration={handleUpdateAspiration}
+              isAnalyzing={isAnalyzingAspiration}
+            />
+
+            {/* 3. Phân tích kỹ năng của bạn */}
+            <div className="mt-6 mb-6">
+              <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
             </div>
           </>
         )}
