@@ -44,6 +44,28 @@ Bổ sung các cụm nghề đa dạng vào `CAREER_SYNONYM_CLUSTERS` trong `asp
 ### 2.3 Bảo vệ kết luận LLM chống ảo giác (Safe LLM Verdict)
 - Thêm hàm `_is_safe_llm_verdict(text, ...)` trong `aspiration_agent.py` để kiểm tra đầu ra từ mô hình AI, ngăn chặn LLM tự sinh các con số điểm số ảo hoặc bịa đặt dữ liệu học bạ không có trong ngữ cảnh.
 
+### 2.4 Bổ sung tính năng Bỏ qua Nguyện vọng & Tối ưu giao diện tinh gọn (Clean Minimalist UI)
+- **Cho phép bỏ qua nguyện vọng (Skip flow):**
+  - Học sinh có thể chọn **"Bỏ qua bước này"** ngay tại banner phía trên hoặc nút **"Bỏ qua & Xem kết quả"** ở thanh điều hướng cuối trang.
+  - Khi bấm bỏ qua, hệ thống không bắt buộc nhập liệu, tự động đồng bộ hồ sơ đánh giá và chuyển ngay sang Dashboard để xem kết quả phân tích theo RIASEC, Học lực và Tư duy.
+- **Tối ưu hiển thị chỉ những gì cần thiết:**
+  - Tập trung 100% vào ô nhập nghề mơ ước kèm icon tìm kiếm, nút xóa chọn nhanh và 8 chip gợi ý phổ biến.
+  - Các mục phụ như "Giá trị công việc" (Mục 2) và "Chiến lược đối chiếu điểm chuẩn" (Mục 3) được thu gọn trong Accordion `Tùy chỉnh thêm giá trị & chiến lược điểm số (Không bắt buộc)`, mặc định đóng để giao diện thoáng đãng, không gây choáng ngợp cho học sinh.
+  - Tự động hiển thị huy hiệu *"Đã tùy chỉnh"* nếu học sinh đã từng chọn các mục nâng cao này.
+
+### 2.5 Dọn dẹp Repo Git & Loại bỏ Remote thừa / Script rác
+- **Xóa 5 script probe/test tạm thời không còn dùng:**
+  - `script_check_live.py`: script thăm dò kết nối LLM tạm thời ở root.
+  - `script_probe_live.py`: script kiểm tra timeout probe tạm thời ở root.
+  - `script_test_probe.py`: script test endpoint probe ở root.
+  - `backend/check_db_status.py`: script test raw connection DB độc lập ở backend.
+  - `backend/scripts/inspect_db.py`: script đọc SQLite `careerguide.db` cũ (hệ thống hiện dùng PostgreSQL).
+- **Gỡ bỏ remote sai lệch (`ntanduy`):**
+  - Đã xóa remote `ntanduy` khỏi cấu hình git cục bộ.
+  - Chỉ giữ lại duy nhất remote chính thức của tổ chức: `origin` = `https://github.com/DTU-C1SE-71/AI-CAREERGUIDE.git`.
+- **Cập nhật `.gitignore`:**
+  - Bổ sung quy tắc bỏ qua `script_*.py`, `check_*.py`, `scratch/` để chống commit nhầm các file test ad-hoc trong tương lai.
+
 ---
 
 ## 3. Kiến trúc hệ thống & Danh mục tệp (Files in Play)
@@ -51,14 +73,17 @@ Bổ sung các cụm nghề đa dạng vào `CAREER_SYNONYM_CLUSTERS` trong `asp
 | File | Vai trò & Điểm chạm chính |
 |------|---------------------------|
 | `backend/app/services/recommender/aspiration_agent.py` | Agent đối chiếu nghề mơ ước: Cụm từ khóa mở rộng, chống bịa điểm `NEED_ACADEMIC_DATA`, bộ lọc an toàn `_is_safe_llm_verdict` |
-| `backend/app/services/recommender/engine.py` | Động cơ tuyển sinh 3 trụ cột: Hỗ trợ `has_academic_data=False` → tier `UNKNOWN`, không suy đoán điểm khối |
-| `backend/app/services/recommender/service.py` | Luồng tính điểm recommender: Loại bỏ việc gán cứng `21.5đ`, trả về `UNKNOWN` khi chưa có học bạ |
-| `backend/tests/test_scoring_and_gap_engine.py` | Bộ test backend: Thêm `test_aspiration_no_grades_returns_need_academic_data_and_unknown_tier` và `test_aspiration_expanded_career_clusters` |
+| `backend/app/services/recommender/engine.py` | Động cơ tuyển sinh 3 trụ cột: Trọng số thích ứng động (`compute_adaptive_weights`), giải thích XAI tinh gọn 3 câu (`build_compact_xai_explanation`), hỗ trợ `has_academic_data=False` → tier `UNKNOWN` |
+| `backend/app/services/recommender/service.py` | Luồng tính điểm recommender: Tích hợp Adaptive Weighting theo chiến lược nguyện vọng và đặc thù nhóm ngành, sinh giải thích XAI súc tích |
+| `backend/tests/test_scoring_and_gap_engine.py` | Bộ test backend: Bổ sung `TestAdaptiveWeightingAndCompactXAI` (7 bài test kiểm định trọng số động và XAI tinh gọn) |
 | `frontend/src/types/assessment.ts` | TypeScript types: Cập nhật `feasibility_tier` (`UNKNOWN`) và `alignment_status` (`NEED_ACADEMIC_DATA`) |
 | `frontend/src/components/xai/AspirationAlignmentCard.tsx` | UI thẻ đối chiếu nguyện vọng: Hiển thị badge Amber `"Chưa có điểm"` và tone màu tương ứng |
 | `backend/app/services/taxonomy/trend_agent.py` | Agent tìm kiếm xu hướng thị trường 2026, quota tối thiểu 3 ngành/nhóm, lưu CSDL |
 | `frontend/src/components/admin/TrendAgentPanel.tsx` | Giao diện Admin chạy/duyệt/lưu ngành xu hướng 2026 vào PostgreSQL |
 | `frontend/src/components/admin/MajorsCatalogPanel.tsx` | Bảng tra cứu danh mục 435 ngành TT74 & trạng thái xu hướng cho Admin |
+| `backend/app/services/major_insight/` | Cụm Agent phân tích chuyên sâu ngành: nội dung đào tạo, vị trí nghề nghiệp, phân tích ưu/nhược điểm học tập sinh viên |
+| `frontend/src/components/xai/MajorInfoCards.tsx` & `SkillAnalysisCard.tsx` | Thẻ hiển thị chuyên sâu thông tin ngành và đánh giá kỹ năng cá nhân hóa tại trang chi tiết ngành |
+| `.agents/skills/arena/` | Tournament skill `arena`: Thi đấu phân loại giải pháp AI đa tác nhân với số lượng tác nhân tinh gọn (Mặc định 8, Quick 4, Wave 4) |
 
 ---
 
@@ -67,15 +92,20 @@ Bổ sung các cụm nghề đa dạng vào `CAREER_SYNONYM_CLUSTERS` trong `asp
 Toàn bộ các cổng kiểm định chất lượng đều đạt chuẩn tuyệt đối:
 1. **Pytest Backend:**
    ```bash
-   py -3 -m pytest backend/tests -v
-   # Kết quả: 90/90 passed (100%), không có lỗi hồi quy
+   $env:ENVIRONMENT="test"; py -3 -m pytest backend/tests -v
+   # Kết quả: 113/113 passed (100%), bao gồm cả 7 bài test Adaptive Weighting & Compact XAI
    ```
-2. **Frontend Production Build:**
+2. **Arena Skill Unit Tests:**
+   ```bash
+   py -3 .agents/skills/arena/test_bracket.py
+   # Kết quả: 29/29 passed (100%), kiểm thử chuẩn xác giải đấu 8 tác nhân & 4 tác nhân quick
+   ```
+3. **Frontend Production Build:**
    ```bash
    npm --prefix frontend run build
-   # Kết quả: tsc -b && vite build thành công (2.25s), không có lỗi TypeScript
+   # Kết quả: tsc -b && vite build thành công (1.48s), không có lỗi TypeScript
    ```
-3. **Database Health & Active Majors:**
+4. **Database Health & Active Majors:**
    - PostgreSQL đang lưu trữ chính xác **435 ngành hoạt động** theo TT74/2026/TT-BGDĐT.
    - 81 ngành được gán nhãn xu hướng vĩ mô 2026 phủ kín 23/23 nhóm ngành.
 
@@ -87,10 +117,13 @@ Toàn bộ các cổng kiểm định chất lượng đều đạt chuẩn tuy�
 # 1. Chạy toàn bộ test suite backend
 $env:ENVIRONMENT="test"; py -3 -m pytest backend/tests -v
 
-# 2. Build kiểm tra TypeScript và bundle Frontend
+# 2. Chạy test suite của arena skill
+py -3 .agents/skills/arena/test_bracket.py
+
+# 3. Build kiểm tra TypeScript và bundle Frontend
 npm --prefix frontend run build
 
-# 3. Kiểm tra trạng thái CSDL và API sức khỏe
+# 4. Kiểm tra trạng thái CSDL và API sức khỏe
 Invoke-RestMethod -Uri "http://localhost:8000/api/health/db"
 Invoke-RestMethod -Uri "http://localhost:8000/api/v1/taxonomy/trend-agent/status"
 ```
