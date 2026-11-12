@@ -6,8 +6,11 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  ClipboardCheck,
+  Eye,
   Layers,
   LayoutDashboard,
+  ListChecks,
   Loader2,
   LockKeyhole,
   RotateCcw,
@@ -119,6 +122,9 @@ export function AssessmentWizard() {
   const [sessionStarted, setSessionStarted] = useState<boolean>(
     () => searchParams.get("new") === "true",
   )
+  const [isReviewMode, setIsReviewMode] = useState<boolean>(
+    () => searchParams.get("review") === "true",
+  )
   const [cardScale, setCardScale] = useState<"normal" | "large">("large")
   const [step, setStep] = useState<number>(assessment.step || 1)
   const [scores, setScores] = useState<Record<string, number>>(() => {
@@ -143,8 +149,8 @@ export function AssessmentWizard() {
     CognitiveQuestionItem[]
   >(defaultCognitiveQuestions)
 
-  // Step 1 Mode: 'swipe' (Vertical Liquid Glass Card) | 'radar' (1-Screen Fast Radar)
-  const [step1Mode, setStep1Mode] = useState<"swipe" | "radar">("swipe")
+  // Step 1 Mode: 'swipe' (Thẻ) | 'list' (Danh sách 30 câu) | 'radar' (Radar tổng quan)
+  const [step1Mode, setStep1Mode] = useState<"swipe" | "radar" | "list">("swipe")
   const [cardIndex, setCardIndex] = useState<number>(() => {
     const firstUnanswered = ONET_MINI_IP_ITEMS.findIndex((item) => {
       const cIdx = CANONICAL_30_CODES.indexOf(item.code)
@@ -281,6 +287,19 @@ export function AssessmentWizard() {
       }, 180)
     },
     [currentCard.code, assessment.answers, update, cardIndex]
+  )
+
+  const handleRateByCode = useCallback(
+    (code: string, value: number) => {
+      const cIdx = CANONICAL_30_CODES.indexOf(code)
+      const nextAnswers = {
+        ...assessment.answers,
+        [code]: value,
+        ...(cIdx >= 0 ? { [`1-${cIdx}`]: value } : {}),
+      }
+      update({ answers: nextAnswers })
+    },
+    [assessment.answers, update]
   )
 
   // Apply 1-screen Radar score (1..5) to all 5 items of a RIASEC dimension
@@ -682,7 +701,7 @@ export function AssessmentWizard() {
                   Chào {user.name || "bạn"}, bạn muốn làm gì tiếp theo?
                 </h1>
                 <p className="mt-2 text-sm sm:text-base font-semibold text-slate-600">
-                  Hệ thống đã ghi nhận hồ sơ đánh giá của bạn. Bạn có thể xem lại kết quả phân tích hoặc thực hiện một bài trắc nghiệm mới.
+                  Hệ thống đã lưu bài trắc nghiệm của bạn. Bạn có thể xem lại các câu hỏi đã trả lời hoặc bắt đầu bài trắc nghiệm mới.
                 </p>
               </div>
             </div>
@@ -691,22 +710,28 @@ export function AssessmentWizard() {
             <div className="mt-8 sm:mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2">
               <button
                 type="button"
-                onClick={() => navigate("/dashboard")}
+                onClick={() => {
+                  setIsReviewMode(true)
+                  setStep(1)
+                  setCardIndex(0)
+                  setCogIndex(0)
+                  setSessionStarted(true)
+                }}
                 className="group flex flex-col justify-between rounded-3xl border border-sky-200/90 bg-gradient-to-br from-white via-sky-50/50 to-sky-100/40 p-6 sm:p-8 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-sky-400 hover:shadow-lg"
               >
                 <div>
                   <div className="mb-5 grid size-14 place-items-center rounded-2xl bg-sky-600 text-white shadow-md transition group-hover:scale-110">
-                    <LayoutDashboard className="size-7" />
+                    <ClipboardCheck className="size-7" />
                   </div>
                   <h3 className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-sky-700">
-                    Xem bài trắc nghiệm đã làm
+                    Xem các câu hỏi đã trả lời
                   </h3>
                   <p className="mt-2 text-sm font-medium leading-relaxed text-slate-600">
-                    Xem lại toàn bộ kết quả phân tích 3 trụ cột, phễu ngành đề xuất và đối chiếu nguyện vọng AI của bạn.
+                    Xem lại toàn bộ 30 câu hỏi sở thích O*NET, các tình huống tư duy và mức điểm mà bạn đã lựa chọn.
                   </p>
                 </div>
                 <div className="mt-6 flex items-center gap-2 text-sm font-black text-sky-700">
-                  <span>Mở Dashboard kết quả</span>
+                  <span>Xem lại câu trả lời</span>
                   <ArrowRight className="size-4 transition group-hover:translate-x-1.5" />
                 </div>
               </button>
@@ -718,6 +743,7 @@ export function AssessmentWizard() {
                   setStep(1)
                   setCardIndex(0)
                   setCogIndex(0)
+                  setIsReviewMode(false)
                   setSessionStarted(true)
                 }}
                 className="group flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white/90 p-6 sm:p-8 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-sky-300 hover:bg-slate-50/90 hover:shadow-lg"
@@ -734,7 +760,7 @@ export function AssessmentWizard() {
                   </p>
                 </div>
                 <div className="mt-6 flex items-center gap-2 text-sm font-black text-slate-700 group-hover:text-sky-700">
-                  <span>Bắt đầu làm bài</span>
+                  <span>Bắt đầu làm bài mới</span>
                   <ArrowRight className="size-4 transition group-hover:translate-x-1.5" />
                 </div>
               </button>
@@ -794,6 +820,58 @@ export function AssessmentWizard() {
           </div>
         </div>
 
+        {/* Review Mode Banner */}
+        {isReviewMode && (
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-sky-200/90 bg-gradient-to-r from-sky-50 via-sky-100/70 to-white/95 p-4 text-sky-950 shadow-sm backdrop-blur-md">
+            <div className="flex items-center gap-3">
+              <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-600 text-white shadow-md">
+                <Eye className="size-6" />
+              </span>
+              <div>
+                <h4 className="text-sm sm:text-base font-black text-sky-950">
+                  Chế độ xem lại các câu hỏi đã trả lời
+                </h4>
+                <p className="text-xs font-semibold text-sky-700">
+                  Bạn đang xem lại các câu trả lời đã lưu trong hệ thống. Nhấn vào từng bước để kiểm tra chi tiết.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  reset()
+                  setStep(1)
+                  setCardIndex(0)
+                  setCogIndex(0)
+                  setIsReviewMode(false)
+                  setSessionStarted(true)
+                }}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300 bg-white px-3 py-2 text-xs font-extrabold text-sky-800 shadow-2xs transition hover:bg-sky-50"
+              >
+                <RotateCcw className="size-3.5" />
+                <span>Bắt đầu bài mới</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSessionStarted(false)}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-xs font-bold text-slate-700 shadow-2xs transition hover:bg-slate-100"
+              >
+                <ArrowLeft className="size-3.5" />
+                <span>Quay lại cổng chọn</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => navigate("/dashboard")}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-2 text-xs font-black text-white shadow-xs transition hover:bg-sky-700"
+              >
+                <LayoutDashboard className="size-3.5" />
+                <span>Xem kết quả Dashboard</span>
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Top Liquid Glass Step Bar */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
           {/* 4 Main Steps */}
@@ -827,7 +905,7 @@ export function AssessmentWizard() {
                   key={s.id}
                   type="button"
                   onClick={() => {
-                    if (s.id === 1 || allRiasecGroupsCovered) {
+                    if (s.id === 1 || allRiasecGroupsCovered || isReviewMode) {
                       setStep(s.id)
                       update({ step: s.id })
                     }
@@ -864,6 +942,18 @@ export function AssessmentWizard() {
                 >
                   <Layers className="size-3.5" />
                   <span>Thẻ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep1Mode("list")}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold transition ${
+                    step1Mode === "list"
+                      ? "bg-sky-600 text-white shadow-sm"
+                      : "text-slate-600 hover:text-sky-700"
+                  }`}
+                >
+                  <ListChecks className="size-3.5" />
+                  <span>Danh sách</span>
                 </button>
                 <button
                   type="button"
@@ -1020,6 +1110,15 @@ export function AssessmentWizard() {
                 </div>
               </div>
             )}
+
+            {/* MODE C: FULL 30-QUESTION LIST VIEW */}
+            {step1Mode === "list" && (
+              <RiasecQuestionsListView
+                items={ONET_MINI_IP_ITEMS}
+                answers={assessment.answers}
+                onRate={handleRateByCode}
+              />
+            )}
           </div>
         )}
 
@@ -1159,8 +1258,9 @@ export function AssessmentWizard() {
                                 {opt.label}
                               </h3>
                               {isSelected && (
-                                <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sky-500 text-white">
+                                <span className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-black text-white shadow-xs">
                                   <Check className="size-3 stroke-[2.5]" />
+                                  <span>Đã chọn</span>
                                 </span>
                               )}
                             </div>
@@ -1248,7 +1348,7 @@ export function AssessmentWizard() {
               <Button
                 icon={ArrowRight}
                 className="text-sm sm:text-base px-5 py-2.5"
-                disabled={!allRiasecGroupsCovered}
+                disabled={!isReviewMode && !allRiasecGroupsCovered}
                 onClick={() => {
                   const filled: Record<string, number> = {
                     ...assessment.answers,
@@ -1267,7 +1367,7 @@ export function AssessmentWizard() {
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
               >
-                Tiếp tục
+                {isReviewMode ? "Xem tiếp: Tư duy nhận thức" : "Tiếp tục"}
               </Button>
             )}
 
@@ -1275,14 +1375,14 @@ export function AssessmentWizard() {
               <Button
                 icon={ArrowRight}
                 className="text-sm sm:text-base px-5 py-2.5"
-                disabled={totalCognitiveAnswered < cognitiveQuestions.length}
+                disabled={!isReviewMode && totalCognitiveAnswered < cognitiveQuestions.length}
                 onClick={() => {
                   setStep(3)
                   update({ step: 3 })
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
               >
-                Tiếp tục
+                {isReviewMode ? "Xem tiếp: Điểm số học tập" : "Tiếp tục"}
               </Button>
             )}
 
@@ -1291,6 +1391,7 @@ export function AssessmentWizard() {
                 icon={ArrowRight}
                 className="text-sm sm:text-base px-5 py-2.5"
                 disabled={
+                  !isReviewMode &&
                   Object.values(scores).filter((v) => typeof v === "number")
                     .length < 3
                 }
@@ -1300,34 +1401,187 @@ export function AssessmentWizard() {
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
               >
-                Tiếp tục: Nguyện vọng
+                {isReviewMode ? "Xem tiếp: Nguyện vọng" : "Tiếp tục: Nguyện vọng"}
               </Button>
             )}
 
             {step === 4 && (
               <div className="flex flex-wrap items-center justify-end gap-2.5 sm:gap-3">
-                <Button
-                  variant="secondary"
-                  className="px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-slate-300"
-                  onClick={() => handleCompleteAssessment(true)}
-                >
-                  Bỏ qua & Xem kết quả
-                </Button>
-                <Button
-                  icon={Check}
-                  className="px-5 py-2.5 text-xs sm:text-sm font-extrabold"
-                  onClick={() => handleCompleteAssessment(false)}
-                >
-                  {aspiration.dreamJob?.trim()
-                    ? "Phân tích & Xem kết quả"
-                    : "Xem kết quả phân tích"}
-                </Button>
+                {isReviewMode ? (
+                  <>
+                    <Button
+                      variant="secondary"
+                      className="px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 border-slate-300"
+                      onClick={() => setSessionStarted(false)}
+                    >
+                      Đóng xem lại
+                    </Button>
+                    <Button
+                      icon={LayoutDashboard}
+                      className="px-5 py-2.5 text-xs sm:text-sm font-black bg-sky-600 text-white shadow-md hover:bg-sky-700"
+                      onClick={() => navigate("/dashboard")}
+                    >
+                      Mở Dashboard kết quả
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <Button
+                      variant="secondary"
+                      className="px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-slate-300"
+                      onClick={() => handleCompleteAssessment(true)}
+                    >
+                      Bỏ qua & Xem kết quả
+                    </Button>
+                    <Button
+                      icon={Check}
+                      className="px-5 py-2.5 text-xs sm:text-sm font-extrabold"
+                      onClick={() => handleCompleteAssessment(false)}
+                    >
+                      {aspiration.dreamJob?.trim()
+                        ? "Phân tích & Xem kết quả"
+                        : "Xem kết quả phân tích"}
+                    </Button>
+                  </>
+                )}
               </div>
             )}
           </div>
         </div>
       </PageContainer>
     </section>
+  )
+}
+
+function RiasecQuestionsListView({
+  items,
+  answers,
+  onRate,
+}: {
+  items: OnetMiniIpItem[]
+  answers: Record<string, number>
+  onRate: (code: string, value: number) => void
+}) {
+  const [filterDim, setFilterDim] = useState<string>("ALL")
+
+  const filteredItems = useMemo(() => {
+    if (filterDim === "ALL") return items
+    return items.filter((item) => item.dimension === filterDim)
+  }, [items, filterDim])
+
+  return (
+    <div className="space-y-4 rounded-3xl border border-white/90 bg-white/70 p-5 sm:p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl">
+      {/* Dimension Filter Tabs */}
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 pb-4">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setFilterDim("ALL")}
+            className={`rounded-xl px-3 py-1.5 text-xs font-black transition ${
+              filterDim === "ALL"
+                ? "bg-sky-600 text-white shadow-xs"
+                : "bg-white/80 text-slate-600 hover:bg-white hover:text-sky-700"
+            }`}
+          >
+            Tất cả (30 câu)
+          </button>
+          {RIASEC_ORDER.map((dim) => {
+            const meta = RIASEC_META[dim]
+            const active = filterDim === dim
+            return (
+              <button
+                key={dim}
+                type="button"
+                onClick={() => setFilterDim(dim)}
+                className={`rounded-xl px-3 py-1.5 text-xs font-extrabold transition ${
+                  active
+                    ? "bg-sky-600 text-white shadow-xs"
+                    : "bg-white/80 text-slate-600 hover:bg-white hover:text-sky-700"
+                }`}
+              >
+                {meta.label}
+              </button>
+            )
+          })}
+        </div>
+        <span className="text-xs font-bold text-slate-500">
+          Đang hiển thị {filteredItems.length} câu hỏi
+        </span>
+      </div>
+
+      {/* List of 30 Questions */}
+      <div className="space-y-3">
+        {filteredItems.map((item) => {
+          const canonicalIdx = CANONICAL_30_CODES.indexOf(item.code)
+          const chosenVal = answers[item.code] ?? answers[`1-${canonicalIdx}`]
+          const chosenScale = ONET_REACTION_SCALE.find(
+            (s) => s.value === chosenVal,
+          )
+
+          return (
+            <div
+              key={item.code}
+              className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl border p-4 backdrop-blur-md transition ${
+                chosenVal
+                  ? "border-sky-200/90 bg-white/95 shadow-2xs"
+                  : "border-slate-200/70 bg-white/60"
+              }`}
+            >
+              <div className="flex items-start gap-3 min-w-0 flex-1">
+                <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-sky-100 text-xs font-black text-sky-800">
+                  {item.code}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600 uppercase">
+                      {RIASEC_META[item.dimension]?.tag}
+                    </span>
+                    {chosenVal ? (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-black text-emerald-700">
+                        <Check className="size-3" />
+                        <span>Đã chọn: {chosenScale?.emoji} {chosenScale?.label} ({chosenVal}/5đ)</span>
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-bold text-amber-600">
+                        Chưa trả lời
+                      </span>
+                    )}
+                  </div>
+                  <h4 className="mt-1 text-sm sm:text-base font-extrabold text-slate-900 leading-snug">
+                    {item.titleVi}
+                  </h4>
+                </div>
+              </div>
+
+              {/* 5-Level Reaction Emoticon Pills */}
+              <div className="flex items-center justify-between sm:justify-end gap-1 sm:gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+                {ONET_REACTION_SCALE.map((s) => {
+                  const isPicked = chosenVal === s.value
+                  return (
+                    <button
+                      key={s.value}
+                      type="button"
+                      onClick={() => onRate(item.code, s.value)}
+                      title={`${s.label} (${s.value}/5)`}
+                      className={`flex flex-col items-center justify-center rounded-xl px-2.5 py-1.5 text-center transition ${
+                        isPicked
+                          ? "bg-sky-500 text-white shadow-xs ring-2 ring-sky-500/25 scale-105"
+                          : "bg-slate-100/90 text-slate-600 hover:bg-sky-50 hover:text-sky-700"
+                      }`}
+                    >
+                      <span className="text-xl sm:text-2xl leading-none">{s.emoji}</span>
+                      <span className="text-[10px] font-bold mt-0.5">
+                        {s.label}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 
@@ -1421,7 +1675,20 @@ function VerticalQuestionCard({
       </div>
 
       {/* 3. 5-Level Rating Emoticons inside the Vertical Card Bottom */}
-      <div className="grid grid-cols-5 gap-2 sm:gap-3 pt-4 border-t border-sky-100/80">
+      <div className="pt-4 border-t border-sky-100/80">
+        {selectedValue && (
+          <div className="mb-2.5 flex items-center justify-center">
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-black text-sky-800 shadow-2xs">
+              <Check className="size-3.5 text-sky-600" />
+              <span>Câu trả lời đã lưu:</span>
+              <span className="text-sky-950 font-black">
+                {ONET_REACTION_SCALE.find((s) => s.value === selectedValue)?.emoji}{" "}
+                {ONET_REACTION_SCALE.find((s) => s.value === selectedValue)?.label} ({selectedValue}/5đ)
+              </span>
+            </span>
+          </div>
+        )}
+        <div className="grid grid-cols-5 gap-2 sm:gap-3">
         {ONET_REACTION_SCALE.map((btn) => {
           const active = selectedValue === btn.value
           return (
@@ -1456,6 +1723,7 @@ function VerticalQuestionCard({
             </motion.button>
           )
         })}
+        </div>
       </div>
     </motion.div>
   )
