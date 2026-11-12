@@ -11,6 +11,7 @@ import {
   X,
 } from "lucide-react"
 import { type FormEvent, useEffect, useState } from "react"
+import { createPortal } from "react-dom"
 import { Button } from "../common/Button"
 import { useAuth } from "../../context/AuthContext"
 import { authPut } from "../../services/api"
@@ -43,7 +44,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
     }
   }, [user, isOpen])
 
-  if (!isOpen || !user) return null
+  if (typeof document === "undefined" || !user) return null
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -97,25 +98,26 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
 
   const initials = user.name ? user.name.slice(0, 2).toUpperCase() : "YU"
 
-  return (
+  return createPortal(
     <AnimatePresence>
-      <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-        {/* Backdrop */}
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-          className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm"
-        />
+      {isOpen && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+          {/* Backdrop */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={onClose}
+            className="fixed inset-0 bg-slate-950/45 backdrop-blur-md"
+          />
 
-        {/* Modal Window */}
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95, y: 12 }}
-          animate={{ opacity: 1, scale: 1, y: 0 }}
-          exit={{ opacity: 0, scale: 0.95, y: 12 }}
-          className="relative z-10 w-full max-w-xl overflow-hidden rounded-3xl border border-white/90 bg-white/90 p-6 sm:p-8 shadow-[0_24px_60px_rgba(14,165,233,0.18)] backdrop-blur-2xl"
-        >
+          {/* Modal Window */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95, y: 16 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.95, y: 16 }}
+            className="relative z-10 w-full max-w-xl overflow-hidden rounded-3xl border border-white/90 bg-white/95 p-6 sm:p-8 shadow-[0_24px_70px_rgba(15,23,42,0.22)] backdrop-blur-2xl my-auto"
+          >
           {/* Close button */}
           <button
             type="button"
@@ -315,6 +317,8 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
           </form>
         </motion.div>
       </div>
-    </AnimatePresence>
-  )
+    )}
+  </AnimatePresence>,
+  document.body,
+)
 }
