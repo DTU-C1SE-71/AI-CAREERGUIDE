@@ -1411,6 +1411,125 @@ class TestExcelBulkImportPersistence:
         assert res["total"] == 1
         db.commit.assert_awaited_once()
 
+    @pytest.mark.anyio
+    async def test_excel_import_purges_all_old_majors_and_prevents_duplicate_categories(self, tmp_path, monkeypatch):
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+        from sqlalchemy import select
+        import app.models  # noqa: F401
+        from app.core.config import settings
+        from app.core.database import Base
+        from app.models.taxonomy import Major
+        from app.main import app
+        from app.core.database import get_db
+        from app.services.taxonomy import service as tax_service
+        from fastapi.testclient import TestClient
+        from pathlib import Path
+
+        monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+
+        db_file = tmp_path / "test_purge.db"
+        test_engine = create_async_engine(f"sqlite+aiosqlite:///{db_file.as_posix()}")
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False)
+
+        # Seed old stale TT09 majors first
+        async with SessionLocal() as s:
+            await tax_service.bulk_sync_majors(
+                s,
+                [
+                    {
+                        "major_code": "7480299",
+                        "name": "Ngành CNTT Cũ Đã Bỏ",
+                        "category": "Máy tính & Công nghệ thông tin",
+                        "blocks": ["A00"],
+                    },
+                    {
+                        "major_code": "7340999",
+                        "name": "Ngành Kinh Doanh Cũ Đã Bỏ",
+                        "category": "Kinh doanh & Quản lý",
+                        "blocks": ["D01"],
+                    },
+                ],
+            )
+
+        async def _override_db():
+            async with SessionLocal() as s:
+                yield s
+
+        app.dependency_overrides[get_db] = _override_db
+        try:
+            tpl_path = Path(__file__).resolve().parents[1] / "app" / "db" / "seeds" / "MOET_Major_Import_Template_Standard.xlsx"
+            client = TestClient(app)
+            with open(tpl_path, "rb") as f:
+                imp_res = client.post(
+                    "/api/v1/taxonomy/import-excel?preview_only=false",
+                    files={"file": ("MOET_Major_Import_Template_Standard.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                )
+            assert imp_res.status_code == 200
+            body = imp_res.json()
+            assert body["deleted_old"] == 2
+
+            # Verify ALL old majors were deleted from DB (not even inactive rows left)
+            async with SessionLocal() as s:
+                all_rows = list((await s.execute(select(Major))).scalars().all())
+                all_codes = {m.major_code for m in all_rows}
+                assert "7480299" not in all_codes
+                assert "7340999" not in all_codes
+                assert len(all_rows) == body["total"]
+
+            # Verify Recommender ONLY evaluates the newly imported Excel majors (does NOT mix old 435 seed data)
+            eval_res = client.post(
+                "/api/v1/recommender/evaluate",
+                json={
+                    "riasec_answers": {"I1": 5, "I2": 5, "R1": 5, "R2": 5, "C1": 4},
+                    "grades_by_subject": {"Toán": 8.5, "Vật lý": 8.0, "Tiếng Anh": 8.0},
+                    "top_k": 500,
+                },
+            )
+            assert eval_res.status_code == 200
+            eval_body = eval_res.json()
+            assert eval_body["total_majors_evaluated"] == body["total"]
+            rec_codes = {m["major_code"] for m in eval_body["majors"]}
+            assert "7480299" not in rec_codes
+            assert "7340999" not in rec_codes
+        finally:
+            app.dependency_overrides.clear()
+            await test_engine.dispose()
+
+    def test_funnel_deduplicates_category_variants_into_single_field(self):
+        import uuid
+        from app.schemas.recommender import MajorRecommendationItem
+        from app.services.recommender.service import build_two_tier_funnel_payload
+
+        def _mk(rank: int, code: str, name: str, cat: str, score: float) -> MajorRecommendationItem:
+            return MajorRecommendationItem(
+                rank=rank,
+                major_id=uuid.uuid4(),
+                major_code=code,
+                major_name=name,
+                category=cat,
+                overall_score=score,
+                score_riasec=score,
+                score_academic=score,
+                score_preference=score,
+                score_breakdown={},
+                explanation="Test XAI",
+                feasibility_tier="TARGET",
+            )
+
+        items = [
+            _mk(1, "7480106", "Kỹ thuật máy tính", "MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN", 0.92),
+            _mk(2, "7480101", "Khoa học máy tính", "Máy tính & Công nghệ thông tin", 0.90),
+            _mk(3, "7340101", "Quản trị kinh doanh", "KINH DOANH VÀ QUẢN LÝ", 0.88),
+        ]
+        funnel = build_two_tier_funnel_payload(items, top_fields=3, majors_per_field=3)
+        field_names = [f["field_name"] for f in funnel["tier1_fields"]]
+        assert len(field_names) == 2
+        assert field_names.count("Máy tính & Công nghệ thông tin") == 1
+        assert "Kinh doanh & Quản lý" in field_names
+
 
 # =========================================================================
 # ADAPTIVE WEIGHTING & COMPACT XAI TESTS (ARENA WINNING DESIGN)
@@ -1487,6 +1606,88 @@ class TestAdaptiveWeightingAndCompactXAI:
         assert "Thiết kế đồ họa" in expl
         assert "Chưa đủ dữ liệu điểm" in expl
         assert "nhập điểm" in expl.lower()
+
+    def test_format_block_with_subjects_mapping(self):
+        from app.services.recommender.engine import format_block_with_subjects
+        assert "Toán, Vật lý, Hóa học" in format_block_with_subjects("A00")
+        assert "Ngữ văn, Lịch sử, Địa lý" in format_block_with_subjects("C00")
+        assert "Toán, Ngữ văn, Tiếng Anh" in format_block_with_subjects("D01")
+        assert "Toán, Vật lý, Hóa học" in format_block_with_subjects("Khối A00")
+        assert format_block_with_subjects("A00", include_prefix=False).startswith("A00 (")
+
+    @pytest.mark.asyncio
+    async def test_cross_block_aspiration_agent_explanation(self):
+        import uuid
+        from app.services.recommender.aspiration_agent import analyze_career_aspiration
+        from app.schemas.recommender import MajorRecommendationItem
+
+        # Kịch bản trong thực tế của học sinh:
+        # - Khối điểm cao nhất: C00 (Ngữ văn, Lịch sử, Địa lý) đạt 24.9đ
+        # - Ngành đề xuất: Kỹ thuật ô tô xét tuyển khối A00 (Toán, Vật lý, Hóa học) đạt 20.1đ, chuẩn ~18đ
+        mock_major = MajorRecommendationItem(
+            rank=1,
+            major_id=uuid.uuid4(),
+            major_code="7520130",
+            major_name="Kỹ thuật ô tô",
+            category="Kỹ thuật & Công nghệ",
+            overall_score=0.88,
+            score_riasec=0.89,
+            score_academic=0.94,
+            score_preference=0.72,
+            best_matching_block="A00",
+            best_block_score=20.1,
+            benchmark_cutoff=18.0,
+            score_gap=2.1,
+            score_breakdown={},
+            explanation="Ngành Kỹ thuật ô tô rất phù hợp.",
+            feasibility_tier="TARGET",
+            feasibility_label="Khả thi cao",
+            constraint_passed=True,
+            constraint_violations=[],
+            admission_advice="Đủ điểm an toàn",
+            summary_explanation="Ngành Kỹ thuật ô tô rất phù hợp.",
+            supporting_factors=[],
+            is_trending=True,
+            trend_tier="TIER_1",
+            trend_label="Xu hướng Bậc 1",
+            trend_priority=1,
+            market_trend_compatibility=0.85,
+        )
+
+        best_block_stats = {
+            "block": "Khối C00 (Ngữ văn, Lịch sử, Địa lý)",
+            "block_code": "C00",
+            "raw_sum": 24.9,
+            "z_score": "+1.01",
+            "percentile": "Top 20%",
+            "has_academic_data": True,
+        }
+
+        res = await analyze_career_aspiration(
+            aspiration_data={"dream_job": ""},
+            student_riasec={"R": 0.70, "A": 0.65, "C": 0.60, "I": 0.40, "S": 0.35, "E": 0.30},
+            best_block_stats=best_block_stats,
+            all_ranked_majors=[mock_major],
+            enable_llm=False,
+        )
+
+        verdict = res["agent_verdict"]
+        takeaways = res["key_takeaways"]
+
+        # Phải giải thích rõ: Khối C00 là điểm cao nhất, nhưng ngành xét A00 và A00 vẫn vượt chuẩn tham chiếu
+        assert "C00" in verdict
+        assert "A00" in verdict
+        assert "Ngữ văn, Lịch sử, Địa lý" in verdict
+        assert "Toán, Vật lý, Hóa học" in verdict
+        assert "Kỹ thuật ô tô" in verdict
+
+        # Takeaways cũng phải nêu rõ đối chiếu tổ hợp xét tuyển kèm tên môn học
+        joined_takeaways = " ".join(takeaways)
+        assert "C00" in joined_takeaways
+        assert "A00" in joined_takeaways
+        assert "Ngữ văn, Lịch sử, Địa lý" in joined_takeaways
+        assert "Toán, Vật lý, Hóa học" in joined_takeaways
+
 
 
 

@@ -1,4 +1,10 @@
-import { AlertCircle, CheckCircle2, Loader2 } from "lucide-react"
+import { AnimatePresence, motion } from "framer-motion"
+import {
+  AlertCircle,
+  BrainCircuit,
+  CheckCircle2,
+  LoaderCircle,
+} from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router"
 import { Button } from "../components/common/Button"
@@ -86,7 +92,7 @@ export function GoogleCallback() {
       })
         .then(async (resp) => {
           if (!resp.ok) {
-            throw new Error(`Google UserInfo trả về lỗi HTTP ${resp.status}`)
+            throw new Error(`Google UserInfo trả về mã lỗi HTTP ${resp.status}`)
           }
           return await resp.json()
         })
@@ -137,50 +143,117 @@ export function GoogleCallback() {
   }, [searchParams, login, navigate])
 
   return (
-    <div className="flex min-h-[75vh] items-center justify-center px-4 py-12">
-      <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white/90 p-8 text-center shadow-xl backdrop-blur-xl space-y-4">
-        {errorMsg ? (
-          <div className="space-y-4">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-600">
-              <AlertCircle size={24} />
-            </div>
-            <h2 className="text-lg font-black text-slate-900">
-              Đăng nhập Google thất bại
-            </h2>
-            <p className="rounded-xl border border-rose-100 bg-rose-50/70 p-3 text-xs font-semibold leading-relaxed text-rose-600">
-              {errorMsg}
-            </p>
-            <Button
-              onClick={() => navigate("/login", { replace: true })}
-              className="w-full"
+    <section className="relative flex min-h-[calc(100vh-72px)] items-center justify-center p-4 sm:p-6 lg:p-10">
+      {/* Ambient background glows */}
+      <div className="pointer-events-none absolute -left-20 top-10 size-80 rounded-full bg-sky-200/40 blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-1/4 size-96 rounded-full bg-cyan-200/35 blur-3xl" />
+
+      {/* Centered Callback State Card */}
+      <div className="relative w-full max-w-md overflow-hidden rounded-3xl border border-slate-200/90 bg-white/85 p-8 text-center shadow-2xl shadow-sky-950/10 backdrop-blur-2xl sm:p-10">
+        {/* Brand Header */}
+        <div className="mb-6 flex items-center justify-center gap-2.5 font-black text-slate-900">
+          <span className="grid size-9 place-items-center rounded-xl bg-sky-600 text-white shadow-sm">
+            <BrainCircuit size={18} />
+          </span>
+          <span className="text-base tracking-tight">AI CareerGuide</span>
+        </div>
+
+        <AnimatePresence mode="wait">
+          {errorMsg ? (
+            <motion.div
+              key="error-state"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="space-y-4"
             >
-              Quay lại trang Đăng nhập
-            </Button>
-          </div>
-        ) : isSuccess ? (
-          <div className="space-y-3">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600">
-              <CheckCircle2 size={24} />
-            </div>
-            <h2 className="text-lg font-black text-slate-900">
-              Đăng nhập Google thành công!
-            </h2>
-            <p className="text-xs font-medium text-slate-500">
-              Đang chuyển hướng tới không gian hướng nghiệp của bạn...
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-3">
-            <Loader2 className="mx-auto size-8 animate-spin text-sky-600" />
-            <h2 className="text-base font-black text-slate-900">
-              Đang đồng bộ tài khoản Google...
-            </h2>
-            <p className="text-xs font-medium text-slate-500">
-              Vui lòng đợi trong giây lát.
-            </p>
-          </div>
-        )}
+              <div className="mx-auto flex size-14 items-center justify-center rounded-full border border-rose-200 bg-rose-50 text-rose-600 shadow-xs">
+                <AlertCircle size={28} />
+              </div>
+
+              <div>
+                <h2 className="text-xl font-black tracking-tight text-slate-900">
+                  Đăng nhập Google không thành công
+                </h2>
+                <p className="mt-2 text-xs sm:text-sm text-slate-500">
+                  Đã xảy ra vấn đề trong quá trình đồng bộ tài khoản của bạn.
+                </p>
+              </div>
+
+              <div
+                role="alert"
+                className="rounded-2xl border border-rose-200 bg-rose-50/80 p-3.5 text-xs sm:text-sm font-medium leading-relaxed text-rose-700"
+              >
+                {errorMsg}
+              </div>
+
+              <div className="pt-2">
+                <Button
+                  onClick={() => navigate("/login", { replace: true })}
+                  className="w-full min-h-11"
+                  size="md"
+                >
+                  Quay lại trang Đăng nhập
+                </Button>
+              </div>
+            </motion.div>
+          ) : isSuccess ? (
+            <motion.div
+              key="success-state"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="space-y-4"
+            >
+              <div className="mx-auto flex size-14 items-center justify-center rounded-full border border-emerald-200 bg-emerald-50 text-emerald-600 shadow-xs">
+                <CheckCircle2 size={28} />
+              </div>
+
+              <div>
+                <h2 className="text-xl font-black tracking-tight text-slate-900">
+                  Đăng nhập Google thành công!
+                </h2>
+                <p className="mt-2 text-xs sm:text-sm text-slate-600 font-medium">
+                  Đang chuyển hướng tới không gian hướng nghiệp của bạn...
+                </p>
+              </div>
+
+              <div className="mx-auto h-1.5 w-32 overflow-hidden rounded-full bg-slate-100">
+                <motion.div
+                  className="h-full bg-sky-600"
+                  initial={{ width: "0%" }}
+                  animate={{ width: "100%" }}
+                  transition={{ duration: 0.65, ease: "easeInOut" }}
+                />
+              </div>
+            </motion.div>
+          ) : (
+            <motion.div
+              key="loading-state"
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+              className="space-y-4"
+            >
+              <div className="mx-auto flex size-14 items-center justify-center rounded-full border border-sky-100 bg-sky-50 text-sky-600">
+                <LoaderCircle className="size-7 animate-spin" />
+              </div>
+
+              <div>
+                <h2 className="text-xl font-black tracking-tight text-slate-900">
+                  Đang đồng bộ tài khoản Google
+                </h2>
+                <p className="mt-2 text-xs sm:text-sm text-slate-500">
+                  Hệ thống đang bảo mật phiên làm việc và chuẩn bị lộ trình của bạn.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
-    </div>
+    </section>
   )
 }

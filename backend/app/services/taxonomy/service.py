@@ -4,7 +4,7 @@ import uuid
 from pathlib import Path
 from typing import List, Optional, Dict, Any
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
+from sqlalchemy import select, update, delete, func
 from sqlalchemy.orm import selectinload
 
 from app.models.taxonomy import (
@@ -242,6 +242,42 @@ async def list_skills(
     query = query.order_by(Skill.skill_code.asc()).limit(limit)
     result = await db.execute(query)
     return list(result.scalars().all())
+
+
+async def purge_old_major_catalog_data(db: AsyncSession) -> int:
+    """
+    Xóa sạch toàn bộ dữ liệu ngành & nhóm ngành cũ trong CSDL trước khi nạp file Excel mới:
+    - Xóa bảng liên kết tổ hợp môn (major_subject_blocks), nghề nghiệp (careers), kỹ năng ngành (major_skills)
+    - Xóa toàn bộ bảng ngành cũ (majors)
+    - Xóa cache phân tích ngành (major_insights), lộ trình ngành (major_roadmaps),
+      lịch sử đề xuất cũ (recommendation_history), vector tri thức ngành cũ (knowledge_embeddings)
+      và bản ghi staging danh mục cũ (staging_records).
+    - Giữ nguyên tài khoản người dùng (users), câu hỏi trắc nghiệm và bài làm của học sinh.
+    Không commit riêng lẻ để đảm bảo tính nguyên tử (rollback an toàn nếu bước insert sau đó gặp lỗi).
+    """
+    from app.models.insight import MajorInsight, StudentSkillInsight
+    from app.models.roadmap import MajorRoadmap
+    from app.models.recommender import RecommendationHistory
+    from app.models.vector import KnowledgeEmbedding
+    from app.models.staging import StagingRecord, StagingStreamType
+
+    count_res = await db.execute(select(func.count()).select_from(Major))
+    raw_count = count_res.scalar_one_or_none()
+    deleted_majors_count = raw_count if isinstance(raw_count, int) else 0
+
+    await db.execute(delete(MajorSubjectBlock))
+    await db.execute(delete(Career))
+    await db.execute(delete(MajorSkill))
+    await db.execute(delete(MajorInsight))
+    await db.execute(delete(StudentSkillInsight).where(StudentSkillInsight.major_code != ""))
+    await db.execute(delete(MajorRoadmap))
+    await db.execute(delete(RecommendationHistory))
+    await db.execute(delete(KnowledgeEmbedding).where(KnowledgeEmbedding.major_code.is_not(None)))
+    await db.execute(delete(StagingRecord).where(StagingRecord.stream_type == StagingStreamType.STREAM_A_MOET))
+    await db.execute(delete(Major))
+    await db.flush()
+
+    return deleted_majors_count
 
 
 async def bulk_sync_majors(

@@ -1,6 +1,6 @@
 from typing import List, Union
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 
 
 class Settings(BaseSettings):
@@ -43,20 +43,26 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:5173/login/callback"
 
-    # AI & Embedding Services
-    OPENAI_API_KEY: str = ""
-    OPENAI_BASE_URL: str = "https://api.xkiro.com/v1"
-    XAI_API_KEY: str = ""
-    XAI_BASE_URL: str = "https://api.xkiro.com/v1"
-    VISION_LLM_MODEL: str = "mistralai/mistral-large-2512"
-    TAVILY_API_KEY: str = ""
-    EMBEDDING_MODEL: str = "text-embedding-3-small"
-    EMBEDDING_DIMENSION: int = 1536
-    LLM_MODEL: str = "mistralai/mistral-large-2512"
+    # AI Assistant & LLM Services (Persona: Navi - AI CareerGuide)
+    AI_ASSISTANT_NAME: str = "Navi"
+    LLM_API_KEY: str = ""
+    LLM_BASE_URL: str = "https://codex.fosta.app/v1"
+    LLM_MODEL: str = "gpt-6-luna"
+    LLM_TIMEOUT_SECONDS: float = 120.0
     LLM_MAX_TOKENS: int = 128000
     LLM_MAX_CONTEXT_TOKENS: int = 272000
     LLM_MAX_CONTEXT_CHARS: int = 240000
-    LLM_TIMEOUT_SECONDS: float = 120.0
+
+    # Legacy & Fallback Compatibility Settings
+    XKIRO_API_KEY: str = ""
+    OPENAI_API_KEY: str = ""
+    OPENAI_BASE_URL: str = "https://codex.fosta.app/v1"
+    XAI_API_KEY: str = ""
+    XAI_BASE_URL: str = "https://codex.fosta.app/v1"
+    VISION_LLM_MODEL: str = "mistralai/mistral-medium-3.5"
+    TAVILY_API_KEY: str = ""
+    EMBEDDING_MODEL: str = "text-embedding-3-small"
+    EMBEDDING_DIMENSION: int = 1536
 
     # 3-Pillar Scoring Weights (Default: RIASEC 0.45, Academic 0.35, Preference 0.20)
     WEIGHT_RIASEC: float = 0.45
@@ -117,6 +123,20 @@ class Settings(BaseSettings):
         ]
 
 
+
+
+    @model_validator(mode="after")
+    def sync_api_keys(self) -> "Settings":
+        # Đồng bộ 2 chiều: Ưu tiên LLM_API_KEY (chuẩn Navi), fallback sang OPENAI_API_KEY hoặc XKIRO_API_KEY
+        eff_key = self.LLM_API_KEY or self.OPENAI_API_KEY or self.XKIRO_API_KEY or self.XAI_API_KEY
+        self.LLM_API_KEY = eff_key
+        self.OPENAI_API_KEY = eff_key
+        self.XKIRO_API_KEY = eff_key
+
+        eff_base = self.LLM_BASE_URL or self.OPENAI_BASE_URL or self.XAI_BASE_URL
+        self.LLM_BASE_URL = eff_base
+        self.OPENAI_BASE_URL = eff_base
+        return self
 
 
 settings = Settings()

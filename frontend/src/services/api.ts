@@ -200,3 +200,34 @@ export async function authPost<T>(path: string, body: unknown): Promise<T> {
     throw err
   }
 }
+
+export async function authPut<T>(path: string, body: unknown): Promise<T> {
+  const token = readStorage<string | null>("career-guide:token", null)
+  const authHeaders: Record<string, string> = token
+    ? { Authorization: `Bearer ${token}` }
+    : {}
+
+  try {
+    const response = await fetch(`/api${path}`, {
+      method: "PUT",
+      headers: {
+        "Content-Type": "application/json",
+        ...authHeaders,
+      },
+      body: JSON.stringify(body),
+    })
+
+    const data = await response.json().catch(() => null)
+    if (!response.ok) {
+      const detail =
+        data && typeof data === "object" && "detail" in data
+          ? String((data as { detail: unknown }).detail)
+          : `Lỗi cập nhật (HTTP ${response.status})`
+      throw new Error(detail)
+    }
+
+    return data as T
+  } catch (err: unknown) {
+    throw err
+  }
+}

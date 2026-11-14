@@ -132,8 +132,8 @@ async def import_majors_from_excel(
     preview_only: bool = Query(default=False),
     sheet_name: Optional[str] = Query(default=None),
     replace_catalog: Optional[bool] = Query(
-        default=None,
-        description="True để đồng bộ chính xác danh mục đang hiệu lực (ẩn mã cũ không còn trong file); mặc định bật khi file >= 20 ngành.",
+        default=True,
+        description="True (mặc định) để xóa toàn bộ dữ liệu ngành/nhóm ngành cũ trước khi nạp file Excel mới.",
     ),
     circular_title: str = Query(default="Thông tư 74/2026/TT-BGDĐT"),
     circular_code: str = Query(default="74/2026/TT-BGDĐT"),
@@ -178,9 +178,12 @@ async def import_majors_from_excel(
 
     from app.core.config import settings
 
-    should_replace = replace_catalog if replace_catalog is not None else len(enriched_majors) >= 20
+    should_replace = True if replace_catalog is None else bool(replace_catalog)
+    deleted_old = 0
 
     try:
+        if should_replace:
+            deleted_old = await service.purge_old_major_catalog_data(db)
         res = await service.bulk_sync_majors(
             db,
             enriched_majors,
@@ -200,19 +203,27 @@ async def import_majors_from_excel(
 
     if settings.ENVIRONMENT != "test" and should_replace:
         try:
-            trend_map = trend_agent.load_trending_registry_map()
-            active_records = []
-            for m in enriched_majors:
-                rec = dict(m)
-                t = trend_map.get(str(rec.get("major_code") or "").strip())
-                if t:
-                    cog = dict(rec.get("cognitive") or {})
-                    cog["_trend"] = t
-                    rec["cognitive"] = cog
-                    rec["cognitive_attributes"] = cog
-                active_records.append(rec)
-
             seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"
+            # Xóa dữ liệu đánh dấu xu hướng cũ của bộ ngành trước đó
+            reg_path = seeds_dir / "trending_majors_registry.json"
+            if reg_path.exists():
+                with open(reg_path, "w", encoding="utf-8") as rf:
+                    json.dump(
+                        {
+                            "last_run_at": None,
+                            "saved_at": None,
+                            "triggered_by": None,
+                            "focus_query": "",
+                            "articles_scanned": 0,
+                            "search_sources": [],
+                            "majors": {},
+                        },
+                        rf,
+                        ensure_ascii=False,
+                        indent=2,
+                    )
+
+            active_records = [dict(m) for m in enriched_majors]
             active_path = seeds_dir / "moet_taxonomy_active.json"
             with open(active_path, "w", encoding="utf-8") as f:
                 json.dump({
@@ -231,6 +242,7 @@ async def import_majors_from_excel(
         "parse_ms": parse_ms,
         "circular_title": circular_title,
         "circular_code": circular_code,
+        "deleted_old": deleted_old,
         "inserted": res.get("inserted", 0),
         "updated": res.get("updated", len(enriched_majors)),
         "deactivated": res.get("deactivated", 0),
@@ -254,10 +266,13 @@ async def publish_majors_to_db(
     from app.core.config import settings
 
     enriched_list = [auto_enrich_major_record(m) for m in payload.majors]
-    should_replace = len(enriched_list) >= 20
+    should_replace = len(enriched_list) > 0
+    deleted_old = 0
 
-    # 1. Persist directly into PostgreSQL majors table
+    # 1. Purge old major data and persist new majors directly into majors table
     try:
+        if should_replace:
+            deleted_old = await service.purge_old_major_catalog_data(db)
         res = await service.bulk_sync_majors(
             db,
             enriched_list,
@@ -275,10 +290,27 @@ async def publish_majors_to_db(
             detail=f"Không thể lưu {len(enriched_list)} ngành vào CSDL: {db_err}",
         )
 
-    # 2. Also persist active seeds JSON file on disk for instantaneous zero-latency fallback
+    # 2. Also persist active seeds JSON file on disk & reset old trending markers
     if settings.ENVIRONMENT != "test" and should_replace:
         try:
             seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"
+            reg_path = seeds_dir / "trending_majors_registry.json"
+            if reg_path.exists():
+                with open(reg_path, "w", encoding="utf-8") as rf:
+                    json.dump(
+                        {
+                            "last_run_at": None,
+                            "saved_at": None,
+                            "triggered_by": None,
+                            "focus_query": "",
+                            "articles_scanned": 0,
+                            "search_sources": [],
+                            "majors": {},
+                        },
+                        rf,
+                        ensure_ascii=False,
+                        indent=2,
+                    )
             active_path = seeds_dir / "moet_taxonomy_active.json"
             with open(active_path, "w", encoding="utf-8") as f:
                 json.dump({
@@ -294,6 +326,7 @@ async def publish_majors_to_db(
         "status": "success",
         "circular_title": payload.circular_title,
         "circular_code": payload.circular_code,
+        "deleted_old": deleted_old,
         "inserted": res.get("inserted", 0),
         "updated": res.get("updated", 0),
         "deactivated": res.get("deactivated", 0),

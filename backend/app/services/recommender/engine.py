@@ -171,6 +171,55 @@ STANDARD_SUBJECT_BLOCKS: Dict[str, Dict[str, Any]] = {
     "V01": {"name": "Toán, Ngữ văn, Vẽ mỹ thuật", "subjects": ["Toán", "Ngữ văn", "Vẽ mỹ thuật"], "national_mean": 20.20, "national_std": 3.00},
 }
 
+# Bản đồ ánh xạ mã khối thi sang tên cụ thể các môn học cấu thành
+BLOCK_SUBJECTS_MAP: Dict[str, str] = {
+    "A00": "Toán, Vật lý, Hóa học",
+    "A01": "Toán, Vật lý, Tiếng Anh",
+    "A02": "Toán, Vật lý, Sinh học",
+    "B00": "Toán, Hóa học, Sinh học",
+    "B08": "Toán, Sinh học, Tiếng Anh",
+    "C00": "Ngữ văn, Lịch sử, Địa lý",
+    "C01": "Ngữ văn, Toán, Vật lý",
+    "C02": "Ngữ văn, Toán, Hóa học",
+    "C03": "Ngữ văn, Toán, Lịch sử",
+    "C04": "Ngữ văn, Toán, Địa lý",
+    "D01": "Toán, Ngữ văn, Tiếng Anh",
+    "D07": "Toán, Hóa học, Tiếng Anh",
+    "D08": "Toán, Sinh học, Tiếng Anh",
+    "D09": "Toán, Lịch sử, Tiếng Anh",
+    "D10": "Toán, Địa lý, Tiếng Anh",
+    "D14": "Ngữ văn, Lịch sử, Tiếng Anh",
+    "D15": "Ngữ văn, Địa lý, Tiếng Anh",
+    "H00": "Ngữ văn, Năng khiếu Vẽ",
+    "V00": "Toán, Vật lý, Vẽ mỹ thuật",
+    "V01": "Toán, Ngữ văn, Vẽ mỹ thuật",
+}
+
+
+def format_block_with_subjects(block_code: Optional[str], include_prefix: bool = True) -> str:
+    """
+    Format mã khối xét tuyển kèm tên cụ thể các môn học cấu thành.
+    VD:
+    - format_block_with_subjects("A00") -> "Khối A00 (Toán, Vật lý, Hóa học)"
+    - format_block_with_subjects("A00", include_prefix=False) -> "A00 (Toán, Vật lý, Hóa học)"
+    - format_block_with_subjects("Khối C00") -> "Khối C00 (Ngữ văn, Lịch sử, Địa lý)"
+    """
+    if not block_code:
+        return "Khối xét tuyển" if include_prefix else "Tổ hợp xét tuyển"
+    raw = str(block_code).strip()
+    if "(" in raw and ")" in raw:
+        return raw
+    import re
+    m = re.search(r"([A-Za-z]\d{2})", raw)
+    if not m:
+        return raw
+    code = m.group(1).upper()
+    subjs = BLOCK_SUBJECTS_MAP.get(code)
+    prefix = "Khối " if include_prefix else ""
+    if subjs:
+        return f"{prefix}{code} ({subjs})"
+    return f"{prefix}{code}"
+
 # Các khối có môn thi năng khiếu riêng không có trong bảng 10 môn THPT thông thường
 APTITUDE_BLOCKS = {"H00", "H01", "M00", "N00", "S00", "T00", "T01", "V00", "V01"}
 
@@ -588,6 +637,42 @@ def calculate_3pillar_hybrid_score(
     return round(score_clamped, 4), weights_dict
 
 
+def calculate_market_trend_compatibility(
+    trend_tier: str,
+    score_riasec: float,
+    score_pref: float,
+    overall_score: float = 0.50,
+) -> Dict[str, Any]:
+    """
+    Tính toán Độ phù hợp Xu hướng có Điều kiện Tương hợp (Affinity-Modulated Trend Fit):
+    - Affinity(u, m) = 0.70 * S_riasec + 0.30 * S_cogn
+    - S_trend_compat = T_base * (0.40 + 0.60 * Affinity)
+    - Boost_trend = MaxBoost * Affinity khi overall_score >= 0.45, ngược lại 0.0
+    """
+    tier = str(trend_tier or "NONE").upper().strip()
+    tier_meta = {
+        "TIER_1": {"base": 1.00, "max_boost": 0.15, "priority": 3, "label": "Xu hướng Mũi nhọn (Cấp 1)"},
+        "TIER_2": {"base": 0.75, "max_boost": 0.09, "priority": 2, "label": "Xu hướng Tăng trưởng Mạnh (Cấp 2)"},
+        "TIER_3": {"base": 0.50, "max_boost": 0.04, "priority": 1, "label": "Xu hướng Nhu cầu Ổn định (Cấp 3)"},
+        "NONE":   {"base": 0.00, "max_boost": 0.00, "priority": 0, "label": "Ngành tiêu chuẩn"},
+    }
+    cfg = tier_meta.get(tier, tier_meta["NONE"])
+    affinity = round(0.70 * score_riasec + 0.30 * score_pref, 4)
+    compat_score = round(cfg["base"] * (0.40 + 0.60 * affinity), 4) if cfg["base"] > 0 else 0.0
+
+    # Chỉ cộng boost khi đạt ngưỡng nền tảng overall_score >= 0.45
+    rank_boost = round(cfg["max_boost"] * affinity, 4) if overall_score >= 0.45 else 0.0
+
+    return {
+        "trend_tier": tier,
+        "trend_priority": cfg["priority"],
+        "trend_label": cfg["label"],
+        "affinity": affinity,
+        "trend_compat_score": compat_score,
+        "rank_boost": rank_boost,
+    }
+
+
 def build_compact_xai_explanation(
     major_name: str,
     score_riasec: float,
@@ -596,49 +681,65 @@ def build_compact_xai_explanation(
     best_block: Optional[str] = None,
     admission_band: str = "UNKNOWN",
     has_academic_scores: bool = True,
+    trend_tier: str = "NONE",
+    trend_label: str = "",
 ) -> str:
     """
-    Tạo đoạn giải thích XAI súc tích đúng 3 câu, thân thiện và dễ hiểu cho học sinh THPT:
-    1. Vì sao hợp: Nêu bật trụ cột mạnh nhất (Sở thích Holland, Năng lực học tập, hay Tư duy nhận thức).
-    2. Khả năng trúng tuyển: Phân tầng tuyển sinh theo khối thi (hoặc nhắc chưa có điểm).
-    3. Cần chú ý / Lời khuyên: Chỉ ra trụ cột/môn cần cải thiện để nâng cao cơ hội.
+    Sinh giải thích XAI ĐÚNG 3 CÂU tinh gọn, tự nhiên, không biệt ngữ toán học:
+    Câu 1: Khẳng định mức độ phù hợp sở thích & tính cách nổi trội.
+    Câu 2: Đánh giá khả năng trúng tuyển VÀ giá trị xu hướng nghề nghiệp 2026.
+    Câu 3: Lời khuyên hành động cụ thể / kỹ năng bồi dưỡng trước mắt.
     """
     components = {
         "riasec": score_riasec,
         "academic": score_academic if has_academic_scores else 0.0,
         "cognitive": score_pref,
     }
+    block_fmt = format_block_with_subjects(best_block, include_prefix=False) if best_block else "xét tuyển"
     labels = {
         "riasec": "thiên hướng sở thích và tính cách nghề nghiệp",
-        "academic": f"nền tảng điểm số học tập khối {best_block or 'xét tuyển'}",
+        "academic": f"nền tảng điểm số học tập khối {block_fmt}",
         "cognitive": "năng lực tư duy và phong cách học tập",
     }
 
     eval_comps = {k: v for k, v in components.items() if (has_academic_scores or k != "academic")}
     best_pillar = max(eval_comps, key=eval_comps.get)
-    why = f"Ngành {major_name} rất phù hợp với bạn nhờ {labels[best_pillar]} nổi bật."
+    c1 = f"Ngành {major_name} rất phù hợp với bạn nhờ {labels[best_pillar]} nổi bật."
 
+    block_str = f" khối {block_fmt}"
     if not has_academic_scores or admission_band == "UNKNOWN":
-        chance = f"Khả năng trúng tuyển khối {best_block or 'xét tuyển'}: Chưa đủ dữ liệu điểm để ước lượng."
+        c2_adm = f"Khả năng trúng tuyển{block_str}: Chưa đủ dữ liệu điểm để ước lượng"
     elif admission_band == "SAFE":
-        chance = f"Khả năng trúng tuyển khối {best_block or 'xét tuyển'}: Tương đối an toàn dựa trên điểm chuẩn tham chiếu."
+        c2_adm = f"Khả năng trúng tuyển{block_str}: Tương đối an toàn dựa trên điểm chuẩn tham chiếu"
     elif admission_band in ("MATCH", "TARGET"):
-        chance = f"Khả năng trúng tuyển khối {best_block or 'xét tuyển'}: Vừa sức trong tầm điểm của bạn."
+        c2_adm = f"Khả năng trúng tuyển{block_str}: Vừa sức trong tầm điểm của bạn"
     elif admission_band == "REACH":
-        chance = f"Khả năng trúng tuyển khối {best_block or 'xét tuyển'}: Cần bứt phá thêm điểm số để chắc suất."
+        c2_adm = f"Khả năng trúng tuyển{block_str}: Cần bứt phá thêm điểm số để chắc suất"
     else:
-        chance = f"Khả năng trúng tuyển khối {best_block or 'xét tuyển'}: Đang được phân tích."
+        c2_adm = f"Khả năng trúng tuyển{block_str}: Đang được phân tích"
+
+    t_tier = str(trend_tier or "NONE").upper().strip()
+    if t_tier == "TIER_1":
+        c2_trend = "đồng thời đây là ngành thuộc Xu hướng Mũi nhọn (Cấp 1) với cơ hội việc làm rộng mở năm 2026"
+    elif t_tier == "TIER_2":
+        c2_trend = "đồng thời đây là ngành thuộc Xu hướng Tăng trưởng Mạnh (Cấp 2) đón đầu làn sóng chuyển đổi số"
+    elif t_tier == "TIER_3":
+        c2_trend = "đồng thời đây là ngành thuộc Xu hướng Nhu cầu Ổn định (Cấp 3) với vị trí việc làm bền vững"
+    else:
+        c2_trend = "đồng thời đây là ngành đào tạo nền tảng với nhu cầu nhân lực xã hội đều đặn"
+
+    c2 = f"{c2_adm}, {c2_trend}."
 
     if not has_academic_scores:
-        advice = "Bạn hãy nhập điểm học bạ hoặc điểm thi thử để nhận đánh giá khả năng trúng tuyển chính xác hơn."
+        c3 = "Bạn nên sớm nhập điểm thi thử hoặc học bạ để kích hoạt phân tích trúng tuyển chi tiết và xây dựng lộ trình ôn tập trọng tâm."
     else:
         weakest_pillar = min(components, key=components.get)
         if components[weakest_pillar] < 0.65:
-            advice = f"Bạn nên tập trung cải thiện thêm {labels[weakest_pillar]} để nâng cao cơ hội."
+            c3 = f"Trước mắt, bạn nên tập trung nâng cao điểm số môn thế mạnh khối {block_fmt} và rèn luyện thêm tư duy giải quyết vấn đề thực tế."
         else:
-            advice = "Bạn đang có nền tảng rất vững để tự tin theo đuổi ngành này."
+            c3 = f"Để tạo lợi thế cạnh tranh vượt trội, bạn nên chủ động bồi dưỡng thêm năng lực ngoại ngữ chuyên ngành và kỹ năng công nghệ ứng dụng phù hợp với {major_name}."
 
-    return f"{why} {chance} {advice}"
+    return f"{c1} {c2} {c3}"
 
 
 def generate_xai_top_supporting_factors(
@@ -653,6 +754,8 @@ def generate_xai_top_supporting_factors(
     major_attr: Dict[str, Any],
     admission_band: str = "UNKNOWN",
     has_academic_scores: bool = True,
+    trend_tier: str = "NONE",
+    trend_label: str = "",
 ) -> Tuple[List[str], str]:
     """
     Generates deterministic, explainable AI (XAI) top supporting factors
@@ -692,21 +795,22 @@ def generate_xai_top_supporting_factors(
         )
 
     # 2. Academic Analysis
+    block_full = format_block_with_subjects(best_block)
     if not has_academic_scores:
         supporting_factors.append(
             "Chưa có dữ liệu điểm học thuật: Đề xuất ưu tiên dựa trên thiên hướng sở thích và tư duy logic."
         )
     elif score_academic >= 0.75:
         supporting_factors.append(
-            f"Năng lực học thuật vượt trội: Khối xét tuyển {best_block or 'thế mạnh'} đạt phân vị {round(score_academic * 100, 1)}% chuẩn hóa toàn quốc."
+            f"Năng lực học thuật vượt trội: {block_full} đạt phân vị {round(score_academic * 100, 1)}% chuẩn hóa toàn quốc."
         )
     elif score_academic >= 0.50:
         supporting_factors.append(
-            f"Năng lực học thuật đáp ứng tốt: Khối {best_block or 'xét tuyển'} đạt mức {round(score_academic * 100, 1)}% so với phổ điểm quốc gia."
+            f"Năng lực học thuật đáp ứng tốt: {block_full} đạt mức {round(score_academic * 100, 1)}% so với phổ điểm quốc gia."
         )
     else:
         supporting_factors.append(
-            f"Điểm học thuật khối {best_block or 'xét tuyển'} ({round(score_academic * 100, 1)}%) cần bổ sung lộ trình rèn luyện để nâng cao khả năng trúng tuyển."
+            f"Điểm học thuật {block_full} ({round(score_academic * 100, 1)}%) cần bổ sung lộ trình rèn luyện để nâng cao khả năng trúng tuyển."
         )
 
     # 3. Cognitive Environment Match
@@ -721,6 +825,14 @@ def generate_xai_top_supporting_factors(
             f"Độ thích ứng phong cách tư duy đạt {round(score_pref * 100, 1)}% qua các tiêu chí tư duy logic và giải quyết vấn đề."
         )
 
+    # 4. Market Trend Support (Nếu có)
+    t_tier = str(trend_tier or "NONE").upper().strip()
+    if t_tier != "NONE":
+        label_text = trend_label or f"Xu hướng {t_tier}"
+        supporting_factors.append(
+            f"Đón đầu xu hướng 2026: Ngành thuộc {label_text} với nhu cầu tuyển dụng và tiềm năng phát triển vượt trội."
+        )
+
     summary_explanation = build_compact_xai_explanation(
         major_name=major_name,
         score_riasec=score_riasec,
@@ -729,6 +841,8 @@ def generate_xai_top_supporting_factors(
         best_block=best_block,
         admission_band=admission_band,
         has_academic_scores=has_academic_scores,
+        trend_tier=trend_tier,
+        trend_label=trend_label,
     )
 
     return supporting_factors, summary_explanation
@@ -1329,14 +1443,30 @@ def extract_6digit_code(major_code: str) -> str:
     return digits
 
 
-# Cross-field practical substitution pathways (High-cutoff Field -> Accessible Sibling Field)
-CROSS_FIELD_SUBSTITUTION_MAP = {
-    "48": {"48", "46", "51", "34", "32"},  # Máy tính/CNTT -> CNTT ứng dụng, CNKT Điện tử, HTTT quản lý, CN truyền thông
-    "52": {"51", "52", "58", "54"},        # Kỹ thuật hàn lâm (52) -> Công nghệ kỹ thuật ứng dụng (51)
-    "72": {"72", "42", "64", "76", "54"},  # Y Dược điểm cao -> Kỹ thuật Y học, Điều dưỡng, Dinh dưỡng, CN sinh học
-    "34": {"34", "31", "51", "81", "84"},  # Kinh doanh quốc tế/Logistics -> QTKD, Kinh tế, Quản lý công nghiệp, Vận tải
-    "14": {"14", "22", "31", "76"},        # Sư phạm điểm cao -> Khoa học giáo dục, Công nghệ giáo dục, Ngôn ngữ
-    "38": {"38", "31", "34", "76"},        # Luật kinh tế -> Luật, Quản lý nhà nước, Công tác xã hội
+# Bảng ánh xạ ma trận chuyển tiếp liên thông đầy đủ 23-24 lĩnh vực TT74
+CROSS_FIELD_SUBSTITUTION_MAP: Dict[str, set] = {
+    # 48: Máy tính & CNTT -> Điện tử, Toán tin, HTTT, Truyền thông số
+    "48": {"48", "46", "51", "34", "32"},
+    # 52: Kỹ thuật hàn lâm -> CNKT ứng dụng (51), Kiến trúc xây dựng (58), Chế biến (54)
+    "52": {"51", "52", "58", "54"},
+    # 72: Sức khỏe / Y Dược -> Công nghệ sinh học (42), Thủy sản (64), Dịch vụ xã hội (76), Thực phẩm (54)
+    "72": {"72", "42", "64", "76", "54"},
+    # 34: Kinh doanh & Quản lý -> Kinh tế (31), Công nghệ tài chính / HTTT (51, 48), Du lịch (81), Vận tải (84)
+    "34": {"34", "31", "48", "51", "81", "84"},
+    # 14: Sư phạm & Giáo dục -> Ngôn ngữ (22), Xã hội & Hành vi (31), Dịch vụ xã hội (76), CNTT Giáo dục (48)
+    "14": {"14", "22", "31", "48", "76"},
+    # 38: Pháp luật -> Xã hội & Hành vi (31), Quản trị / Kinh doanh (34), Dịch vụ xã hội (76), Pháp lý số / An ninh mạng (48)
+    "38": {"38", "31", "34", "48", "76"},
+    # 21: Nghệ thuật & Thiết kế -> Thiết kế đồ họa / Hoạt hình số (48), Truyền thông đa phương tiện (32), Kiến trúc (58)
+    "21": {"21", "48", "32", "58"},
+    # 62: Nông - Lâm nghiệp -> Công nghệ sinh học (42), Môi trường (85), Chế biến thực phẩm (54), Thủy sản (64)
+    "62": {"62", "42", "85", "54", "64"},
+    # 64: Thủy sản -> Nông nghiệp (62), Công nghệ sinh học (42), Chế biến thực phẩm (54), Môi trường (85)
+    "64": {"64", "62", "42", "54", "85"},
+    # 32: Báo chí & Thông tin -> Truyền thông số (48), Nghệ thuật số (21), Xã hội (31)
+    "32": {"32", "48", "21", "31"},
+    # 42: Khoa học sự sống / CNSH -> Y Dược (72), Nông nghiệp CNC (62), Thực phẩm (54), Môi trường (85)
+    "42": {"42", "72", "62", "54", "85"},
 }
 
 
@@ -1430,8 +1560,13 @@ def build_radar_and_block_summary(
                     )
                 )
             )
+            raw_code = str(best_entry.get("block_code", "A00")).upper().replace("KHỐI", "").strip()
+            subjs_text = BLOCK_SUBJECTS_MAP.get(raw_code, ", ".join(best_entry.get("subjects_used", [])))
+            formatted_block = f"Khối {raw_code} ({subjs_text})" if subjs_text else f"Khối {raw_code}"
             best_block_info.update({
-                "block": f"Khối {best_entry.get('block_code', 'A00')}",
+                "block": formatted_block,
+                "block_code": raw_code,
+                "subjects_name": subjs_text,
                 "raw_sum": round(float(best_entry.get("raw_sum", 0.0)), 2),
                 "z_score": f"{'+' if z >= 0 else ''}{z:.2f}",
                 "percentile": pct_str,

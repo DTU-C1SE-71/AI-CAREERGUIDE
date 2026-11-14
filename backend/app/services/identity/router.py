@@ -14,6 +14,7 @@ from app.schemas.identity import (
     UserConsentResponse,
     GoogleLoginRequest,
     GoogleOAuthCallbackRequest,
+    UserProfileUpdateRequest,
 )
 from app.services.identity import service
 
@@ -37,6 +38,17 @@ async def login(payload: UserLoginRequest, db: AsyncSession = Depends(get_db)):
 async def get_current_profile(current_user: User = Depends(get_current_user)):
     """Returns profile information for the authenticated user."""
     return current_user
+
+
+@router.put("/profile", response_model=UserResponse)
+@router.put("/me", response_model=UserResponse)
+async def update_profile(
+    payload: UserProfileUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """Updates student profile information (gender, grade_level, school_class, school_name)."""
+    return await service.update_user_profile(db, current_user.id, payload)
 
 
 @router.post("/consent", response_model=UserConsentResponse)

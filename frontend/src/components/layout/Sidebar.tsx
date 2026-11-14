@@ -1,7 +1,6 @@
 import {
   BarChart3,
   BrainCircuit,
-  ChevronRight,
   ClipboardCheck,
   Compass,
   LogIn,
@@ -10,17 +9,18 @@ import {
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
-  Plus,
   Search,
   Settings,
   ShieldCheck,
   Sparkles,
+  UserCheck,
   X,
 } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
-import { type ReactNode, useState } from "react"
+import { type ReactNode, useEffect, useRef, useState } from "react"
 import { Link, NavLink, useNavigate } from "react-router"
 import { useAuth } from "../../context/AuthContext"
+import { UserProfileModal } from "../profile/UserProfileModal"
 
 interface SidebarProps {
   collapsed: boolean
@@ -34,25 +34,21 @@ interface SidebarProps {
 const mainLinks = [
   {
     label: "Tổng quan",
-    short: "Tổng quan",
     href: "/",
     icon: BarChart3,
   },
   {
     label: "Trắc nghiệm",
-    short: "Trắc nghiệm",
     href: "/assessment",
     icon: ClipboardCheck,
   },
   {
-    label: "Khám phá 435 ngành",
-    short: "435 Ngành học",
+    label: "Khám phá ngành",
     href: "/dashboard",
     icon: Compass,
   },
   {
     label: "Lộ trình 4 tuần",
-    short: "Lộ trình",
     href: "/roadmap",
     icon: Map,
   },
@@ -72,8 +68,8 @@ function SidebarLabel({
           initial={{ opacity: 0, width: 0 }}
           animate={{ opacity: 1, width: "auto" }}
           exit={{ opacity: 0, width: 0 }}
-          transition={{ duration: 0.16 }}
-          className="whitespace-nowrap"
+          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          className="overflow-hidden whitespace-nowrap"
         >
           {children}
         </motion.span>
@@ -98,6 +94,19 @@ function SidebarBody({
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
+  const [showProfileModal, setShowProfileModal] = useState(false)
+  const menuRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (!showSettingsMenu) return
+    const handleOutside = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setShowSettingsMenu(false)
+      }
+    }
+    document.addEventListener("mousedown", handleOutside)
+    return () => document.removeEventListener("mousedown", handleOutside)
+  }, [showSettingsMenu])
 
   const handleQuickSearch = () => {
     onNavigate?.()
@@ -106,9 +115,10 @@ function SidebarBody({
 
   return (
     <div className="flex h-full min-h-0 flex-col">
+      {/* Brand Header */}
       <div
         className={`flex shrink-0 items-center ${
-          collapsed ? "h-24 flex-col justify-start gap-2" : "h-14 gap-2"
+          collapsed ? "flex-col justify-start gap-2.5 py-1" : "h-13 gap-2 px-1"
         }`}
       >
         <Link
@@ -119,36 +129,38 @@ function SidebarBody({
           }`}
           title={collapsed ? "AI CareerGuide" : undefined}
         >
-          <span className="relative grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-md shadow-sky-500/20">
+          <span className="relative grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm shadow-sky-600/20">
             <BrainCircuit size={20} />
           </span>
           <SidebarLabel collapsed={collapsed}>
-            <span className="block text-sm font-black leading-tight text-slate-900">
+            <span className="block text-base font-extrabold tracking-tight text-slate-900">
               AI Career<span className="text-sky-600">Guide</span>
             </span>
           </SidebarLabel>
         </Link>
+
         {!collapsed && (
           <button
             type="button"
             onClick={handleQuickSearch}
             className="sidebar-icon-button"
-            title="Tra cứu 435 ngành"
+            title="Tra cứu danh mục ngành"
             aria-label="Tìm kiếm nhanh"
           >
             <Search size={17} />
           </button>
         )}
+
         <button
           type="button"
           onClick={onToggle}
           className={
             collapsed
-              ? "grid size-10 shrink-0 place-items-center rounded-xl bg-sky-100/80 text-sky-700 transition-all hover:bg-sky-200"
+              ? "grid size-10 shrink-0 place-items-center rounded-xl bg-sky-50 text-sky-700 transition hover:bg-sky-100"
               : "sidebar-icon-button"
           }
-          title={collapsed ? "Mở rộng" : "Thu gọn"}
-          aria-label={collapsed ? "Mở rộng" : "Thu gọn"}
+          title={collapsed ? "Mở rộng thanh bên" : "Thu gọn thanh bên"}
+          aria-label={collapsed ? "Mở rộng thanh bên" : "Thu gọn thanh bên"}
         >
           {mobile ? (
             <X size={18} />
@@ -160,98 +172,37 @@ function SidebarBody({
         </button>
       </div>
 
-      <div className="mt-4 shrink-0">
+      {/* Quick AI Assistant Action */}
+      <div className="mt-4 shrink-0 px-0.5">
         <button
           type="button"
           onClick={onOpenChat}
           title={collapsed ? "Trợ lý AI" : undefined}
-          className={`group flex h-11 items-center rounded-2xl border border-white/85 bg-white/65 font-extrabold text-sky-700 shadow-2xs backdrop-blur-md transition hover:bg-white ${
-            collapsed
-              ? "w-full justify-center px-0"
-              : "w-full gap-2.5 px-4 text-xs"
+          className={`group flex h-11 w-full items-center rounded-2xl border border-sky-200/80 bg-sky-50/75 font-bold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100/70 active:scale-[0.985] ${
+            collapsed ? "justify-center px-0" : "gap-2.5 px-3.5 text-sm"
           }`}
         >
-          <Plus
+          <Sparkles
             size={17}
-            className="shrink-0 transition-transform group-hover:rotate-90"
+            className="shrink-0 text-sky-600 transition-transform duration-200 group-hover:scale-110"
           />
           <SidebarLabel collapsed={collapsed}>Trợ lý AI</SidebarLabel>
         </button>
       </div>
 
-      <div className="sidebar-scroll mt-5 flex-1 overflow-x-hidden overflow-y-auto pr-1">
-        <nav>
-          <motion.div
-            className="space-y-1.5"
-            initial="hidden"
-            animate="visible"
-            variants={{ visible: { transition: { staggerChildren: 0.04 } } }}
-          >
-            {mainLinks.map(({ label, short, href, icon: Icon }) => (
-              <motion.div
-                key={href}
-                variants={{
-                  hidden: { opacity: 0, x: -6 },
-                  visible: { opacity: 1, x: 0 },
-                }}
-              >
-                <NavLink
-                  to={href}
-                  end={href === "/"}
-                  onClick={onNavigate}
-                  title={collapsed ? label : undefined}
-                  className={`relative flex h-11 items-center rounded-2xl text-xs font-bold transition-colors ${
-                    collapsed ? "justify-center px-0" : "gap-3 px-3.5"
-                  }`}
-                >
-                  {({ isActive }) => (
-                    <>
-                      {isActive && (
-                        <motion.span
-                          layoutId="activeSidebarItem"
-                          className="absolute inset-0 rounded-2xl border border-white/90 bg-white/80 shadow-2xs backdrop-blur-md"
-                          transition={{
-                            type: "spring",
-                            stiffness: 300,
-                            damping: 30,
-                          }}
-                        />
-                      )}
-                      <Icon
-                        size={17}
-                        className={`relative z-10 shrink-0 ${
-                          isActive ? "text-sky-600" : "text-slate-500"
-                        }`}
-                      />
-                      {!collapsed && (
-                        <>
-                          <span
-                            className={`relative z-10 min-w-0 flex-1 truncate ${
-                              isActive ? "text-slate-900" : "text-slate-600"
-                            }`}
-                          >
-                            {short}
-                          </span>
-                          <ChevronRight
-                            size={13}
-                            className={`relative z-10 ${
-                              isActive ? "text-sky-500" : "text-slate-300"
-                            }`}
-                          />
-                        </>
-                      )}
-                    </>
-                  )}
-                </NavLink>
-              </motion.div>
-            ))}
-            {user?.role === "admin" && (
+      {/* Primary Navigation */}
+      <div className="sidebar-scroll mt-5 flex-1 overflow-x-hidden overflow-y-auto px-0.5">
+        <nav aria-label="Điều hướng chính">
+          <div className="space-y-1.5">
+            {mainLinks.map(({ label, href, icon: Icon }) => (
               <NavLink
-                to="/admin"
+                key={href}
+                to={href}
+                end={href === "/"}
                 onClick={onNavigate}
-                title={collapsed ? "Quản trị HITL" : undefined}
-                className={`relative flex h-11 items-center rounded-2xl text-xs font-bold ${
-                  collapsed ? "justify-center" : "gap-3 px-3.5"
+                title={collapsed ? label : undefined}
+                className={`relative flex h-11 items-center rounded-2xl text-sm font-semibold transition-colors ${
+                  collapsed ? "justify-center px-0" : "gap-3 px-3.5"
                 }`}
               >
                 {({ isActive }) => (
@@ -259,113 +210,182 @@ function SidebarBody({
                     {isActive && (
                       <motion.span
                         layoutId="activeSidebarItem"
-                        className="absolute inset-0 rounded-2xl border border-white/90 bg-white/80 shadow-2xs backdrop-blur-md"
+                        className="absolute inset-0 rounded-2xl border border-sky-200/80 bg-white shadow-xs"
+                        transition={{
+                          type: "spring",
+                          stiffness: 380,
+                          damping: 32,
+                        }}
+                      />
+                    )}
+                    <Icon
+                      size={18}
+                      className={`relative z-10 shrink-0 transition-colors ${
+                        isActive ? "text-sky-600" : "text-slate-500"
+                      }`}
+                    />
+                    {!collapsed && (
+                      <span
+                        className={`relative z-10 min-w-0 flex-1 truncate transition-colors ${
+                          isActive
+                            ? "font-bold text-slate-900"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        {label}
+                      </span>
+                    )}
+                  </>
+                )}
+              </NavLink>
+            ))}
+
+            {user?.role === "admin" && (
+              <NavLink
+                to="/admin"
+                onClick={onNavigate}
+                title={collapsed ? "Quản trị hệ thống" : undefined}
+                className={`relative flex h-11 items-center rounded-2xl text-sm font-semibold transition-colors ${
+                  collapsed ? "justify-center px-0" : "gap-3 px-3.5"
+                }`}
+              >
+                {({ isActive }) => (
+                  <>
+                    {isActive && (
+                      <motion.span
+                        layoutId="activeSidebarItem"
+                        className="absolute inset-0 rounded-2xl border border-sky-200/80 bg-white shadow-xs"
+                        transition={{
+                          type: "spring",
+                          stiffness: 380,
+                          damping: 32,
+                        }}
                       />
                     )}
                     <ShieldCheck
-                      size={17}
-                      className="relative z-10 text-sky-600"
+                      size={18}
+                      className={`relative z-10 shrink-0 ${
+                        isActive ? "text-sky-600" : "text-slate-500"
+                      }`}
                     />
                     {!collapsed && (
-                      <span className="relative z-10 text-slate-700">
-                        Quản trị HITL
+                      <span
+                        className={`relative z-10 truncate ${
+                          isActive
+                            ? "font-bold text-slate-900"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        Quản trị hệ thống
                       </span>
                     )}
                   </>
                 )}
               </NavLink>
             )}
-          </motion.div>
+          </div>
         </nav>
       </div>
 
-      <div className="relative mt-2 shrink-0 border-t border-white/70 pt-2.5">
+      {/* Account Footer */}
+      <div
+        ref={menuRef}
+        className="relative mt-2 shrink-0 border-t border-slate-200/70 pt-3"
+      >
         {user ? (
           <>
-            {showSettingsMenu && (
-              <div
-                className={`mb-2.5 space-y-2 rounded-2xl border border-sky-100 bg-white/95 p-3 text-xs shadow-xl backdrop-blur-xl ${
-                  collapsed
-                    ? "fixed bottom-4 left-20 z-[90] w-64"
-                    : "w-full"
-                }`}
-              >
-                <div className="flex items-center gap-2.5 border-b border-slate-100 pb-2.5">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 text-xs font-black text-white shadow-sm">
-                    {user.name.slice(0, 2).toUpperCase()}
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-extrabold text-slate-900">
-                      {user.name}
-                    </p>
-                    <p className="truncate text-[10px] font-medium text-slate-500">
-                      {user.email}
-                    </p>
-                    <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-50 px-2 py-0.5 text-[9px] font-bold text-sky-700 border border-sky-200">
-                      <ShieldCheck size={10} />
-                      {user.role === "admin" ? "Quản trị viên Hệ thống" : "Hồ sơ Học sinh THPT"}
+            <AnimatePresence>
+              {showSettingsMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.98 }}
+                  transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+                  className={`mb-2.5 space-y-2 rounded-2xl border border-slate-200/90 bg-white p-3 text-sm shadow-xl ${
+                    collapsed
+                      ? "fixed bottom-4 left-21 z-[90] w-68"
+                      : "w-full"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowSettingsMenu(false)
+                      setShowProfileModal(true)
+                    }}
+                    className="flex w-full items-center gap-3 rounded-xl border-b border-slate-100 p-1.5 pb-3 text-left transition hover:bg-slate-50"
+                  >
+                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 text-xs font-bold text-white">
+                      {user.name.slice(0, 2).toUpperCase()}
                     </span>
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSettingsMenu(false)
-                      onNavigate?.()
-                      navigate("/dashboard")
-                    }}
-                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-bold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
-                  >
-                    <Compass size={14} className="text-sky-600" />
-                    <span>Hồ sơ Năng lực & Kết quả</span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-slate-900">
+                        {user.name}
+                      </p>
+                      <p className="truncate text-xs text-slate-500">
+                        {user.email}
+                      </p>
+                    </div>
                   </button>
 
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSettingsMenu(false)
-                      onNavigate?.()
-                      navigate("/assessment")
-                    }}
-                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-bold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
-                  >
-                    <ClipboardCheck size={14} className="text-sky-600" />
-                    <span>Cập nhật Bài đánh giá 3 trụ cột</span>
-                  </button>
+                  <div className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSettingsMenu(false)
+                        setShowProfileModal(true)
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
+                    >
+                      <UserCheck size={15} className="text-sky-600" />
+                      <span>Chỉnh sửa hồ sơ</span>
+                    </button>
 
-                  {user.role === "admin" && (
                     <button
                       type="button"
                       onClick={() => {
                         setShowSettingsMenu(false)
                         onNavigate?.()
-                        navigate("/admin")
+                        navigate("/dashboard")
                       }}
-                      className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-bold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
                     >
-                      <ShieldCheck size={14} className="text-sky-600" />
-                      <span>Quản trị HITL & Dữ liệu Ngành</span>
+                      <Compass size={15} className="text-sky-600" />
+                      <span>Kết quả định hướng</span>
                     </button>
-                  )}
-                </div>
 
-                <div className="border-t border-slate-100 pt-1.5">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSettingsMenu(false)
-                      logout()
-                    }}
-                    className="flex w-full items-center gap-2 rounded-xl px-2.5 py-2 text-left text-[11px] font-bold text-rose-600 transition hover:bg-rose-50"
-                  >
-                    <LogOut size={14} />
-                    <span>Đăng xuất tài khoản</span>
-                  </button>
-                </div>
-              </div>
-            )}
+                    {user.role === "admin" && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setShowSettingsMenu(false)
+                          onNavigate?.()
+                          navigate("/admin")
+                        }}
+                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
+                      >
+                        <ShieldCheck size={15} className="text-sky-600" />
+                        <span>Quản trị hệ thống</span>
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="border-t border-slate-100 pt-1.5">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setShowSettingsMenu(false)
+                        logout()
+                      }}
+                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+                    >
+                      <LogOut size={15} />
+                      <span>Đăng xuất</span>
+                    </button>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             <div
               onClick={() => setShowSettingsMenu((v) => !v)}
@@ -377,36 +397,39 @@ function SidebarBody({
                   setShowSettingsMenu((v) => !v)
                 }
               }}
-              title={`Hồ sơ cá nhân · ${user.name}`}
-              className={`flex cursor-pointer items-center rounded-2xl border border-white/80 bg-white/55 p-2 backdrop-blur-md transition hover:bg-white/85 ${
+              title={user.name}
+              className={`flex items-center rounded-2xl border border-slate-200/80 bg-white/75 p-2 transition hover:border-sky-200 hover:bg-white ${
                 collapsed ? "justify-center" : "gap-2.5"
               }`}
             >
-              <span
-                title={`Mở hồ sơ · ${user.name}`}
-                className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 text-[10px] font-black text-white shadow-xs"
-              >
+              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 text-xs font-bold text-white">
                 {user.name.slice(0, 2).toUpperCase()}
               </span>
               {!collapsed && (
                 <>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-[11px] font-extrabold text-slate-800">
+                    <p className="truncate text-sm font-bold text-slate-800">
                       {user.name}
                     </p>
-                    <p className="truncate text-[9px] font-semibold text-slate-400">
-                      {user.role === "admin" ? "Quản trị viên · Xem hồ sơ" : "Học sinh · Xem hồ sơ"}
+                    <p className="truncate text-xs text-slate-500">
+                      {user.role === "admin" ? "Quản trị viên" : user.grade_level || "Học sinh"}
                     </p>
                   </div>
-                  <span
-                    title="Tùy chọn hồ sơ"
-                    className="group grid size-8 place-items-center rounded-xl text-slate-400 hover:bg-white hover:text-sky-600"
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setShowSettingsMenu(false)
+                      setShowProfileModal(true)
+                    }}
+                    title="Chỉnh sửa hồ sơ"
+                    className="group grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
                   >
                     <Settings
-                      size={15}
-                      className="transition-transform group-hover:rotate-45"
+                      size={16}
+                      className="transition-transform duration-200 group-hover:rotate-45"
                     />
-                  </span>
+                  </button>
                 </>
               )}
             </div>
@@ -415,7 +438,7 @@ function SidebarBody({
           <Link
             to="/login"
             title={collapsed ? "Đăng nhập" : undefined}
-            className={`flex h-11 items-center rounded-2xl border border-white/80 bg-white/60 text-xs font-bold text-slate-700 backdrop-blur-md ${
+            className={`flex h-11 items-center rounded-2xl border border-slate-200/80 bg-white/80 text-sm font-bold text-slate-700 transition hover:border-sky-300 hover:bg-white ${
               collapsed ? "justify-center" : "gap-3 px-3.5"
             }`}
           >
@@ -424,6 +447,11 @@ function SidebarBody({
           </Link>
         )}
       </div>
+
+      <UserProfileModal
+        isOpen={showProfileModal}
+        onClose={() => setShowProfileModal(false)}
+      />
     </div>
   )
 }
@@ -440,19 +468,23 @@ export function Sidebar({
     <>
       <header className="glass-panel fixed inset-x-3 top-3 z-50 flex h-14 items-center justify-between rounded-2xl px-3 lg:hidden">
         <button
+          type="button"
           onClick={onMobileOpen}
           className="sidebar-icon-button"
           aria-label="Mở thanh điều hướng"
         >
           <Menu size={19} />
         </button>
-        <Link to="/" className="flex items-center gap-2 text-sm font-black">
-          <span className="grid size-8 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-500 text-white">
+        <Link to="/" className="flex items-center gap-2 text-sm font-extrabold">
+          <span className="grid size-8 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 text-white">
             <BrainCircuit size={17} />
           </span>
-          AI Career<span className="-ml-2 text-sky-600">Guide</span>
+          <span>
+            AI Career<span className="text-sky-600">Guide</span>
+          </span>
         </Link>
         <button
+          type="button"
           onClick={onOpenChat}
           className="sidebar-icon-button"
           aria-label="Mở cố vấn AI"
@@ -463,9 +495,9 @@ export function Sidebar({
 
       <motion.aside
         initial={false}
-        animate={{ width: collapsed ? 64 : 288 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="glass-sidebar fixed bottom-3 left-3 top-3 z-50 hidden overflow-hidden rounded-[26px] p-2.5 lg:block"
+        animate={{ width: collapsed ? 68 : 268 }}
+        transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+        className="glass-sidebar fixed bottom-3 left-3 top-3 z-50 hidden overflow-hidden rounded-3xl p-3 lg:block"
       >
         <SidebarBody
           collapsed={collapsed}
@@ -478,19 +510,21 @@ export function Sidebar({
         {mobileOpen && (
           <>
             <motion.button
-              className="fixed inset-0 z-[70] bg-slate-950/25 backdrop-blur-sm lg:hidden"
+              type="button"
+              className="fixed inset-0 z-[70] bg-slate-950/30 backdrop-blur-xs lg:hidden"
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
               onClick={onMobileClose}
               aria-label="Đóng menu"
             />
             <motion.aside
-              className="glass-sidebar fixed bottom-3 left-3 top-3 z-[80] w-[min(260px,calc(100vw-24px))] rounded-[26px] p-3 lg:hidden"
-              initial={{ x: "-110%" }}
+              className="glass-sidebar fixed bottom-3 left-3 top-3 z-[80] w-[min(276px,calc(100vw-24px))] rounded-3xl p-3.5 lg:hidden"
+              initial={{ x: "-108%" }}
               animate={{ x: 0 }}
-              exit={{ x: "-110%" }}
-              transition={{ type: "spring", stiffness: 300, damping: 30 }}
+              exit={{ x: "-108%" }}
+              transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
             >
               <SidebarBody
                 collapsed={false}

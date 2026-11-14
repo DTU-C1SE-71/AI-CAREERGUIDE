@@ -1,9 +1,12 @@
+import { motion } from "framer-motion"
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Bookmark,
   BookmarkCheck,
   CircleCheck,
+  Compass,
   Loader2,
 } from "lucide-react"
 import { useEffect, useState } from "react"
@@ -17,6 +20,7 @@ import { GapAnalysisCard } from "../components/xai/GapAnalysisCard"
 import { MajorInfoCards } from "../components/xai/MajorInfoCards"
 import { SkillAnalysisCard } from "../components/xai/SkillAnalysisCard"
 import { TrendBadge } from "../components/xai/TrendBadge"
+import { useAuth } from "../context/AuthContext"
 import { MOET_435_MAJORS } from "../data/moetMajors435"
 import { useAssessment } from "../hooks/useAssessment"
 import { apiRequest } from "../services/api"
@@ -24,6 +28,7 @@ import { majors as fallbackMajors } from "../services/mockData"
 import { readStorage, writeStorage } from "../services/storage"
 import type { MajorInsight, StudentSkillAnalysis } from "../types/insight"
 import type { Major } from "../types/major"
+import { formatBlockWithSubjects } from "../utils"
 import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
 
 interface TaxonomyMajorDetail {
@@ -63,6 +68,7 @@ interface SavedRoadmapItem {
 export function MajorDetail() {
   const { id } = useParams()
   const { assessment } = useAssessment()
+  const { user } = useAuth()
   const [major, setMajor] = useState<Major>(() => {
     return (
       fallbackMajors.find((item) => item.id === id || item.code === id) ??
@@ -145,7 +151,10 @@ export function MajorDetail() {
       (assessment.scores || []).map((s) => [s.subject, s.score]),
     )
 
-    const evalPayload = buildEvaluateProfilePayload(assessment, 435)
+    const evalPayload = buildEvaluateProfilePayload(assessment, 435, {
+      gender: user?.gender,
+      grade_level: user?.grade_level,
+    })
     const hasUserAssessment =
       Boolean(evalPayload.riasec_answers) ||
       Boolean(evalPayload.grades_by_subject)
@@ -320,7 +329,15 @@ export function MajorDetail() {
     return () => {
       mounted = false
     }
-  }, [id, assessment.answers, assessment.scores, assessment.cognitive])
+  }, [
+    id,
+    assessment,
+    assessment.answers,
+    assessment.scores,
+    assessment.cognitive,
+    user?.gender,
+    user?.grade_level,
+  ])
 
   const isSaved = savedList.some((item) => item.code === major.code)
 
@@ -340,154 +357,204 @@ export function MajorDetail() {
     window.dispatchEvent(new Event("saved-roadmaps-updated"))
   }
 
-  const blockText =
+  const rawBlocks =
     majorInsight?.subject_blocks && majorInsight.subject_blocks.length > 0
-      ? majorInsight.subject_blocks.join(", ")
+      ? majorInsight.subject_blocks
       : taxDetail?.subject_blocks && taxDetail.subject_blocks.length > 0
-        ? taxDetail.subject_blocks.join(", ")
-        : "A00, A01, D01, D07"
+        ? taxDetail.subject_blocks
+        : ["A00", "A01", "D01", "D07"]
+
+  const blockText = rawBlocks
+    .map((b) => formatBlockWithSubjects(b, { short: true }))
+    .join(" · ")
 
   const skillCardVisible = skillLoading || Boolean(skillAnalysis)
 
   return (
-    <section className="py-10">
-      <PageContainer className="max-w-5xl">
+    <motion.section
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+      className="py-8 sm:py-10"
+    >
+      <PageContainer className="max-w-7xl">
+        {/* Navigation & Actions Top Bar */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <Link
             to="/dashboard"
-            className="inline-flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-sky-600"
+            className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3.5 py-2 text-xs font-bold text-slate-600 shadow-2xs backdrop-blur-md transition-colors hover:border-sky-300 hover:text-sky-700"
           >
             <ArrowLeft size={14} />
-            Quay lại
+            Quay lại bảng điều khiển
           </Link>
 
-          <button
-            type="button"
-            onClick={toggleSaveMajor}
-            className={`inline-flex items-center gap-1.5 rounded-2xl border px-3.5 py-2 text-xs font-bold backdrop-blur-md transition ${
-              isSaved
-                ? "border-sky-300 bg-sky-500/15 text-sky-800"
-                : "border-white/85 bg-white/60 text-slate-600 hover:bg-white hover:text-sky-700"
-            }`}
-          >
-            {isSaved ? <BookmarkCheck size={15} /> : <Bookmark size={15} />}
-            {isSaved ? "Đã lưu" : "Lưu ngành"}
-          </button>
+          <div className="flex items-center gap-2.5">
+            <button
+              type="button"
+              onClick={toggleSaveMajor}
+              className={`inline-flex items-center gap-2 rounded-xl border px-4 py-2 text-xs font-bold backdrop-blur-md transition-all ${
+                isSaved
+                  ? "border-sky-300 bg-sky-50 text-sky-800 shadow-xs"
+                  : "border-slate-200/85 bg-white/80 text-slate-700 hover:border-sky-200 hover:bg-white hover:text-sky-700"
+              }`}
+            >
+              {isSaved ? (
+                <BookmarkCheck size={15} className="text-sky-600" />
+              ) : (
+                <Bookmark size={15} />
+              )}
+              {isSaved ? "Đã lưu vào danh mục" : "Lưu ngành học"}
+            </button>
+
+            <Link
+              to={`/roadmap?major=${major.code}&name=${encodeURIComponent(major.name)}`}
+              className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-sky-500"
+            >
+              <Compass size={14} />
+              Xem lộ trình 4 tuần
+            </Link>
+          </div>
         </div>
 
-        <Card className="rounded-[32px] p-7 sm:p-9">
-          <div className="flex flex-col justify-between gap-6 sm:flex-row sm:items-end">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-lg bg-sky-500/12 px-2.5 py-0.5 text-xs font-extrabold text-sky-700">
+        {/* Major Overview Hero Card */}
+        <Card className="rounded-3xl p-6 sm:p-8 border border-white/80 bg-white/80 shadow-sm backdrop-blur-xl">
+          <div className="flex flex-col justify-between gap-6 lg:flex-row lg:items-end">
+            <div className="flex-1">
+              {/* Badges strip - clean, uncluttered, legible */}
+              <div className="flex flex-wrap items-center gap-2.5">
+                <span className="rounded-lg bg-sky-500/12 px-2.5 py-1 text-xs font-extrabold text-sky-700">
                   Mã {major.code}
                 </span>
+
                 {major.category && (
-                  <span className="rounded-full border border-white/80 bg-white/70 px-2.5 py-0.5 text-[11px] font-bold text-slate-600">
+                  <span className="rounded-full border border-slate-200/80 bg-slate-100/80 px-3 py-1 text-xs font-semibold text-slate-700">
                     {major.category}
                   </span>
                 )}
+
                 <FeasibilityBadge
                   value={major.feasibility}
                   label={major.feasibility_label}
                 />
+
                 <TrendBadge
                   tier={major.trend_tier}
                   isTrending={major.is_trending}
                   reason={major.trend_reason}
                 />
+
                 {major.best_matching_block && major.best_block_score != null && (
-                  <span className="rounded-full border border-sky-200 bg-sky-50/90 px-2.5 py-0.5 text-[11px] font-extrabold text-sky-700">
-                    {major.best_matching_block}: {major.best_block_score}đ
+                  <span className="rounded-full border border-sky-200 bg-sky-50/90 px-3 py-1 text-xs font-bold text-sky-800">
+                    Khối {formatBlockWithSubjects(major.best_matching_block, { short: true, includePrefix: false })}: {major.best_block_score}đ
                     {major.benchmark_cutoff ? ` / ~${major.benchmark_cutoff}đ` : ""}
                   </span>
                 )}
+
                 {loading && (
-                  <Loader2 size={14} className="animate-spin text-sky-600" />
+                  <Loader2 size={15} className="animate-spin text-sky-600" />
                 )}
               </div>
+
+              {/* Constraint violations notice */}
               {major.constraint_violations && major.constraint_violations.length > 0 && (
-                <div className="mt-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/85 px-3.5 py-2 text-xs font-semibold text-slate-700">
-                  {major.constraint_violations.join(" · ")}
+                <div className="mt-3.5 flex items-center gap-2 rounded-2xl border border-amber-200/80 bg-amber-50/80 px-4 py-2.5 text-xs font-medium text-amber-900">
+                  <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                  <span>{major.constraint_violations.join(" · ")}</span>
                 </div>
               )}
-              {major.is_trending && major.trend_reason && (
-                <div className="mt-2.5 rounded-2xl border border-sky-200/85 bg-sky-50/80 px-3.5 py-2 text-xs font-semibold text-sky-900">
-                  <span className="font-extrabold">{major.trend_label || "Ngành xu hướng"}:</span>{" "}
-                  {major.trend_reason}
-                </div>
-              )}
-              <h1 className="mt-3 text-3xl font-black text-slate-900 sm:text-4xl">
+
+              {/* Title & University */}
+              <h1 className="mt-4 text-2xl font-black text-slate-900 sm:text-3xl lg:text-4xl">
                 {major.name}
               </h1>
-              <p className="mt-1.5 text-xs font-medium text-slate-500">
+              <p className="mt-2 text-xs font-medium text-slate-500 sm:text-sm">
                 {major.university}
               </p>
+
+              {/* Fit dimensions breakdown */}
               {major.fit && (
-                <div className="mt-4 inline-flex flex-wrap items-center gap-3 rounded-2xl border border-white/85 bg-white/65 px-3.5 py-2 text-xs font-bold text-slate-700 backdrop-blur-md">
+                <div className="mt-4 inline-flex flex-wrap items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs">
                   <span>
-                    Sở thích: <b className="text-sky-600">{major.fit.interest}%</b>
+                    Sở thích: <strong className="text-sky-600 font-extrabold">{major.fit.interest}%</strong>
                   </span>
                   <span className="text-slate-300">·</span>
                   <span>
-                    Học lực: <b className="text-sky-600">{major.fit.academic}%</b>
+                    Học lực: <strong className="text-sky-600 font-extrabold">{major.fit.academic}%</strong>
                   </span>
                   <span className="text-slate-300">·</span>
                   <span>
-                    Nhận thức: <b className="text-cyan-600">{major.fit.cognitive}%</b>
+                    Nhận thức: <strong className="text-cyan-600 font-extrabold">{major.fit.cognitive}%</strong>
                   </span>
                 </div>
               )}
             </div>
-            <div className="text-left sm:text-right">
-              <span className="text-5xl font-black text-sky-600">
+
+            {/* Match score prominent badge */}
+            <div className="flex flex-col items-start lg:items-end rounded-2xl bg-sky-50/60 p-4 border border-sky-100 sm:bg-transparent sm:border-0 sm:p-0">
+              <span className="text-4xl sm:text-5xl font-black text-sky-600 tracking-tight">
                 {major.match}%
               </span>
-              <span className="block text-[10px] font-bold uppercase tracking-wider text-slate-400">
+              <span className="mt-0.5 text-xs font-bold uppercase tracking-wider text-slate-500">
                 Độ tương thích
               </span>
             </div>
           </div>
         </Card>
 
-        <div className="mt-6 grid gap-5 lg:grid-cols-[1.2fr_.8fr]">
-          <div className="space-y-5">
+        {/* Balanced 12-Column Responsive Layout */}
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-12 gap-6 xl:gap-8 items-start">
+          {/* Main Column: Explanation, Competency Gaps & Skill Analysis (8 cols on xl, 7 cols on lg) */}
+          <div className="lg:col-span-7 xl:col-span-8 space-y-6">
             <ExplanationBox
               content={aiExplanationText || major.explanation}
               loading={aiExplaining}
             />
-            <GapAnalysisCard gaps={major.gaps} />
+
+            {major.gaps && major.gaps.length > 0 && (
+              <GapAnalysisCard gaps={major.gaps} />
+            )}
+
             {skillCardVisible && (
               <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
             )}
           </div>
 
-          <div className="space-y-4">
+          {/* Sticky Career/Curriculum Info Cards + Roadmap Launcher (4 cols on xl, 5 cols on lg) */}
+          <div className="lg:col-span-5 xl:col-span-4 space-y-6 lg:sticky lg:top-20">
             <MajorInfoCards
               training={majorInsight?.training_content || null}
               careers={majorInsight?.career_positions || []}
               subjectBlocks={blockText}
               loading={insightLoading}
             />
+
+            {/* Quick 4-Week Roadmap CTA */}
+            <Card className="rounded-3xl p-6 border border-sky-100 bg-gradient-to-br from-white/95 to-sky-50/50 shadow-xs">
+              <div className="flex items-start gap-3.5">
+                <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-sky-600 text-white shadow-sm">
+                  <CircleCheck size={20} />
+                </div>
+                <div>
+                  <h3 className="text-sm font-extrabold text-slate-900">
+                    Lộ trình 4 tuần thử thách
+                  </h3>
+                  <p className="mt-1 text-xs text-slate-600 leading-relaxed">
+                    Khám phá chi tiết các cột mốc tuần tự hóa từ căn bản đến sản phẩm đầu tay cho ngành {major.name}.
+                  </p>
+                </div>
+              </div>
+              <Link
+                to={`/roadmap?major=${major.code}&name=${encodeURIComponent(major.name)}`}
+                className="mt-4 block"
+              >
+                <Button icon={ArrowRight} className="w-full justify-center text-xs">
+                  Mở lộ trình học tập 4 tuần
+                </Button>
+              </Link>
+            </Card>
           </div>
         </div>
-
-        <Card className="mt-6 flex flex-col justify-between gap-4 rounded-3xl p-6 sm:flex-row sm:items-center">
-          <div className="flex items-center gap-3">
-            <CircleCheck className="shrink-0 text-sky-600" />
-            <div>
-              <h3 className="text-sm font-extrabold text-slate-900">
-                Trải nghiệm lộ trình 4 tuần ngành {major.name}
-              </h3>
-            </div>
-          </div>
-          <Link
-            to={`/roadmap?major=${major.code}&name=${encodeURIComponent(major.name)}`}
-          >
-            <Button icon={ArrowRight}>Mở lộ trình 4 tuần</Button>
-          </Link>
-        </Card>
       </PageContainer>
-    </section>
+    </motion.section>
   )
 }

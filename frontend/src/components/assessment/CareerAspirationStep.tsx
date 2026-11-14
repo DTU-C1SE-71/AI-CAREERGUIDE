@@ -1,5 +1,6 @@
 import {
   ArrowRight,
+  Check,
   ChevronDown,
   Compass,
   Search,
@@ -17,42 +18,42 @@ const QUICK_DREAM_JOBS: Array<{
   field: string
 }> = [
   {
-    label: "💻 Kỹ sư AI & Phần mềm",
+    label: "Kỹ sư AI & Phần mềm",
     dreamJob: "Kỹ sư Trí tuệ nhân tạo & Kỹ thuật phần mềm",
     field: "Máy tính và công nghệ thông tin",
   },
   {
-    label: "⚙️ Vi mạch & Tự động hóa",
+    label: "Vi mạch & Tự động hóa",
     dreamJob: "Kỹ sư Thiết kế vi mạch & Tự động hóa",
     field: "Công nghệ kỹ thuật",
   },
   {
-    label: "🩺 Bác sĩ & Dược sĩ",
+    label: "Bác sĩ & Dược học",
     dreamJob: "Bác sĩ Y khoa & Dược học",
     field: "Sức khỏe",
   },
   {
-    label: "📊 Marketing & Kinh doanh",
+    label: "Marketing số & Kinh doanh",
     dreamJob: "Chuyên gia Marketing số & Kinh doanh quốc tế",
     field: "Kinh doanh và quản lý",
   },
   {
-    label: "🏛️ Tài chính & Fintech",
+    label: "Tài chính & Fintech",
     dreamJob: "Chuyên gia Tài chính - Ngân hàng & Fintech",
     field: "Kinh doanh và quản lý",
   },
   {
-    label: "🎨 Thiết kế & Truyền thông",
+    label: "Thiết kế UI/UX & Truyền thông",
     dreamJob: "Nhà Thiết kế Đồ họa UI/UX & Truyền thông đa phương tiện",
     field: "Nghệ thuật",
   },
   {
-    label: "📚 Sư phạm & Tâm lý học",
+    label: "Sư phạm & Tâm lý học",
     dreamJob: "Giáo viên Sư phạm & Chuyên gia Tâm lý học",
     field: "Khoa học giáo dục và đào tạo giáo viên",
   },
   {
-    label: "⚖️ Luật sư & Ngoại giao",
+    label: "Luật sư & Ngoại giao",
     dreamJob: "Luật sư Pháp chế & Quan hệ quốc tế",
     field: "Pháp luật",
   },
@@ -107,7 +108,6 @@ export function CareerAspirationStep({
   const selectedValues = value.workValues || []
   const activeStrategy = value.scoreStrategy || "FLEXIBLE_PATHWAY"
 
-  // Kiểm tra xem người dùng đã từng tùy chỉnh giá trị công việc hoặc chiến lược điểm chưa
   const hasCustomOptions =
     selectedValues.length > 0 ||
     (Boolean(value.scoreStrategy) && value.scoreStrategy !== "FLEXIBLE_PATHWAY")
@@ -146,26 +146,28 @@ export function CareerAspirationStep({
     }
   }
 
+  const hasDreamJob = Boolean(value.dreamJob?.trim())
+
   return (
     <div className="space-y-4 sm:space-y-5">
-      {/* Header Banner tinh gọn, có nút Bỏ qua */}
-      <div className="flex flex-col gap-3 rounded-2xl border border-sky-200/80 bg-gradient-to-r from-sky-50/90 via-sky-50/50 to-white/70 p-3.5 sm:flex-row sm:items-center sm:justify-between sm:p-4 backdrop-blur-xl">
-        <div className="flex items-center gap-2.5">
-          <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-sky-500 text-white shadow-xs">
-            <Sparkles className="size-4" />
+      {/* Header Banner tinh gọn */}
+      <div className="flex flex-col gap-3 rounded-2xl border border-sky-200/80 bg-gradient-to-r from-sky-50/90 via-sky-50/50 to-white/70 p-4 sm:flex-row sm:items-center sm:justify-between backdrop-blur-xl">
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-sm">
+            <Sparkles className="size-5" />
           </span>
           <div>
-            <div className="flex flex-wrap items-center gap-1.5">
-              <h2 className="text-sm sm:text-base font-black text-slate-900">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="text-base sm:text-lg font-black text-slate-900">
                 Nguyện vọng nghề nghiệp mong muốn
               </h2>
-              <span className="rounded-full border border-sky-300/80 bg-sky-100/80 px-2 py-0.5 text-[10px] font-extrabold text-sky-800">
-                Tùy chọn · Không bắt buộc
+              <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] font-extrabold text-sky-800">
+                Tùy chọn
               </span>
             </div>
-            <p className="mt-0.5 text-xs text-slate-600">
-              Đối chiếu nghề mơ ước với mã Holland{" "}
-              <strong className="text-sky-700">{topHollandPreview}</strong> & 435 ngành TT74.
+            <p className="mt-0.5 text-xs sm:text-sm text-slate-600">
+              Đối chiếu nguyện vọng cùng mã Holland{" "}
+              <strong className="text-sky-700 font-black">{topHollandPreview}</strong> & dữ liệu 435 ngành đào tạo.
             </p>
           </div>
         </div>
@@ -174,26 +176,26 @@ export function CareerAspirationStep({
           <button
             type="button"
             onClick={onSkip}
-            className="self-end sm:self-center inline-flex items-center gap-1 rounded-xl border border-slate-200 bg-white/90 px-3 py-1.5 text-xs font-bold text-slate-600 shadow-2xs transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 cursor-pointer"
+            className="self-end sm:self-center inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/90 px-3.5 py-2 text-xs font-bold text-slate-600 shadow-2xs transition hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700 cursor-pointer active:scale-95"
           >
             <span>Bỏ qua bước này</span>
-            <ArrowRight className="size-3" />
+            <ArrowRight className="size-3.5" />
           </button>
         )}
       </div>
 
-      {/* Mục cốt lõi duy nhất cần thiết: Ô nhập nghề mơ ước + Gợi ý nhanh */}
-      <div className="space-y-2.5 rounded-2xl border border-white/85 bg-white/60 p-3.5 sm:p-4 shadow-xs backdrop-blur-md">
+      {/* Input Nghề mơ ước + Gợi ý nhanh */}
+      <div className="space-y-3 rounded-3xl border border-white/90 bg-white/75 p-4 sm:p-6 shadow-sm backdrop-blur-md">
         <div className="flex items-center justify-between">
-          <label className="flex items-center gap-1.5 text-xs sm:text-sm font-extrabold text-slate-800">
-            <Compass className="size-4 text-sky-600" />
-            Bạn ước muốn làm nghề gì hoặc theo đuổi ngành nào sau này?
+          <label className="flex items-center gap-2 text-sm sm:text-base font-extrabold text-slate-900">
+            <Compass className="size-4.5 text-sky-600" />
+            Nghề nghiệp hoặc lĩnh vực bạn muốn theo đuổi
           </label>
-          {Boolean(value.dreamJob?.trim()) && (
+          {hasDreamJob && (
             <button
               type="button"
               onClick={handleClearJob}
-              className="text-[11px] font-bold text-slate-400 hover:text-rose-500 transition cursor-pointer"
+              className="text-xs font-bold text-rose-500 hover:text-rose-700 hover:underline transition cursor-pointer"
             >
               Xóa chọn
             </button>
@@ -201,7 +203,7 @@ export function CareerAspirationStep({
         </div>
 
         <div className="relative">
-          <Search className="absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+          <Search className="absolute left-4 top-1/2 size-4.5 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             value={value.dreamJob || ""}
@@ -211,26 +213,39 @@ export function CareerAspirationStep({
                 dreamJob: e.target.value,
               })
             }
-            placeholder="VD: Kỹ sư AI, Bác sĩ, Marketing, Thiết kế đồ họa, Phi công, Luật sư..."
-            className="h-11 w-full rounded-2xl border border-sky-200/90 bg-white/95 pl-10 pr-9 text-xs sm:text-sm font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
+            placeholder="VD: Kỹ sư AI, Bác sĩ, Marketing, Thiết kế UI/UX, Phi công, Luật sư..."
+            className="h-12 w-full rounded-2xl border border-sky-200/90 bg-white pl-11 pr-10 text-sm sm:text-base font-semibold text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/20"
           />
-          {Boolean(value.dreamJob?.trim()) && (
+          {hasDreamJob && (
             <button
               type="button"
               onClick={handleClearJob}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700 cursor-pointer"
+              aria-label="Xóa nội dung đã nhập"
+              className="absolute right-3.5 top-1/2 -translate-y-1/2 rounded-full p-1 text-slate-400 hover:bg-rose-50 hover:text-rose-600 transition cursor-pointer"
             >
-              <X className="size-3.5" />
+              <X className="size-4" />
             </button>
           )}
         </div>
 
-        {/* 8 gợi ý nhanh 1 chạm */}
-        <div className="pt-0.5">
-          <span className="block text-[11px] font-bold text-slate-500 mb-1.5">
+        {/* Status Pill: Emerald when filled, Amber when empty */}
+        {hasDreamJob ? (
+          <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-1.5 text-xs font-bold text-emerald-800">
+            <Check className="size-4 text-emerald-600 stroke-[2.5]" />
+            <span>Mục tiêu đã lưu: <strong>{value.dreamJob}</strong></span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 rounded-xl border border-amber-200/70 bg-amber-50/60 px-3 py-1.5 text-xs font-medium text-amber-800">
+            <span>💡 Nhập tên nghề hoặc chọn từ danh sách phổ biến bên dưới.</span>
+          </div>
+        )}
+
+        {/* 8 Gợi ý nhanh - Unified Sky/Cyan Chips */}
+        <div className="pt-2">
+          <span className="block text-xs font-bold text-slate-600 mb-2">
             Gợi ý phổ biến (bấm để chọn nhanh):
           </span>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {QUICK_DREAM_JOBS.map((chip) => {
               const isSelected =
                 (value.dreamJob || "").trim().toLowerCase() ===
@@ -240,13 +255,14 @@ export function CareerAspirationStep({
                   key={chip.label}
                   type="button"
                   onClick={() => handleSelectChip(chip)}
-                  className={`rounded-xl border px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
+                  className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs sm:text-sm font-bold transition-all duration-150 cursor-pointer active:scale-95 ${
                     isSelected
-                      ? "border-sky-500 bg-sky-500 text-white shadow-xs"
-                      : "border-slate-200/80 bg-white/80 text-slate-700 hover:border-sky-300 hover:bg-sky-50/70"
+                      ? "border-sky-500 bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-[0_4px_12px_rgba(14,165,233,0.25)] ring-1 ring-sky-400"
+                      : "border-slate-200/90 bg-white/90 text-slate-700 hover:border-sky-300 hover:bg-sky-50/60 hover:text-sky-900 shadow-2xs"
                   }`}
                 >
-                  {chip.label}
+                  {isSelected && <Check className="size-3.5 stroke-[2.5]" />}
+                  <span>{chip.label}</span>
                 </button>
               )
             })}
@@ -254,18 +270,18 @@ export function CareerAspirationStep({
         </div>
       </div>
 
-      {/* Accordion tùy chọn mở rộng: Thu gọn các mục phụ để không làm rối giao diện */}
-      <div className="rounded-2xl border border-slate-200/70 bg-white/40 p-2.5 sm:p-3 transition">
+      {/* Accordion tùy chọn mở rộng */}
+      <div className="rounded-3xl border border-slate-200/80 bg-white/60 p-4 transition">
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
-          className="flex w-full items-center justify-between text-left text-xs font-bold text-slate-600 hover:text-sky-700 cursor-pointer"
+          className="flex w-full items-center justify-between text-left text-xs sm:text-sm font-bold text-slate-700 hover:text-sky-700 cursor-pointer"
         >
-          <div className="flex items-center gap-1.5">
-            <SlidersHorizontal className="size-3.5 text-sky-600" />
-            <span>Tùy chỉnh thêm giá trị & chiến lược điểm số (Không bắt buộc)</span>
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="size-4 text-sky-600" />
+            <span>Tùy chỉnh thêm giá trị làm việc & chiến lược điểm số</span>
             {hasCustomOptions && (
-              <span className="inline-flex items-center rounded-full bg-sky-500/15 px-1.5 py-0.2 font-mono text-[10px] font-extrabold text-sky-800">
+              <span className="inline-flex items-center rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px] font-black text-emerald-800">
                 Đã tùy chỉnh
               </span>
             )}
@@ -278,13 +294,13 @@ export function CareerAspirationStep({
         </button>
 
         {showAdvanced && (
-          <div className="mt-3.5 space-y-4 border-t border-slate-200/60 pt-3">
+          <div className="mt-4 space-y-4 border-t border-slate-200/70 pt-4">
             {/* Giá trị công việc */}
-            <div className="space-y-1.5">
-              <label className="block text-xs font-bold text-slate-700">
-                Giá trị công việc coi trọng (chọn tối đa 2):
+            <div className="space-y-2">
+              <label className="block text-xs sm:text-sm font-bold text-slate-800">
+                Giá trị công việc coi trọng (chọn tối đa 2 mục):
               </label>
-              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 {WORK_VALUE_OPTIONS.map((opt) => {
                   const active = selectedValues.includes(opt.id)
                   return (
@@ -292,19 +308,19 @@ export function CareerAspirationStep({
                       key={opt.id}
                       type="button"
                       onClick={() => toggleWorkValue(opt.id)}
-                      className={`flex items-center justify-between rounded-xl border px-3 py-2 text-left text-xs font-semibold transition cursor-pointer ${
+                      className={`flex min-h-[48px] items-center justify-between rounded-2xl border px-3.5 py-2.5 text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer active:scale-[0.98] ${
                         active
-                          ? "border-sky-500 bg-sky-50 text-sky-900 ring-1 ring-sky-500/20"
-                          : "border-slate-200 bg-white/70 text-slate-700 hover:border-sky-200 hover:bg-white"
+                          ? "border-sky-500 bg-sky-50/90 text-sky-950 ring-1 ring-sky-500/25 shadow-xs"
+                          : "border-slate-200/90 bg-white/85 text-slate-700 hover:border-sky-300 hover:bg-white"
                       }`}
                     >
-                      <span className="flex items-center gap-1.5">
-                        <span>{opt.icon}</span>
+                      <span className="flex items-center gap-2">
+                        <span className="text-base">{opt.icon}</span>
                         <span>{opt.label}</span>
                       </span>
                       <span
-                        className={`size-2 rounded-full ${
-                          active ? "bg-sky-500" : "bg-slate-300"
+                        className={`size-2.5 rounded-full ${
+                          active ? "bg-sky-500 ring-2 ring-sky-200" : "bg-slate-300"
                         }`}
                       />
                     </button>
@@ -314,12 +330,12 @@ export function CareerAspirationStep({
             </div>
 
             {/* Chiến lược đối chiếu điểm chuẩn */}
-            <div className="space-y-1.5">
-              <label className="flex items-center gap-1 text-xs font-bold text-slate-700">
-                <Target className="size-3.5 text-sky-600" />
+            <div className="space-y-2">
+              <label className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-800">
+                <Target className="size-4 text-sky-600" />
                 Định hướng khi AI đối chiếu với điểm chuẩn:
               </label>
-              <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                 {STRATEGY_OPTIONS.map((st) => {
                   const active = activeStrategy === st.id
                   return (
@@ -327,17 +343,17 @@ export function CareerAspirationStep({
                       key={st.id}
                       type="button"
                       onClick={() => onChange({ ...value, scoreStrategy: st.id })}
-                      className={`flex flex-col justify-between rounded-xl border p-2.5 text-left transition cursor-pointer ${
+                      className={`flex flex-col justify-between rounded-2xl border p-3.5 text-left transition-all cursor-pointer active:scale-[0.98] ${
                         active
-                          ? "border-sky-500 bg-sky-50/90 ring-1 ring-sky-500/20"
-                          : "border-slate-200 bg-white/70 hover:border-sky-200 hover:bg-white"
+                          ? "border-sky-500 bg-sky-50/90 ring-1 ring-sky-500/25 shadow-xs"
+                          : "border-slate-200/90 bg-white/85 hover:border-sky-300 hover:bg-white"
                       }`}
                     >
-                      <div className="flex items-center gap-1 text-xs font-bold text-slate-900">
-                        <span>{st.icon}</span>
+                      <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-900">
+                        <span className="text-base">{st.icon}</span>
                         <span>{st.title}</span>
                       </div>
-                      <p className="mt-1 text-[11px] leading-snug text-slate-500">
+                      <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
                         {st.desc}
                       </p>
                     </button>

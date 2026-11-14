@@ -13,6 +13,7 @@ interface AuthContextValue {
   token: string | null
   login: (role?: UserRole, customUser?: User, authToken?: string) => void
   logout: () => void
+  updateUser: (updates: Partial<User>) => void
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -61,7 +62,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("career-guide:token")
   }
 
-  const value = useMemo(() => ({ user, token, login, logout }), [user, token])
+  const updateUser = (updates: Partial<User>) => {
+    setUser((curr) => {
+      if (!curr) return null
+      const updated = { ...curr, ...updates }
+      writeStorage("career-guide:user", updated)
+      return updated
+    })
+  }
+
+  const value = useMemo(
+    () => ({ user, token, login, logout, updateUser }),
+    [user, token],
+  )
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 

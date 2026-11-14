@@ -26,6 +26,7 @@ from app.services.llamaindex_rag_orchestrator.guidance_rag import sanitize_pii
 from app.services.recommender.engine import (
     RIASEC_NAMES_VI,
     are_majors_related_pathway,
+    format_block_with_subjects,
 )
 
 logger = logging.getLogger(__name__)
@@ -348,6 +349,7 @@ def _serialize_major_brief(item: MajorRecommendationItem, role_tag: str = "DREAM
         "feasibility_tier": item.feasibility_tier or "TARGET",
         "feasibility_label": item.feasibility_label or "Khả thi cao",
         "best_matching_block": item.best_matching_block,
+        "best_matching_block_formatted": format_block_with_subjects(item.best_matching_block) if item.best_matching_block else None,
         "best_block_score": item.best_block_score,
         "benchmark_cutoff": item.benchmark_cutoff,
         "score_gap": item.score_gap,
@@ -407,20 +409,24 @@ async def _try_llm_aspiration_synthesis(
     Gọi LLM (với timeout ngắn 3.5 giây & Zero-PII) để viết lời khuyên cá nhân hóa ngắn gọn.
     Nếu không cấu hình key hoặc môi trường test/offline, trả về None để dùng ngay nhận xét tất định.
     """
+    api_key = getattr(settings, "LLM_API_KEY", "") or settings.OPENAI_API_KEY
+    base_url = getattr(settings, "LLM_BASE_URL", "") or settings.OPENAI_BASE_URL
+    model_name = getattr(settings, "LLM_MODEL", "") or "gpt-6-luna"
+
     if (
-        not settings.OPENAI_API_KEY
+        not api_key
         or settings.ENVIRONMENT == "test"
-        or settings.OPENAI_API_KEY.startswith("sk-test")
-        or settings.OPENAI_API_KEY == "your-openai-api-key"
+        or api_key.startswith("sk-test")
+        or api_key == "your-openai-api-key"
     ):
         return None
 
     try:
         from openai import AsyncOpenAI
 
-        client_kwargs: Dict[str, Any] = {"api_key": settings.OPENAI_API_KEY}
-        if settings.OPENAI_BASE_URL:
-            client_kwargs["base_url"] = settings.OPENAI_BASE_URL
+        client_kwargs: Dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
         client = AsyncOpenAI(**client_kwargs)
 
         dream_info = (
@@ -457,11 +463,11 @@ async def _try_llm_aspiration_synthesis(
             token_limits = await resolve_model_token_limits()
             try:
                 resp = await client.chat.completions.create(
-                    model=settings.LLM_MODEL,
+                    model=model_name,
                     messages=[
                         {
                             "role": "system",
-                            "content": "Bạn là AI Agent Phân tích Nguyện vọng & Đối chiếu Trắc nghiệm của hệ thống AI CareerGuide.",
+                            "content": f"Bạn là {getattr(settings, 'AI_ASSISTANT_NAME', 'Navi')} - Trợ lý Hướng nghiệp AI thông minh của hệ thống AI CareerGuide.",
                         },
                         {"role": "user", "content": prompt},
                     ],
@@ -475,8 +481,25 @@ async def _try_llm_aspiration_synthesis(
                 except Exception:
                     pass
 
+        if allowed_numbers is None:
+            raw_allowed = set(_NUMBER_PATTERN.findall(prompt))
+            eff_allowed = set()
+            for raw in raw_allowed:
+                norm = raw.replace(",", ".")
+                eff_allowed.add(raw)
+                eff_allowed.add(norm)
+                try:
+                    v = float(norm)
+                    eff_allowed.add(f"{v:g}")
+                    if v == int(v):
+                        eff_allowed.add(str(int(v)))
+                except ValueError:
+                    pass
+        else:
+            eff_allowed = allowed_numbers
+
         text = await asyncio.wait_for(_call(), timeout=8.0)
-        if not _is_safe_llm_verdict(text, allowed_numbers or set()):
+        if not _is_safe_llm_verdict(text, eff_allowed):
             logger.debug("Aspiration Agent loại nhận xét LLM có số liệu lạ hoặc cam kết tuyệt đối.")
             return None
         return text
@@ -513,6 +536,7 @@ async def analyze_career_aspiration(
 
     sanitized_dream = sanitize_pii(raw_dream_job)
     sanitized_field = sanitize_pii(desired_field)
+    assistant_name = getattr(settings, "AI_ASSISTANT_NAME", "Navi")
 
     # Xác định Top 3 chiều Holland của học sinh từ bài test
     sorted_riasec = sorted(
@@ -526,8 +550,15 @@ async def analyze_career_aspiration(
     primary_dim_label = RIASEC_NAMES_VI.get(primary_dim, primary_dim)
 
     block_name = (best_block_stats or {}).get("block", "Khối xét tuyển")
+    student_best_code = (best_block_stats or {}).get("block_code")
+    if not student_best_code and block_name:
+        m_c = re.search(r"([A-Za-z]\d{2})", block_name)
+        if m_c:
+            student_best_code = m_c.group(1).upper()
     block_sum = (best_block_stats or {}).get("raw_sum")
-    best_block_str = f"{block_name} ({block_sum}đ)" if block_sum is not None else block_name
+    best_student_blk_str = format_block_with_subjects(student_best_code or block_name)
+    student_score_str = f"{block_sum}đ" if block_sum is not None else ""
+    best_block_str = f"{best_student_blk_str} - {student_score_str}" if student_score_str else best_student_blk_str
 
     # Cờ chống bịa điểm: chỉ coi là có dữ liệu học lực khi thực sự có khối được xếp TARGET/REACH
     # (khi chưa nhập điểm, mọi ngành đều UNKNOWN nên cờ này = False).
@@ -544,6 +575,19 @@ async def analyze_career_aspiration(
 
     eligible_targets = [m for m in all_ranked_majors if m.feasibility_tier == "TARGET"]
     top_test_major = eligible_targets[0] if eligible_targets else (all_ranked_majors[0] if all_ranked_majors else None)
+
+    # Tổ hợp xét tuyển thực tế của ngành đề xuất dẫn đầu
+    top_adm_block = getattr(top_test_major, "best_matching_block", None) if top_test_major else None
+    top_adm_score = getattr(top_test_major, "best_block_score", None) if top_test_major else None
+    top_adm_cutoff = getattr(top_test_major, "benchmark_cutoff", None) if top_test_major else None
+    top_adm_blk_str = format_block_with_subjects(top_adm_block) if top_adm_block else best_student_blk_str
+    top_score_str = f"{top_adm_score}đ" if top_adm_score is not None else student_score_str
+
+    is_cross_block = bool(
+        top_adm_block
+        and student_best_code
+        and top_adm_block.upper() != student_best_code.upper()
+    )
 
     # Tìm các ngành khớp với nguyện vọng nghề nghiệp
     dream_majors = _match_aspiration_to_majors(
@@ -562,31 +606,54 @@ async def analyze_career_aspiration(
             f"Thiên hướng nổi trội từ bài test: **{top_holland_str}** (dẫn đầu là nhóm **{primary_dim_label}** - {int(round(sorted_riasec[0][1] * 100))}%).",
         ]
         if has_academic_data:
-            takeaways.append(
-                f"Tổ hợp học lực mạnh nhất hiện tại: **{best_block_str}** — ưu tiên các ngành có ngưỡng điểm chuẩn vừa sức (`TARGET`)."
-            )
+            if is_cross_block:
+                cutoff_txt = f"~{top_adm_cutoff}đ" if top_adm_cutoff is not None else ""
+                takeaways.append(
+                    f"Đối chiếu tổ hợp môn xét tuyển: Điểm học lực cao nhất của bạn là **{best_student_blk_str}** ({student_score_str}). "
+                    f"Tuy nhiên, ngành **{top_test_major.major_name}** xét tuyển theo **{top_adm_blk_str}**. "
+                    f"Ở tổ hợp này, điểm của bạn đạt **{top_score_str}** (vượt ngưỡng điểm chuẩn tham chiếu {cutoff_txt}), "
+                    f"đảm bảo vừa đúng sở thích thực hành công nghệ vừa an toàn trúng tuyển (`TARGET`)."
+                )
+            else:
+                cutoff_txt = f"~{top_adm_cutoff}đ" if top_adm_cutoff is not None else ""
+                takeaways.append(
+                    f"Tổ hợp học lực xét tuyển: **{top_adm_blk_str}** đạt **{top_score_str}** "
+                    f"— vượt ngưỡng điểm chuẩn tham chiếu {cutoff_txt} (`TARGET`)."
+                )
         else:
             takeaways.append(
-                "Chưa có điểm học lực nên Agent **chỉ xếp hạng theo thiên hướng/sở thích**, chưa kết luận ngành nào đạt điểm chuẩn. Hãy nhập điểm môn học để nhận phân tầng `TARGET`/`REACH`."
+                f"Chưa có điểm học lực nên Trợ lý {assistant_name} **chỉ xếp hạng theo thiên hướng/sở thích**, chưa kết luận ngành nào đạt điểm chuẩn. Hãy nhập điểm môn học để nhận phân tầng `TARGET`/`REACH`."
             )
         if top_test_major:
             takeaways.append(
                 f"Đề xuất dẫn đầu từ 435 ngành TT74: **{top_test_major.major_name}** (Mã `{top_test_major.major_code}`, độ khớp **{int(round(top_test_major.overall_score * 100))}%**)."
             )
         if has_academic_data:
-            verdict = (
-                f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**) và tổ hợp **{best_block_str}**, "
-                f"AI Agent đề xuất bạn tập trung vào nhóm ngành **{top_test_major.category if top_test_major else 'Mũi nhọn'}** "
-                f"với ngành tiêu biểu là **{top_test_major.major_name if top_test_major else 'Công nghệ thông tin'}**. "
-                f"Bạn có thể nhập thêm nghề nghiệp mơ ước cụ thể để Agent đối chiếu chuyên sâu."
-            )
+            if is_cross_block:
+                cutoff_txt = f"~{top_adm_cutoff}đ" if top_adm_cutoff is not None else ""
+                verdict = (
+                    f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**), bạn có thiên hướng nổi trội ở nhóm "
+                    f"**{primary_dim_label}** nên Trợ lý {assistant_name} định hướng bạn vào nhóm ngành "
+                    f"**{top_test_major.category if top_test_major else 'Kỹ thuật & Công nghệ'}** với ngành tiêu biểu là **{top_test_major.major_name}**. "
+                    f"Giải thích về điểm xét tuyển: Mặc dù điểm tổng cao nhất trên học bạ của bạn hiện tại là **{best_student_blk_str}** ({student_score_str}), "
+                    f"nhưng ngành **{top_test_major.major_name}** xét tuyển theo **{top_adm_blk_str}**. "
+                    f"Tại tổ hợp này, điểm của bạn đạt **{top_score_str}** (vượt ngưỡng điểm chuẩn tham chiếu {cutoff_txt}), "
+                    f"hoàn toàn đủ điều kiện trúng tuyển an toàn (`TARGET`). Do đó, bạn có thể tự tin lựa chọn ngành học đúng với sở thích bẩm sinh của mình!"
+                )
+            else:
+                verdict = (
+                    f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**) và tổ hợp xét tuyển **{top_adm_blk_str}** ({top_score_str}), "
+                    f"Trợ lý {assistant_name} đề xuất bạn tập trung vào nhóm ngành **{top_test_major.category if top_test_major else 'Mũi nhọn'}** "
+                    f"với ngành tiêu biểu là **{top_test_major.major_name if top_test_major else 'Công nghệ thông tin'}**. "
+                    f"Bạn có thể nhập thêm nghề nghiệp mơ ước cụ thể để {assistant_name} đối chiếu chuyên sâu."
+                )
         else:
             verdict = (
-                f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**), AI Agent đề xuất bạn khám phá nhóm ngành "
+                f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**), Trợ lý {assistant_name} đề xuất bạn khám phá nhóm ngành "
                 f"**{top_test_major.category if top_test_major else 'Mũi nhọn'}** với ngành tiêu biểu là "
                 f"**{top_test_major.major_name if top_test_major else 'Công nghệ thông tin'}**. "
                 f"Lưu ý: bạn chưa nhập điểm học lực, nên đây là gợi ý theo thiên hướng chứ chưa phải kết luận về khả năng trúng tuyển. "
-                f"Hãy nhập điểm và nghề nghiệp mơ ước để Agent đối chiếu chính xác hơn."
+                f"Hãy nhập điểm và nghề nghiệp mơ ước để {assistant_name} đối chiếu chính xác hơn."
             )
         return {
             "has_aspiration": bool(sanitized_dream or sanitized_field or work_values),
@@ -741,47 +808,80 @@ async def analyze_career_aspiration(
         alignment_status = "ALIGNED_AND_ELIGIBLE"
         alignment_label = "Đam mê Trùng khớp Năng lực & Đủ Điểm chuẩn"
         alignment_score = int(round(best_dream_item.overall_score * 100))
+        dream_blk = getattr(best_dream_item, "best_matching_block", None)
+        dream_score = getattr(best_dream_item, "best_block_score", None) or block_sum
+        dream_cutoff = getattr(best_dream_item, "benchmark_cutoff", None)
+        dream_blk_fmt = format_block_with_subjects(dream_blk) if dream_blk else best_student_blk_str
+        is_dream_cross = bool(
+            dream_blk
+            and student_best_code
+            and dream_blk.upper() != student_best_code.upper()
+        )
+
         takeaways = [
             f"Nguyện vọng **\"{sanitized_dream}\"** khớp chặt chẽ với mã Holland **{top_holland_str}** của bạn (độ tương thích sở thích **{int(round(best_dream_item.score_riasec * 100))}%**).",
-            f"Đạt ngưỡng điểm chuẩn: Ngành **{best_dream_item.major_name}** (Mã `{best_dream_item.major_code}`) hoàn toàn khả thi (`TARGET`) với **{best_dream_item.best_matching_block or block_name}** (**{best_dream_item.best_block_score or block_sum}đ** vs chuẩn ~**{best_dream_item.benchmark_cutoff}đ**).",
         ]
+        if is_dream_cross:
+            takeaways.append(
+                f"Đạt ngưỡng điểm chuẩn: Mặc dù điểm tổng cao nhất của bạn ở **{best_student_blk_str} ({student_score_str})**, ngành **{best_dream_item.major_name}** xét tuyển theo **{dream_blk_fmt}**. Tại tổ hợp này, điểm của bạn đạt **{dream_score}đ** (vượt chuẩn ~**{dream_cutoff}đ**), hoàn toàn khả thi (`TARGET`)."
+            )
+        else:
+            takeaways.append(
+                f"Đạt ngưỡng điểm chuẩn: Ngành **{best_dream_item.major_name}** (Mã `{best_dream_item.major_code}`) hoàn toàn khả thi (`TARGET`) với tổ hợp **{dream_blk_fmt}** (**{dream_score}đ** vs chuẩn ~**{dream_cutoff}đ**)."
+            )
+
         if blocked_dreams and blocked_dreams[0].major_code != best_dream_item.major_code:
             b0 = blocked_dreams[0]
+            b0_blk_fmt = format_block_with_subjects(getattr(b0, "best_matching_block", None))
             takeaways.append(
-                f"Lưu ý phân tầng: Ngành top cùng nhóm là **{b0.major_name}** (chuẩn ~**{b0.benchmark_cutoff}đ**) đang ở ngưỡng Thử thách (`REACH`), nên đặt **{best_dream_item.major_name}** làm nguyện vọng chủ lực an toàn."
+                f"Lưu ý phân tầng: Ngành top cùng nhóm là **{b0.major_name}** (xét {b0_blk_fmt}, chuẩn ~**{b0.benchmark_cutoff}đ**) đang ở ngưỡng Thử thách (`REACH`), nên đặt **{best_dream_item.major_name}** làm nguyện vọng chủ lực an toàn."
             )
         else:
             takeaways.append(
                 f"Độ phù hợp tổng thể 3 trụ cột đạt **{alignment_score}%** — bạn có thể tự tin đặt làm nguyện vọng ưu tiên số 1."
             )
-        default_verdict = (
-            f"Ước muốn trở thành **{sanitized_dream}** của bạn đồng nhất cao với kết quả trắc nghiệm khách quan (**{top_holland_str}**). "
-            f"Đặc biệt, ngành **{best_dream_item.major_name}** (Mã `{best_dream_item.major_code}`) vừa khớp đam mê (**{int(round(best_dream_item.score_riasec * 100))}%**) "
-            f"vừa nằm trong vùng điểm an toàn (`TARGET`, chuẩn ~**{best_dream_item.benchmark_cutoff}đ**)."
-        )
+
+        if is_dream_cross:
+            default_verdict = (
+                f"Ước muốn trở thành **{sanitized_dream}** của bạn đồng nhất cao với kết quả trắc nghiệm khách quan (**{top_holland_str}**). "
+                f"Mặc dù điểm cao nhất của bạn thuộc **{best_student_blk_str}**, ngành **{best_dream_item.major_name}** (Mã `{best_dream_item.major_code}`) "
+                f"xét tuyển theo **{dream_blk_fmt}** mà điểm của bạn (**{dream_score}đ**) vẫn vượt chuẩn tham chiếu (~**{dream_cutoff}đ** - `TARGET`), "
+                f"giúp bạn tự tin đặt làm nguyện vọng ưu tiên số 1."
+            )
+        else:
+            default_verdict = (
+                f"Ước muốn trở thành **{sanitized_dream}** của bạn đồng nhất cao với kết quả trắc nghiệm khách quan (**{top_holland_str}**). "
+                f"Đặc biệt, ngành **{best_dream_item.major_name}** (Mã `{best_dream_item.major_code}`) vừa khớp đam mê (**{int(round(best_dream_item.score_riasec * 100))}%**) "
+                f"vừa nằm trong vùng điểm an toàn xét theo tổ hợp **{dream_blk_fmt}** (`TARGET`, chuẩn ~**{dream_cutoff}đ**)."
+            )
 
     elif is_passion_aligned and not primary_is_target:
         alignment_status = "PASSION_MATCH_SCORE_GAP"
         alignment_label = "Đúng Thiên hướng Đam mê · Cần Ngành Liên thông Vừa sức"
         alignment_score = int(round((primary_dream.score_riasec * 0.65 + primary_dream.overall_score * 0.35) * 100))
+        p_blk = getattr(primary_dream, "best_matching_block", None)
+        p_blk_fmt = format_block_with_subjects(p_blk) if p_blk else best_student_blk_str
+        p_score = getattr(primary_dream, "best_block_score", None) or block_sum
         violation_reason = (
             primary_dream.constraint_violations[0]
             if primary_dream.constraint_violations
-            else f"Điểm hiện tại ({primary_dream.best_block_score or block_sum}đ) chưa đạt ngưỡng chuẩn (~{primary_dream.benchmark_cutoff}đ)"
+            else f"Điểm tổ hợp {p_blk_fmt} ({p_score}đ) chưa đạt ngưỡng chuẩn (~{primary_dream.benchmark_cutoff}đ)"
         )
         takeaways = [
             f"Thiên hướng sở thích của bạn (**{top_holland_str}**) rất phù hợp với **\"{sanitized_dream}\"** (độ khớp sở thích đạt **{int(round(primary_dream.score_riasec * 100))}%** ở ngành **{primary_dream.major_name}**).",
-            f"Rào cản điểm số (`REACH`): Ngành **{primary_dream.major_name}** (Mã `{primary_dream.major_code}`) hiện bị chặn do *{violation_reason}*.",
+            f"Rào cản điểm số (`REACH`): Ngành **{primary_dream.major_name}** (Mã `{primary_dream.major_code}`, xét {p_blk_fmt}) hiện bị chặn do *{violation_reason}*.",
         ]
         if substitutes:
             sub0 = substitutes[0]
+            sub0_blk = getattr(sub0, "best_matching_block", None)
+            sub0_blk_fmt = format_block_with_subjects(sub0_blk) if sub0_blk else best_student_blk_str
             takeaways.append(
-                f"Giải pháp thay thế vừa sức (`TARGET`): Chọn ngành liên thông **{sub0.major_name}** (Mã `{sub0.major_code}`, chuẩn ~**{sub0.benchmark_cutoff}đ**, độ khớp **{int(round(sub0.overall_score * 100))}%**) để giữ trọn đam mê nghề nghiệp mà vẫn an toàn đậu đại học."
+                f"Giải pháp thay thế vừa sức (`TARGET`): Chọn ngành liên thông **{sub0.major_name}** (Mã `{sub0.major_code}`, xét {sub0_blk_fmt}, chuẩn ~**{sub0.benchmark_cutoff}đ**, độ khớp **{int(round(sub0.overall_score * 100))}%**) để giữ trọn đam mê nghề nghiệp mà vẫn an toàn đậu đại học."
             )
             default_verdict = (
                 f"Bạn có tố chất sở thích rất hợp với **{sanitized_dream}** (**{int(round(primary_dream.score_riasec * 100))}%**), "
                 f"nhưng ngành **{primary_dream.major_name}** (chuẩn ~**{primary_dream.benchmark_cutoff}đ**) đang vượt ngưỡng điểm hiện tại. "
-                f"AI Agent khuyến nghị chuyển sang ngành cùng nhóm liên thông là **{sub0.major_name}** (Mã `{sub0.major_code}`, chuẩn ~**{sub0.benchmark_cutoff}đ** - `TARGET`) để theo đuổi đúng nghề mơ ước một cách an toàn."
+                f"Trợ lý {assistant_name} khuyến nghị chuyển sang ngành cùng nhóm liên thông là **{sub0.major_name}** (Mã `{sub0.major_code}`, xét {sub0_blk_fmt}, chuẩn ~**{sub0.benchmark_cutoff}đ** - `TARGET`) để theo đuổi đúng nghề mơ ước một cách an toàn."
             )
         else:
             default_verdict = (
@@ -799,13 +899,15 @@ async def analyze_career_aspiration(
         ]
         if bridge_majors:
             b0 = bridge_majors[0]
+            b0_blk = getattr(b0, "best_matching_block", None)
+            b0_blk_fmt = format_block_with_subjects(b0_blk) if b0_blk else best_student_blk_str
             takeaways.append(
-                f"Ngành cầu nối giao thoa (`TARGET`): **{b0.major_name}** (Mã `{b0.major_code}`, độ khớp **{int(round(b0.overall_score * 100))}%**, chuẩn ~**{b0.benchmark_cutoff}đ**) giúp bạn phát huy đúng thế mạnh **{primary_dim}** trong môi trường gần với định hướng mong muốn."
+                f"Ngành cầu nối giao thoa (`TARGET`): **{b0.major_name}** (Mã `{b0.major_code}`, xét {b0_blk_fmt}, độ khớp **{int(round(b0.overall_score * 100))}%**, chuẩn ~**{b0.benchmark_cutoff}đ**) giúp bạn phát huy đúng thế mạnh **{primary_dim}** trong môi trường gần với định hướng mong muốn."
             )
         default_verdict = (
             f"Bài trắc nghiệm phát hiện sự khác biệt thú vị: bạn mong muốn làm **{sanitized_dream}** (độ khớp sở thích **{int(round(primary_dream.score_riasec * 100))}%**), "
             f"nhưng tố chất tự nhiên mạnh nhất của bạn lại là **{top_holland_str}** ({primary_dim_label}). "
-            f"AI Agent gợi ý bạn cân nhắc ngành giao thoa **{bridge_majors[0].major_name if bridge_majors else primary_dream.major_name}** "
+            f"Trợ lý {assistant_name} gợi ý bạn cân nhắc ngành giao thoa **{bridge_majors[0].major_name if bridge_majors else primary_dream.major_name}** "
             f"để vừa tận dụng thế mạnh bẩm sinh vừa thỏa mãn mục tiêu nghề nghiệp."
         )
 
