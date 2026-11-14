@@ -1411,6 +1411,125 @@ class TestExcelBulkImportPersistence:
         assert res["total"] == 1
         db.commit.assert_awaited_once()
 
+    @pytest.mark.anyio
+    async def test_excel_import_purges_all_old_majors_and_prevents_duplicate_categories(self, tmp_path, monkeypatch):
+        from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
+        from sqlalchemy import select
+        import app.models  # noqa: F401
+        from app.core.config import settings
+        from app.core.database import Base
+        from app.models.taxonomy import Major
+        from app.main import app
+        from app.core.database import get_db
+        from app.services.taxonomy import service as tax_service
+        from fastapi.testclient import TestClient
+        from pathlib import Path
+
+        monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+
+        db_file = tmp_path / "test_purge.db"
+        test_engine = create_async_engine(f"sqlite+aiosqlite:///{db_file.as_posix()}")
+        async with test_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+
+        SessionLocal = async_sessionmaker(test_engine, expire_on_commit=False)
+
+        # Seed old stale TT09 majors first
+        async with SessionLocal() as s:
+            await tax_service.bulk_sync_majors(
+                s,
+                [
+                    {
+                        "major_code": "7480299",
+                        "name": "Ngành CNTT Cũ Đã Bỏ",
+                        "category": "Máy tính & Công nghệ thông tin",
+                        "blocks": ["A00"],
+                    },
+                    {
+                        "major_code": "7340999",
+                        "name": "Ngành Kinh Doanh Cũ Đã Bỏ",
+                        "category": "Kinh doanh & Quản lý",
+                        "blocks": ["D01"],
+                    },
+                ],
+            )
+
+        async def _override_db():
+            async with SessionLocal() as s:
+                yield s
+
+        app.dependency_overrides[get_db] = _override_db
+        try:
+            tpl_path = Path(__file__).resolve().parents[1] / "app" / "db" / "seeds" / "MOET_Major_Import_Template_Standard.xlsx"
+            client = TestClient(app)
+            with open(tpl_path, "rb") as f:
+                imp_res = client.post(
+                    "/api/v1/taxonomy/import-excel?preview_only=false",
+                    files={"file": ("MOET_Major_Import_Template_Standard.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
+                )
+            assert imp_res.status_code == 200
+            body = imp_res.json()
+            assert body["deleted_old"] == 2
+
+            # Verify ALL old majors were deleted from DB (not even inactive rows left)
+            async with SessionLocal() as s:
+                all_rows = list((await s.execute(select(Major))).scalars().all())
+                all_codes = {m.major_code for m in all_rows}
+                assert "7480299" not in all_codes
+                assert "7340999" not in all_codes
+                assert len(all_rows) == body["total"]
+
+            # Verify Recommender ONLY evaluates the newly imported Excel majors (does NOT mix old 435 seed data)
+            eval_res = client.post(
+                "/api/v1/recommender/evaluate",
+                json={
+                    "riasec_answers": {"I1": 5, "I2": 5, "R1": 5, "R2": 5, "C1": 4},
+                    "grades_by_subject": {"Toán": 8.5, "Vật lý": 8.0, "Tiếng Anh": 8.0},
+                    "top_k": 500,
+                },
+            )
+            assert eval_res.status_code == 200
+            eval_body = eval_res.json()
+            assert eval_body["total_majors_evaluated"] == body["total"]
+            rec_codes = {m["major_code"] for m in eval_body["majors"]}
+            assert "7480299" not in rec_codes
+            assert "7340999" not in rec_codes
+        finally:
+            app.dependency_overrides.clear()
+            await test_engine.dispose()
+
+    def test_funnel_deduplicates_category_variants_into_single_field(self):
+        import uuid
+        from app.schemas.recommender import MajorRecommendationItem
+        from app.services.recommender.service import build_two_tier_funnel_payload
+
+        def _mk(rank: int, code: str, name: str, cat: str, score: float) -> MajorRecommendationItem:
+            return MajorRecommendationItem(
+                rank=rank,
+                major_id=uuid.uuid4(),
+                major_code=code,
+                major_name=name,
+                category=cat,
+                overall_score=score,
+                score_riasec=score,
+                score_academic=score,
+                score_preference=score,
+                score_breakdown={},
+                explanation="Test XAI",
+                feasibility_tier="TARGET",
+            )
+
+        items = [
+            _mk(1, "7480106", "Kỹ thuật máy tính", "MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN", 0.92),
+            _mk(2, "7480101", "Khoa học máy tính", "Máy tính & Công nghệ thông tin", 0.90),
+            _mk(3, "7340101", "Quản trị kinh doanh", "KINH DOANH VÀ QUẢN LÝ", 0.88),
+        ]
+        funnel = build_two_tier_funnel_payload(items, top_fields=3, majors_per_field=3)
+        field_names = [f["field_name"] for f in funnel["tier1_fields"]]
+        assert len(field_names) == 2
+        assert field_names.count("Máy tính & Công nghệ thông tin") == 1
+        assert "Kinh doanh & Quản lý" in field_names
+
 
 # =========================================================================
 # ADAPTIVE WEIGHTING & COMPACT XAI TESTS (ARENA WINNING DESIGN)

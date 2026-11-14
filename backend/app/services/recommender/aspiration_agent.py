@@ -409,20 +409,24 @@ async def _try_llm_aspiration_synthesis(
     Gọi LLM (với timeout ngắn 3.5 giây & Zero-PII) để viết lời khuyên cá nhân hóa ngắn gọn.
     Nếu không cấu hình key hoặc môi trường test/offline, trả về None để dùng ngay nhận xét tất định.
     """
+    api_key = getattr(settings, "LLM_API_KEY", "") or settings.OPENAI_API_KEY
+    base_url = getattr(settings, "LLM_BASE_URL", "") or settings.OPENAI_BASE_URL
+    model_name = getattr(settings, "LLM_MODEL", "") or "gpt-6-luna"
+
     if (
-        not settings.OPENAI_API_KEY
+        not api_key
         or settings.ENVIRONMENT == "test"
-        or settings.OPENAI_API_KEY.startswith("sk-test")
-        or settings.OPENAI_API_KEY == "your-openai-api-key"
+        or api_key.startswith("sk-test")
+        or api_key == "your-openai-api-key"
     ):
         return None
 
     try:
         from openai import AsyncOpenAI
 
-        client_kwargs: Dict[str, Any] = {"api_key": settings.OPENAI_API_KEY}
-        if settings.OPENAI_BASE_URL:
-            client_kwargs["base_url"] = settings.OPENAI_BASE_URL
+        client_kwargs: Dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
         client = AsyncOpenAI(**client_kwargs)
 
         dream_info = (
@@ -459,11 +463,11 @@ async def _try_llm_aspiration_synthesis(
             token_limits = await resolve_model_token_limits()
             try:
                 resp = await client.chat.completions.create(
-                    model=settings.LLM_MODEL,
+                    model=model_name,
                     messages=[
                         {
                             "role": "system",
-                            "content": "Bạn là AI Agent Phân tích Nguyện vọng & Đối chiếu Trắc nghiệm của hệ thống AI CareerGuide.",
+                            "content": f"Bạn là {getattr(settings, 'AI_ASSISTANT_NAME', 'Navi')} - Trợ lý Hướng nghiệp AI thông minh của hệ thống AI CareerGuide.",
                         },
                         {"role": "user", "content": prompt},
                     ],
@@ -477,8 +481,25 @@ async def _try_llm_aspiration_synthesis(
                 except Exception:
                     pass
 
+        if allowed_numbers is None:
+            raw_allowed = set(_NUMBER_PATTERN.findall(prompt))
+            eff_allowed = set()
+            for raw in raw_allowed:
+                norm = raw.replace(",", ".")
+                eff_allowed.add(raw)
+                eff_allowed.add(norm)
+                try:
+                    v = float(norm)
+                    eff_allowed.add(f"{v:g}")
+                    if v == int(v):
+                        eff_allowed.add(str(int(v)))
+                except ValueError:
+                    pass
+        else:
+            eff_allowed = allowed_numbers
+
         text = await asyncio.wait_for(_call(), timeout=8.0)
-        if not _is_safe_llm_verdict(text, allowed_numbers or set()):
+        if not _is_safe_llm_verdict(text, eff_allowed):
             logger.debug("Aspiration Agent loại nhận xét LLM có số liệu lạ hoặc cam kết tuyệt đối.")
             return None
         return text
@@ -515,6 +536,7 @@ async def analyze_career_aspiration(
 
     sanitized_dream = sanitize_pii(raw_dream_job)
     sanitized_field = sanitize_pii(desired_field)
+    assistant_name = getattr(settings, "AI_ASSISTANT_NAME", "Navi")
 
     # Xác định Top 3 chiều Holland của học sinh từ bài test
     sorted_riasec = sorted(
@@ -600,7 +622,7 @@ async def analyze_career_aspiration(
                 )
         else:
             takeaways.append(
-                "Chưa có điểm học lực nên Agent **chỉ xếp hạng theo thiên hướng/sở thích**, chưa kết luận ngành nào đạt điểm chuẩn. Hãy nhập điểm môn học để nhận phân tầng `TARGET`/`REACH`."
+                f"Chưa có điểm học lực nên Trợ lý {assistant_name} **chỉ xếp hạng theo thiên hướng/sở thích**, chưa kết luận ngành nào đạt điểm chuẩn. Hãy nhập điểm môn học để nhận phân tầng `TARGET`/`REACH`."
             )
         if top_test_major:
             takeaways.append(
@@ -611,7 +633,7 @@ async def analyze_career_aspiration(
                 cutoff_txt = f"~{top_adm_cutoff}đ" if top_adm_cutoff is not None else ""
                 verdict = (
                     f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**), bạn có thiên hướng nổi trội ở nhóm "
-                    f"**{primary_dim_label}** nên AI Agent định hướng bạn vào nhóm ngành "
+                    f"**{primary_dim_label}** nên Trợ lý {assistant_name} định hướng bạn vào nhóm ngành "
                     f"**{top_test_major.category if top_test_major else 'Kỹ thuật & Công nghệ'}** với ngành tiêu biểu là **{top_test_major.major_name}**. "
                     f"Giải thích về điểm xét tuyển: Mặc dù điểm tổng cao nhất trên học bạ của bạn hiện tại là **{best_student_blk_str}** ({student_score_str}), "
                     f"nhưng ngành **{top_test_major.major_name}** xét tuyển theo **{top_adm_blk_str}**. "
@@ -621,17 +643,17 @@ async def analyze_career_aspiration(
             else:
                 verdict = (
                     f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**) và tổ hợp xét tuyển **{top_adm_blk_str}** ({top_score_str}), "
-                    f"AI Agent đề xuất bạn tập trung vào nhóm ngành **{top_test_major.category if top_test_major else 'Mũi nhọn'}** "
+                    f"Trợ lý {assistant_name} đề xuất bạn tập trung vào nhóm ngành **{top_test_major.category if top_test_major else 'Mũi nhọn'}** "
                     f"với ngành tiêu biểu là **{top_test_major.major_name if top_test_major else 'Công nghệ thông tin'}**. "
-                    f"Bạn có thể nhập thêm nghề nghiệp mơ ước cụ thể để Agent đối chiếu chuyên sâu."
+                    f"Bạn có thể nhập thêm nghề nghiệp mơ ước cụ thể để {assistant_name} đối chiếu chuyên sâu."
                 )
         else:
             verdict = (
-                f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**), AI Agent đề xuất bạn khám phá nhóm ngành "
+                f"Dựa trên hồ sơ trắc nghiệm khách quan (**{top_holland_str}**), Trợ lý {assistant_name} đề xuất bạn khám phá nhóm ngành "
                 f"**{top_test_major.category if top_test_major else 'Mũi nhọn'}** với ngành tiêu biểu là "
                 f"**{top_test_major.major_name if top_test_major else 'Công nghệ thông tin'}**. "
                 f"Lưu ý: bạn chưa nhập điểm học lực, nên đây là gợi ý theo thiên hướng chứ chưa phải kết luận về khả năng trúng tuyển. "
-                f"Hãy nhập điểm và nghề nghiệp mơ ước để Agent đối chiếu chính xác hơn."
+                f"Hãy nhập điểm và nghề nghiệp mơ ước để {assistant_name} đối chiếu chính xác hơn."
             )
         return {
             "has_aspiration": bool(sanitized_dream or sanitized_field or work_values),
@@ -859,7 +881,7 @@ async def analyze_career_aspiration(
             default_verdict = (
                 f"Bạn có tố chất sở thích rất hợp với **{sanitized_dream}** (**{int(round(primary_dream.score_riasec * 100))}%**), "
                 f"nhưng ngành **{primary_dream.major_name}** (chuẩn ~**{primary_dream.benchmark_cutoff}đ**) đang vượt ngưỡng điểm hiện tại. "
-                f"AI Agent khuyến nghị chuyển sang ngành cùng nhóm liên thông là **{sub0.major_name}** (Mã `{sub0.major_code}`, xét {sub0_blk_fmt}, chuẩn ~**{sub0.benchmark_cutoff}đ** - `TARGET`) để theo đuổi đúng nghề mơ ước một cách an toàn."
+                f"Trợ lý {assistant_name} khuyến nghị chuyển sang ngành cùng nhóm liên thông là **{sub0.major_name}** (Mã `{sub0.major_code}`, xét {sub0_blk_fmt}, chuẩn ~**{sub0.benchmark_cutoff}đ** - `TARGET`) để theo đuổi đúng nghề mơ ước một cách an toàn."
             )
         else:
             default_verdict = (
@@ -885,7 +907,7 @@ async def analyze_career_aspiration(
         default_verdict = (
             f"Bài trắc nghiệm phát hiện sự khác biệt thú vị: bạn mong muốn làm **{sanitized_dream}** (độ khớp sở thích **{int(round(primary_dream.score_riasec * 100))}%**), "
             f"nhưng tố chất tự nhiên mạnh nhất của bạn lại là **{top_holland_str}** ({primary_dim_label}). "
-            f"AI Agent gợi ý bạn cân nhắc ngành giao thoa **{bridge_majors[0].major_name if bridge_majors else primary_dream.major_name}** "
+            f"Trợ lý {assistant_name} gợi ý bạn cân nhắc ngành giao thoa **{bridge_majors[0].major_name if bridge_majors else primary_dream.major_name}** "
             f"để vừa tận dụng thế mạnh bẩm sinh vừa thỏa mãn mục tiêu nghề nghiệp."
         )
 

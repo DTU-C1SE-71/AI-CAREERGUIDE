@@ -39,8 +39,12 @@ async def evaluate_majors_with_constraints(
     Đánh giá đầy đủ 435 ngành TT74 kèm cơ chế ràng buộc điểm đa tầng:
     - Trả về 422 CHUA_HOAN_THANH_BAI_TEST nếu học sinh chưa có dữ liệu bài test/điểm số.
     - Nhận trực tiếp dữ liệu bài làm hiện tại hoặc tự động nạp từ CSDL của user đã đăng nhập.
+    - Thích ứng động theo Khối lớp (Horizon tau) và Công thái học Giới tính (HA-GAE v3.1).
     """
     target_user_id = current_user.id if current_user else uuid.UUID("00000000-0000-0000-0000-000000000001")
+    eff_gender = payload.gender or (current_user.gender if current_user else None)
+    eff_grade_level = payload.grade_level or (current_user.grade_level if current_user else None)
+
     inline_profile = {
         "riasec_scores": payload.riasec_scores,
         "riasec_answers": payload.riasec_answers,
@@ -48,6 +52,8 @@ async def evaluate_majors_with_constraints(
         "cognitive_answers": payload.cognitive_answers,
         "grades_by_subject": payload.grades_by_subject,
         "aspiration": payload.aspiration,
+        "gender": eff_gender,
+        "grade_level": eff_grade_level,
     }
     return await service.evaluate_dashboard_profile_bundle(
         db=db,
@@ -58,6 +64,8 @@ async def evaluate_majors_with_constraints(
         raise_if_unassessed=True,
         persist_history=False,
         user_name=current_user.full_name if current_user else None,
+        gender=eff_gender,
+        grade_level=eff_grade_level,
     )
 
 
@@ -72,6 +80,9 @@ async def analyze_aspiration_endpoint(
     Cho phép cập nhật hoặc phân tích lại nguyện vọng nghề nghiệp ngay trên Dashboard / Trắc nghiệm.
     """
     target_user_id = current_user.id if current_user else uuid.UUID("00000000-0000-0000-0000-000000000001")
+    eff_gender = payload.gender or (current_user.gender if current_user else None)
+    eff_grade_level = payload.grade_level or (current_user.grade_level if current_user else None)
+
     inline_profile = {
         "riasec_scores": payload.riasec_scores,
         "riasec_answers": payload.riasec_answers,
@@ -79,6 +90,8 @@ async def analyze_aspiration_endpoint(
         "cognitive_answers": payload.cognitive_answers,
         "grades_by_subject": payload.grades_by_subject,
         "aspiration": payload.aspiration,
+        "gender": eff_gender,
+        "grade_level": eff_grade_level,
     }
     bundle = await service.evaluate_dashboard_profile_bundle(
         db=db,
@@ -89,6 +102,8 @@ async def analyze_aspiration_endpoint(
         raise_if_unassessed=True,
         persist_history=False,
         user_name=current_user.full_name if current_user else None,
+        gender=eff_gender,
+        grade_level=eff_grade_level,
     )
     return bundle.get("aspirationAnalysis")
 
@@ -122,12 +137,16 @@ async def get_dashboard_overview(
             raise_if_unassessed=True,
             persist_history=False,
             user_name=current_user.full_name,
+            gender=current_user.gender,
+            grade_level=current_user.grade_level,
         )
     except HTTPException:
         return {
             "has_assessment": False,
             "code": "CHUA_HOAN_THANH_BAI_TEST",
             "user_name": current_user.full_name,
+            "gender": current_user.gender,
+            "grade_level": current_user.grade_level,
             "riasecData": [],
             "bestBlockStats": None,
             "majors": [],
@@ -143,7 +162,11 @@ async def get_recommended_majors_list(
 ):
     """Trả về danh sách ngành đề xuất theo hồ sơ user (tương thích DTO Frontend)."""
     target_user_id = current_user.id if current_user else uuid.UUID("00000000-0000-0000-0000-000000000001")
-    req = RecommendationRequest(top_k=top_k)
+    req = RecommendationRequest(
+        top_k=top_k,
+        gender=current_user.gender if current_user else None,
+        grade_level=current_user.grade_level if current_user else None,
+    )
     rec_resp = await service.calculate_3pillar_recommendations(
         db,
         target_user_id,

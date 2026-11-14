@@ -4,6 +4,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
@@ -793,8 +794,8 @@ export function AssessmentWizard() {
         className="pointer-events-none absolute right-1/4 top-28 h-72 w-72 rounded-full bg-cyan-300/20 blur-3xl"
       />
 
-      {/* Scalable Container: Fluid Responsive Width up to max-w-4xl */}
-      <PageContainer className={`relative z-10 transition-all duration-200 ${cardScale === "large" ? "max-w-3xl lg:max-w-4xl" : "max-w-2xl lg:max-w-3xl"}`}>
+      {/* Scalable Container: Fluid Responsive Width across monitor sizes */}
+      <PageContainer className={`relative z-10 transition-all duration-200 ${cardScale === "large" ? "max-w-4xl lg:max-w-5xl 2xl:max-w-6xl" : "max-w-3xl lg:max-w-4xl 2xl:max-w-5xl"}`}>
         {/* Top Header: Prominent Back Button & Scale Toggle */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <button
@@ -995,7 +996,7 @@ export function AssessmentWizard() {
             {step1Mode === "swipe" && (
               <>
                 {/* Compact Progress Track */}
-                <div className={`mx-auto flex items-center gap-3 px-1 transition-all duration-200 ${cardScale === "large" ? "max-w-xl lg:max-w-2xl" : "max-w-md"}`}>
+                <div className={`mx-auto flex items-center gap-3 px-1 transition-all duration-200 ${cardScale === "large" ? "max-w-2xl lg:max-w-3xl xl:max-w-4xl" : "max-w-md lg:max-w-lg"}`}>
                   <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
                     <motion.div
                       animate={{
@@ -1003,17 +1004,20 @@ export function AssessmentWizard() {
                           (totalRiasecAnswered / 30) * 100
                         )}%`,
                       }}
-                      transition={{ type: "spring", stiffness: 260, damping: 24 }}
+                      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                       className="h-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-cyan-500"
                     />
                   </div>
-                  <span className="text-xs sm:text-sm font-black text-sky-900">
+                  <span className="text-xs sm:text-sm font-black tabular-nums text-sky-900">
                     {totalRiasecAnswered}/30
                   </span>
                 </div>
 
-                {/* Vertical Card Stage: Responsive Stage */}
-                <div className={`relative mx-auto flex w-full items-center justify-center gap-3 sm:gap-4 transition-all duration-200 ${cardScale === "large" ? "max-w-3xl" : "max-w-xl"}`}>
+                {/* Compact Collapsible Guide - Distraction Free */}
+                <HelpGuideCollapsible />
+
+                {/* Vertical Card Stage: Generous Responsive Stage */}
+                <div className={`relative mx-auto flex w-full items-center justify-center gap-3 sm:gap-4 transition-all duration-200 ${cardScale === "large" ? "max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "max-w-xl lg:max-w-2xl"}`}>
                   {/* Left Arrow Button (Previous Question) */}
                   <motion.button
                     type="button"
@@ -1022,13 +1026,13 @@ export function AssessmentWizard() {
                     disabled={cardIndex === 0}
                     onClick={goToPrevCard}
                     aria-label="Câu trước"
-                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30"
+                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
                   >
                     <ChevronLeft className="size-6" />
                   </motion.button>
 
                   {/* Unified Vertical Bento Card (Illustration + Question + 5 Emoticon Ratings) */}
-                  <div className={`relative w-full transition-all duration-200 ${cardScale === "large" ? "max-w-2xl" : "max-w-md"}`}>
+                  <div className={`relative w-full transition-all duration-200 ${cardScale === "large" ? "max-w-2xl lg:max-w-3xl xl:max-w-4xl" : "max-w-md lg:max-w-xl"}`}>
                     {/* Subtle Stacked Depth Card Behind */}
                     <div className="pointer-events-none absolute inset-x-4 -bottom-2.5 top-4 rounded-3xl border border-white/60 bg-white/35 backdrop-blur-xl" />
 
@@ -1056,7 +1060,7 @@ export function AssessmentWizard() {
                     disabled={cardIndex >= ONET_MINI_IP_ITEMS.length - 1}
                     onClick={goToNextCard}
                     aria-label="Câu tiếp theo"
-                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30"
+                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
                   >
                     <ChevronRight className="size-6" />
                   </motion.button>
@@ -1126,8 +1130,8 @@ export function AssessmentWizard() {
         {step === 2 && currentCog && (
           <div className="space-y-4">
             {/* Compact Step 2 Progress Track */}
-            <div className="mx-auto flex max-w-xl items-center gap-3 px-1">
-              <div className="h-2 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
+            <div className={`mx-auto flex items-center gap-3 px-1 transition-all duration-200 ${cardScale === "large" ? "max-w-2xl lg:max-w-3xl xl:max-w-4xl" : "max-w-xl"}`}>
+              <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
                 <motion.div
                   animate={{
                     width: `${Math.round(
@@ -1136,16 +1140,16 @@ export function AssessmentWizard() {
                         100
                     )}%`,
                   }}
-                  transition={{ type: "spring", stiffness: 260, damping: 24 }}
+                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                   className="h-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-cyan-500"
                 />
               </div>
-              <span className="text-xs font-black text-sky-900 sm:text-sm">
+              <span className="text-xs font-black tabular-nums text-sky-900 sm:text-sm">
                 {totalCognitiveAnswered}/{cognitiveQuestions.length}
               </span>
             </div>
 
-            <div className="relative mx-auto flex max-w-2xl items-center justify-center gap-2.5">
+            <div className={`relative mx-auto flex w-full items-center justify-center gap-3 sm:gap-4 transition-all duration-200 ${cardScale === "large" ? "max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "max-w-2xl"}`}>
               <motion.button
                 type="button"
                 whileHover={{ scale: 1.08 }}
@@ -1153,19 +1157,19 @@ export function AssessmentWizard() {
                 disabled={cogIndex === 0}
                 onClick={goToPrevCog}
                 aria-label="Câu trước"
-                className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-md backdrop-blur-2xl disabled:opacity-30"
+                className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-md backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
               >
-                <ChevronLeft className="size-5" />
+                <ChevronLeft className="size-6" />
               </motion.button>
 
               <AnimatePresence mode="wait" custom={cogDirection}>
                 <motion.div
                   key={currentCog.code}
                   custom={cogDirection}
-                  initial={{ opacity: 0, x: cogDirection * 48, scale: 0.97 }}
+                  initial={{ opacity: 0, x: cogDirection * 48, scale: 0.98 }}
                   animate={{ opacity: 1, x: 0, scale: 1 }}
-                  exit={{ opacity: 0, x: cogDirection * -48, scale: 0.97 }}
-                  transition={{ type: "spring", stiffness: 320, damping: 28 }}
+                  exit={{ opacity: 0, x: cogDirection * -48, scale: 0.98 }}
+                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
                   drag="x"
                   dragConstraints={{ left: 0, right: 0 }}
                   dragElastic={0.35}
@@ -1176,12 +1180,12 @@ export function AssessmentWizard() {
                       goToPrevCog()
                     }
                   }}
-                  className="w-full max-w-xl mx-auto rounded-3xl border border-white/90 bg-white/70 p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl"
+                  className={`w-full mx-auto rounded-3xl border border-white/90 bg-white/75 p-6 sm:p-8 lg:p-9 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition-all duration-200 ${cardScale === "large" ? "max-w-2xl lg:max-w-3xl xl:max-w-4xl" : "max-w-xl"}`}
                 >
                   {/* Top Header Pills + Mobile Nav */}
-                  <div className="mb-4 flex items-center justify-between gap-2">
+                  <div className="mb-4 sm:mb-5 flex items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-sky-200/80 bg-white/90 px-3 py-1 text-xs font-black text-sky-700 shadow-2xs">
+                      <span className="rounded-full border border-sky-200/80 bg-white/90 px-3 py-1 text-xs font-black tabular-nums text-sky-800 shadow-2xs">
                         {cogIndex + 1} / {cognitiveQuestions.length}
                       </span>
                       {currentCog.dimension_badge && (
@@ -1197,7 +1201,7 @@ export function AssessmentWizard() {
                         disabled={cogIndex === 0}
                         onClick={goToPrevCog}
                         aria-label="Câu trước"
-                        className="grid size-8 place-items-center rounded-full border border-white/80 bg-white/80 text-sky-700 disabled:opacity-30"
+                        className="grid size-9 place-items-center rounded-full border border-white/80 bg-white/80 text-sky-700 disabled:opacity-30"
                       >
                         <ChevronLeft className="size-4" />
                       </button>
@@ -1206,7 +1210,7 @@ export function AssessmentWizard() {
                         disabled={cogIndex >= cognitiveQuestions.length - 1}
                         onClick={goToNextCog}
                         aria-label="Câu tiếp theo"
-                        className="grid size-8 place-items-center rounded-full border border-white/80 bg-white/80 text-sky-700 disabled:opacity-30"
+                        className="grid size-9 place-items-center rounded-full border border-white/80 bg-white/80 text-sky-700 disabled:opacity-30"
                       >
                         <ChevronRight className="size-4" />
                       </button>
@@ -1214,11 +1218,11 @@ export function AssessmentWizard() {
                   </div>
 
                   {/* Relatable Scenario Question */}
-                  <h2 className="mb-5 text-lg sm:text-xl font-extrabold leading-snug text-slate-900">
+                  <h2 className="mb-5 sm:mb-6 text-base sm:text-lg lg:text-xl font-bold leading-snug text-slate-900">
                     {currentCog.subtitle}
                   </h2>
 
-                  {/* 4 Two-Tier Context Cards (Icon + Label + Description + Subtle Option Key) */}
+                  {/* 4 Two-Tier Context Cards */}
                   <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                     {currentCog.options.map((opt) => {
                       const isSelected =
@@ -1233,14 +1237,14 @@ export function AssessmentWizard() {
                             e.stopPropagation()
                             handleSelectCognitive(opt.option_key)
                           }}
-                          className={`group relative flex items-start gap-3.5 rounded-2xl border p-4 text-left backdrop-blur-xl transition-all cursor-pointer ${
+                          className={`group relative flex min-h-[52px] items-start gap-3.5 rounded-2xl border p-4 sm:p-4.5 text-left backdrop-blur-xl transition-all cursor-pointer active:scale-[0.98] ${
                             isSelected
-                              ? "border-sky-500 bg-sky-50/80 ring-2 ring-sky-500/20 shadow-sm"
-                              : "border-slate-200/80 bg-white/85 hover:border-sky-300 hover:bg-sky-50/40"
+                              ? "border-sky-500 bg-sky-50/90 ring-2 ring-sky-500/25 shadow-sm"
+                              : "border-slate-200/90 bg-white/90 hover:border-sky-300 hover:bg-sky-50/40"
                           }`}
                         >
                           <span
-                            className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                            className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
                               isSelected
                                 ? "bg-sky-500 text-white shadow-xs"
                                 : "bg-slate-100 text-slate-600 group-hover:bg-sky-100 group-hover:text-sky-600"
@@ -1254,7 +1258,7 @@ export function AssessmentWizard() {
 
                           <div className="min-w-0 flex-1">
                             <div className="flex items-start justify-between gap-2">
-                              <h3 className="text-sm md:text-base font-semibold leading-snug text-slate-800">
+                              <h3 className="text-sm sm:text-base font-bold leading-snug text-slate-800">
                                 {opt.label}
                               </h3>
                               {isSelected && (
@@ -1264,7 +1268,7 @@ export function AssessmentWizard() {
                                 </span>
                               )}
                             </div>
-                            <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                            <p className="mt-1 text-xs sm:text-sm leading-relaxed text-slate-600">
                               {opt.description}
                             </p>
                           </div>
@@ -1282,9 +1286,9 @@ export function AssessmentWizard() {
                 disabled={cogIndex >= cognitiveQuestions.length - 1}
                 onClick={goToNextCog}
                 aria-label="Câu tiếp theo"
-                className="hidden sm:grid size-10 shrink-0 place-items-center rounded-full border border-white/90 bg-white/65 text-sky-700 shadow-md backdrop-blur-2xl disabled:opacity-30"
+                className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-md backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
               >
-                <ChevronRight className="size-5" />
+                <ChevronRight className="size-6" />
               </motion.button>
             </div>
           </div>
@@ -1453,6 +1457,64 @@ export function AssessmentWizard() {
   )
 }
 
+function HelpGuideCollapsible() {
+  const [isOpen, setIsOpen] = useState(false)
+  return (
+    <div className="mx-auto w-full max-w-xl transition-all">
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={() => setIsOpen((prev) => !prev)}
+          className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/90 bg-white/80 px-3.5 py-1 text-xs font-extrabold text-sky-800 shadow-2xs backdrop-blur-md transition hover:border-sky-300 hover:bg-white hover:text-sky-950 cursor-pointer active:scale-95"
+        >
+          <Sparkles className="size-3 text-sky-600" />
+          <span>Hướng dẫn làm bài</span>
+          <ChevronDown
+            className={`size-3.5 text-sky-600 transition-transform duration-200 ${
+              isOpen ? "rotate-180" : ""
+            }`}
+          />
+        </button>
+      </div>
+
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="mt-2.5 rounded-2xl border border-sky-200/90 bg-white/90 p-4 text-xs leading-relaxed text-slate-700 shadow-sm backdrop-blur-xl">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="flex items-start gap-2">
+                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sky-100 text-[10px] font-black text-sky-800">
+                    1
+                  </span>
+                  <span>Đánh giá theo cảm nhận tự nhiên đầu tiên của bạn. Không có đáp án đúng hay sai.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sky-100 text-[10px] font-black text-sky-800">
+                    2
+                  </span>
+                  <span>Điểm số thể hiện mức độ hứng thú công việc, không đo lường áp lực hay điểm học lực.</span>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sky-100 text-[10px] font-black text-sky-800">
+                    3
+                  </span>
+                  <span>Phím tắt: dùng ← / → để chuyển câu, hoặc phím 1 - 5 để đánh giá nhanh.</span>
+                </div>
+              </div>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
 function RiasecQuestionsListView({
   items,
   answers,
@@ -1553,8 +1615,8 @@ function RiasecQuestionsListView({
                 </div>
               </div>
 
-              {/* 5-Level Reaction Emoticon Pills */}
-              <div className="flex items-center justify-between sm:justify-end gap-1 sm:gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
+              {/* 5-Level Reaction Emoticon Pills with 48px min-h tap targets */}
+              <div className="flex items-center justify-between sm:justify-end gap-1.5 sm:gap-2 shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                 {ONET_REACTION_SCALE.map((s) => {
                   const isPicked = chosenVal === s.value
                   return (
@@ -1563,10 +1625,10 @@ function RiasecQuestionsListView({
                       type="button"
                       onClick={() => onRate(item.code, s.value)}
                       title={`${s.label} (${s.value}/5)`}
-                      className={`flex flex-col items-center justify-center rounded-xl px-2.5 py-1.5 text-center transition ${
+                      className={`flex min-h-[48px] min-w-[48px] flex-col items-center justify-center rounded-xl px-2.5 py-1.5 text-center transition-all duration-150 cursor-pointer active:scale-95 ${
                         isPicked
                           ? "bg-sky-500 text-white shadow-xs ring-2 ring-sky-500/25 scale-105"
-                          : "bg-slate-100/90 text-slate-600 hover:bg-sky-50 hover:text-sky-700"
+                          : "bg-slate-100/90 text-slate-700 hover:bg-sky-50 hover:text-sky-800"
                       }`}
                     >
                       <span className="text-xl sm:text-2xl leading-none">{s.emoji}</span>
@@ -1646,10 +1708,8 @@ function VerticalQuestionCard({
         filter: "blur(3px)",
       }}
       transition={{
-        type: "spring",
-        stiffness: 320,
-        damping: 28,
-        mass: 0.85,
+        duration: 0.25,
+        ease: [0.22, 1, 0.36, 1],
       }}
       className={`relative flex flex-col cursor-grab active:cursor-grabbing select-none overflow-hidden rounded-3xl border border-white/90 bg-white/75 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_48px_rgba(14,165,233,0.14)] backdrop-blur-2xl transition-all duration-200 ${
         isLarge ? "p-6 sm:p-8 lg:p-9" : "p-5 sm:p-6"
@@ -1658,11 +1718,11 @@ function VerticalQuestionCard({
       {/* Specular Top Reflection */}
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
 
-      {/* 1. 16:9 Visual Illustration Frame for the Question */}
+      {/* 1. Visual Illustration Frame for the Question with Responsive Aspect Ratio */}
       <QuestionIllustrationFrame item={item} index={index} total={total} />
 
-      {/* 2. Question Content (Balanced Typography & Spacing) */}
-      <div className={`my-4 sm:my-6 text-center px-1`}>
+      {/* 2. Question Content (Balanced Typography & Generous Spacing) */}
+      <div className="my-4 sm:my-6 text-center px-1">
         <h2
           className={`font-black tracking-tight text-slate-900 leading-snug transition-all ${
             isLarge
@@ -1674,7 +1734,7 @@ function VerticalQuestionCard({
         </h2>
       </div>
 
-      {/* 3. 5-Level Rating Emoticons inside the Vertical Card Bottom */}
+      {/* 3. 5-Level Rating Emoticons with 52px+ Comfortable Tap Targets */}
       <div className="pt-4 border-t border-sky-100/80">
         {selectedValue && (
           <div className="mb-2.5 flex items-center justify-center">
@@ -1697,17 +1757,17 @@ function VerticalQuestionCard({
               type="button"
               whileHover={{ y: -2, scale: 1.05 }}
               whileTap={{ scale: 0.94 }}
-              transition={{ type: "spring", stiffness: 400, damping: 22 }}
+              transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
               onClick={(e) => {
                 e.stopPropagation()
                 onRate(btn.value)
               }}
-              className={`flex flex-col items-center justify-center rounded-2xl border text-center transition-all duration-200 ${
-                isLarge ? "py-3 sm:py-4 px-1.5 sm:px-2.5" : "py-2 px-1"
+              className={`flex min-h-[52px] sm:min-h-[62px] flex-col items-center justify-center rounded-2xl border text-center transition-all duration-150 cursor-pointer ${
+                isLarge ? "py-3 sm:py-3.5 px-1.5 sm:px-2.5" : "py-2 px-1"
               } ${
                 active
                   ? "border-sky-400 bg-gradient-to-b from-sky-500 to-cyan-500 text-white shadow-[0_8px_20px_rgba(14,165,233,0.3)] scale-[1.03]"
-                  : "border-white/90 bg-white/80 text-slate-700 shadow-xs hover:border-sky-300 hover:bg-white"
+                  : "border-white/90 bg-white/80 text-slate-700 shadow-xs hover:border-sky-300 hover:bg-white active:scale-95"
               }`}
             >
               <span className={isLarge ? "text-2xl sm:text-3xl leading-none" : "text-xl leading-none"}>

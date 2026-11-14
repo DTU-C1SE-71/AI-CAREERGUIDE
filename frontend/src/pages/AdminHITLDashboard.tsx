@@ -1,15 +1,18 @@
-import { motion } from "framer-motion"
+import { AnimatePresence, motion } from "framer-motion"
 import {
   Check,
   CheckCircle2,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
   Clock3,
   Copy,
   Database,
   Download,
   FileSpreadsheet,
   FileText,
+  HelpCircle,
   Layers3,
   RefreshCw,
   Search,
@@ -23,6 +26,7 @@ import remarkGfm from "remark-gfm"
 import * as XLSX from "xlsx"
 import { MajorsCatalogPanel } from "../components/admin/MajorsCatalogPanel"
 import { TrendAgentPanel } from "../components/admin/TrendAgentPanel"
+import { LLMConnectionPanel } from "../components/admin/LLMConnectionPanel"
 import { Badge } from "../components/common/Badge"
 import { Button } from "../components/common/Button"
 import { PageContainer } from "../components/layout/PageContainer"
@@ -102,6 +106,7 @@ interface ParsedSheetOption {
 }
 
 const ITEMS_PER_PAGE = 50
+const SMOOTH_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
 function parseExcelClientFallback(buffer: ArrayBuffer): {
   activeSheet: string
@@ -113,8 +118,14 @@ function parseExcelClientFallback(buffer: ArrayBuffer): {
 
   const headerMapLookup: Record<string, string> = {
     field_code: "field_code",
+    field_name: "field_name",
+    "lĩnh vực đào tạo": "field_name",
+    "tên lĩnh vực": "field_name",
+    category: "field_name",
     group_code: "group_code",
     group_name: "group_name",
+    "nhóm ngành đào tạo": "group_name",
+    "tên nhóm ngành": "group_name",
     major_code: "major_code",
     "mã ngành": "major_code",
     ma_nganh: "major_code",
@@ -191,6 +202,7 @@ function parseExcelClientFallback(buffer: ArrayBuffer): {
         major_code: full7,
         raw_code: raw6,
         name: rec.major_name || `Ngành ${raw6}`,
+        category: rec.field_name || rec.group_name || "Khác",
         field_code: rec.field_code || raw6.slice(0, 2),
         group_code: rec.group_code || raw6.slice(0, 4),
         group_name: rec.group_name,
@@ -230,6 +242,7 @@ export function AdminHITLDashboard() {
   const [dbHealth, setDbHealth] = useState<DbHealthPayload | null>(null)
   const [toast, setToast] = useState<{ msg: string; error?: boolean } | null>(null)
   const [copiedPrompt, setCopiedPrompt] = useState(false)
+  const [showHelpGuide, setShowHelpGuide] = useState(false)
 
   // Drag & Drop + Preview state
   const [isDragging, setIsDragging] = useState(false)
@@ -469,6 +482,7 @@ export function AdminHITLDashboard() {
       formData.append("file", previewFile)
       const qs = new URLSearchParams({
         preview_only: "false",
+        replace_catalog: "true",
         ...(activeSheetName ? { sheet_name: activeSheetName } : {}),
       }).toString()
       const res = await fetch(`/api/v1/taxonomy/import-excel?${qs}`, {
@@ -487,11 +501,10 @@ export function AdminHITLDashboard() {
         throw new Error("Backend chưa ghi được dữ liệu vào CSDL PostgreSQL.")
       }
       const totalImported = data.total ?? previewMajors.length
+      const deletedOld = data.deleted_old ?? 0
 
-      const deactivatedNote =
-        data.deactivated && data.deactivated > 0
-          ? `, Tạm ẩn mã cũ: ${data.deactivated}`
-          : ""
+      const deletedNote =
+        deletedOld > 0 ? `Đã xóa sạch ${deletedOld} ngành cũ, ` : ""
       const newRecord: StagingRecord = {
         id: Date.now(),
         title: `Import · ${previewFile.name}`,
@@ -500,7 +513,7 @@ export function AdminHITLDashboard() {
         type: "Excel Auto-Map",
         status: "APPROVED",
         updated: "Vừa đồng bộ",
-        markdown: `Đã nạp **${totalImported} ngành** từ Sheet \`${activeSheetName}\` (Mới: ${data.inserted ?? 0}, Cập nhật: ${data.updated ?? totalImported}${deactivatedNote}).`,
+        markdown: `${deletedNote}đã nạp mới **${totalImported} ngành** từ Sheet \`${activeSheetName}\`.`,
       }
       setRecords((prev) => [newRecord, ...prev])
       setSelectedId(newRecord.id)
@@ -516,7 +529,7 @@ export function AdminHITLDashboard() {
       setCatalogRefreshKey((key) => key + 1)
 
       showToast(
-        `Đã lưu ${totalImported} ngành vào CSDL! (Thêm mới: ${data.inserted ?? 0}, Cập nhật: ${data.updated ?? 0}${deactivatedNote})`,
+        `${deletedNote}đã lưu mới ${totalImported} ngành vào CSDL!`,
       )
       setPreviewFile(null)
       setPreviewMajors([])
@@ -563,7 +576,7 @@ export function AdminHITLDashboard() {
 
   return (
     <section className="min-h-screen py-5">
-      <PageContainer className="max-w-[1450px]">
+      <PageContainer size="wide">
         {toast && (
           <motion.div
             initial={{ opacity: 0, y: -8 }}
@@ -576,12 +589,15 @@ export function AdminHITLDashboard() {
           >
             <span className="flex items-center gap-2">
               <CheckCircle2
-                size={15}
+                size={16}
                 className={toast.error ? "text-rose-600" : "text-emerald-600"}
               />
               {toast.msg}
             </span>
-            <button onClick={() => setToast(null)} className="opacity-70 hover:opacity-100">
+            <button
+              onClick={() => setToast(null)}
+              className="rounded-lg p-1 opacity-70 hover:bg-black/5 hover:opacity-100 cursor-pointer"
+            >
               <X size={14} />
             </button>
           </motion.div>
@@ -589,67 +605,147 @@ export function AdminHITLDashboard() {
 
         {/* Minimal Header */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-          <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
-            Quản trị Danh mục Ngành
-          </h1>
+          <div>
+            <h1 className="text-xl font-black tracking-tight text-slate-900 sm:text-2xl">
+              Quản trị Danh mục Ngành & Tuyển sinh
+            </h1>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Chuẩn hóa danh mục MOET TT74/TT09, phân loại RIASEC/CIP và điều phối dữ liệu đào tạo
+            </p>
+          </div>
 
           <div className="flex items-center gap-2.5">
             <div className="flex items-center gap-2 rounded-xl border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm">
-              <Database size={14} className="text-sky-600" />
-              <span className="text-[11px] text-slate-500">CSDL:</span>
-              <span className="text-xs font-black text-slate-900">
+              <Database size={15} className="text-sky-600" />
+              <span className="text-xs text-slate-500 font-medium">CSDL:</span>
+              <span className="text-xs font-bold text-slate-900 tabular-nums">
                 {dbHealth?.majors_count !== undefined ? `${dbHealth.majors_count} ngành` : "--"}
               </span>
             </div>
             <div className="flex items-center gap-2 rounded-xl border border-white/80 bg-white/75 px-3 py-1.5 shadow-sm">
-              <Clock3 size={14} className="text-amber-600" />
-              <span className="text-[11px] text-slate-500">Chờ duyệt:</span>
-              <span className="text-xs font-black text-amber-600">{pendingCount}</span>
+              <Clock3 size={15} className="text-amber-600" />
+              <span className="text-xs text-slate-500 font-medium">Chờ duyệt HITL:</span>
+              <span className="text-xs font-bold text-amber-600 tabular-nums">{pendingCount}</span>
             </div>
           </div>
         </div>
 
-        {/* 2 Compact Cards: Excel Template | AI Prompt */}
-        <div className="mb-4 grid gap-3 md:grid-cols-2">
-          <div className="glass-card flex items-center justify-between gap-3 rounded-2xl p-3.5">
+        {/* 2 Compact Guidance Cards: Excel Template | AI Prompt */}
+        <div className="mb-3 grid gap-3 md:grid-cols-2">
+          <div className="glass-card flex items-center justify-between gap-3 rounded-2xl p-4">
             <div className="flex items-center gap-3">
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-emerald-500 text-white">
-                <FileSpreadsheet size={18} />
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-emerald-500 text-white shadow-xs">
+                <FileSpreadsheet size={19} />
               </span>
               <div>
-                <h2 className="text-xs font-black text-slate-900">File Excel Mẫu (.xlsx)</h2>
-                <p className="text-[10px] text-slate-500">19 cột chuẩn · Kèm mô tả cách nhập từng cột</p>
+                <h2 className="text-sm font-bold text-slate-900">File Excel Mẫu (.xlsx)</h2>
+                <p className="text-xs text-slate-500">
+                  19 cột chuẩn TT74/TT09 · Bảng tra cứu CIP & RIASEC mẫu
+                </p>
               </div>
             </div>
             <Button
               onClick={downloadExcelTemplate}
               icon={Download}
-              className="!min-h-8 !px-3.5 !py-1.5 !text-xs !bg-emerald-600 hover:!bg-emerald-700 shrink-0"
+              className="!min-h-9 !px-3.5 !py-1.5 !text-xs !bg-emerald-600 hover:!bg-emerald-700 shrink-0"
             >
-              Tải mẫu
+              Tải mẫu chuẩn
             </Button>
           </div>
 
-          <div className="glass-card flex items-center justify-between gap-3 rounded-2xl p-3.5">
+          <div className="glass-card flex items-center justify-between gap-3 rounded-2xl p-4">
             <div className="flex items-center gap-3">
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-sky-500 text-white">
-                <Sparkles size={18} />
+              <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-sky-500 text-white shadow-xs">
+                <Sparkles size={19} />
               </span>
               <div>
-                <h2 className="text-xs font-black text-slate-900">Prompt cho AI</h2>
-                <p className="text-[10px] text-slate-500">Chuyển PDF Thông tư → Excel</p>
+                <h2 className="text-sm font-bold text-slate-900">Prompt AI Trích Xuất</h2>
+                <p className="text-xs text-slate-500">
+                  Chuyển PDF Thông tư Bộ GD&ĐT sang bảng dữ liệu chuẩn hóa
+                </p>
               </div>
             </div>
-            <Button
-              variant={copiedPrompt ? "primary" : "secondary"}
-              onClick={copyExternalAiPrompt}
-              icon={copiedPrompt ? Check : Copy}
-              className="!min-h-8 !px-3.5 !py-1.5 !text-xs shrink-0"
-            >
-              {copiedPrompt ? "Đã Copy" : "Copy Prompt"}
-            </Button>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button
+                variant={copiedPrompt ? "primary" : "secondary"}
+                onClick={copyExternalAiPrompt}
+                icon={copiedPrompt ? Check : Copy}
+                className="!min-h-9 !px-3.5 !py-1.5 !text-xs shrink-0"
+              >
+                {copiedPrompt ? "Đã Copy" : "Copy Prompt"}
+              </Button>
+            </div>
           </div>
         </div>
+
+        {/* Collapsible Format Guidance & Instructions */}
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => setShowHelpGuide((v) => !v)}
+            aria-expanded={showHelpGuide}
+            className="inline-flex items-center gap-2 text-xs font-semibold text-slate-600 hover:text-sky-700 cursor-pointer transition px-1"
+          >
+            <HelpCircle size={14} className="text-sky-600" />
+            <span>Hướng dẫn định dạng 19 cột & quy trình Prompt AI</span>
+            {showHelpGuide ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+
+          <AnimatePresence initial={false}>
+            {showHelpGuide && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0 }}
+                transition={{ duration: 0.2, ease: SMOOTH_EASE }}
+                className="overflow-hidden"
+              >
+                <div className="mt-2.5 rounded-2xl border border-sky-200/80 bg-white/95 p-4 text-xs text-slate-700 shadow-xs space-y-3">
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+                      <p className="font-bold text-slate-900 mb-1">1. Định danh ngành (7 cột)</p>
+                      <p className="font-mono text-slate-600 leading-relaxed">
+                        field_code, field_name, group_code, group_name, major_code, major_name, legacy_tt09_codes
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+                      <p className="font-bold text-slate-900 mb-1">2. CIP & RIASEC (8 cột)</p>
+                      <p className="font-mono text-slate-600 leading-relaxed">
+                        cip_code, holland_code, riasec_r, riasec_i, riasec_a, riasec_s, riasec_e, riasec_c (0.0 → 1.0)
+                      </p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200/80 bg-slate-50/70 p-3">
+                      <p className="font-bold text-slate-900 mb-1">3. Tuyển sinh & Nghề (4 cột)</p>
+                      <p className="font-mono text-slate-600 leading-relaxed">
+                        degree_levels, circular_note, subject_blocks (A00, A01...), career_paths
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="rounded-xl border border-sky-100 bg-sky-50/60 p-3">
+                    <div className="flex items-center justify-between gap-2 mb-1.5">
+                      <span className="font-bold text-sky-900">Prompt AI chuẩn bị sẵn cho ChatGPT / Claude / Gemini:</span>
+                      <button
+                        type="button"
+                        onClick={copyExternalAiPrompt}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-sky-700 hover:text-sky-900 cursor-pointer"
+                      >
+                        {copiedPrompt ? <Check size={13} /> : <Copy size={13} />}
+                        {copiedPrompt ? "Đã chép" : "Chép prompt"}
+                      </button>
+                    </div>
+                    <pre className="whitespace-pre-wrap font-sans text-slate-700 leading-relaxed">
+                      {EXTERNAL_AI_PROMPT}
+                    </pre>
+                  </div>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </div>
+
+        {/* Trạng thái kết nối AI & API Key */}
+        <LLMConnectionPanel onNotify={showToast} />
 
         {/* AI Trend Hunter Agent Panel (Chạy thủ công khi Admin bấm nút) */}
         <TrendAgentPanel onNotify={showToast} />
@@ -682,26 +778,31 @@ export function AdminHITLDashboard() {
             }`}
           >
             <UploadCloud
-              size={22}
+              size={24}
               className={`pointer-events-none mb-1.5 transition ${
                 isDragging ? "text-sky-600 animate-bounce" : "text-sky-500"
               }`}
             />
-            <p className="pointer-events-none text-xs font-extrabold text-slate-700">
+            <p className="pointer-events-none text-sm font-bold text-slate-800">
               {parsingFile
-                ? "Đang phân tích file Excel..."
+                ? "Đang phân tích file Excel và các sheet..."
                 : isDragging
-                  ? "Thả file vào đây"
-                  : "Kéo thả file Excel (.xlsx, .csv) vào đây hoặc bấm chọn file"}
+                  ? "Thả file vào đây để phân tích"
+                  : "Kéo thả file Excel (.xlsx, .xls, .csv) vào đây hoặc bấm để chọn"}
+            </p>
+            <p className="pointer-events-none mt-0.5 text-xs text-slate-500">
+              Hệ thống tự động đọc bảng dữ liệu, chuẩn hóa mã 7 số TT74 và liên kết mã TT09
             </p>
           </div>
 
           {/* Preview Table */}
           {previewMajors.length > 0 && (
             <div className="mt-4 overflow-hidden rounded-2xl border border-sky-200 bg-white shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-2.5 border-b border-slate-100 bg-sky-50/80 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 bg-sky-50/80 p-3 sm:p-3.5">
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone="emerald">Tổng: {previewMajors.length} ngành</Badge>
+                  <Badge tone="emerald">
+                    <span className="tabular-nums">Tổng: {previewMajors.length} ngành</span>
+                  </Badge>
                   <span className="max-w-[200px] truncate text-xs font-bold text-slate-700">
                     {previewFile?.name}
                   </span>
@@ -714,26 +815,35 @@ export function AdminHITLDashboard() {
                             key={s.sheet_name}
                             type="button"
                             onClick={() => handleSheetChange(s.sheet_name)}
-                            className={`rounded-lg px-2.5 py-1 text-[11px] font-bold transition ${
+                            className={`relative rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
                               isActive
-                                ? "bg-sky-600 text-white shadow-xs"
+                                ? "text-white shadow-xs"
                                 : "text-slate-600 hover:bg-sky-50 hover:text-sky-700"
                             }`}
                           >
-                            {s.sheet_name} ({s.count} ngành)
+                            {isActive && (
+                              <motion.span
+                                layoutId="preview-sheet-tab-pill"
+                                transition={{ duration: 0.2, ease: SMOOTH_EASE }}
+                                className="absolute inset-0 rounded-lg bg-sky-600"
+                              />
+                            )}
+                            <span className="relative z-10 tabular-nums">
+                              {s.sheet_name} ({s.count} ngành)
+                            </span>
                           </button>
                         )
                       })}
                     </div>
                   ) : (
                     activeSheetName && (
-                      <span className="rounded-md bg-white px-2 py-0.5 text-[10px] font-bold text-slate-500 border border-slate-200">
+                      <span className="rounded-md bg-white px-2 py-0.5 text-xs font-semibold text-slate-600 border border-slate-200 tabular-nums">
                         Sheet: {activeSheetName} ({previewMajors.length} ngành)
                       </span>
                     )
                   )}
                   {parseTimeMs !== null && (
-                    <span className="text-[10px] font-semibold text-slate-400">
+                    <span className="text-xs font-medium text-slate-400 tabular-nums">
                       ({parseTimeMs}ms)
                     </span>
                   )}
@@ -741,7 +851,7 @@ export function AdminHITLDashboard() {
 
                 <div className="flex flex-wrap items-center gap-2">
                   <div className="relative">
-                    <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                    <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
                     <input
                       value={previewSearch}
                       onChange={(e) => {
@@ -766,29 +876,29 @@ export function AdminHITLDashboard() {
                     onClick={confirmImportToDb}
                     loading={committingImport}
                     icon={Check}
-                    className="!min-h-8 !px-4 !py-1 !text-xs"
+                    className="!min-h-8 !px-4 !py-1 !text-xs !bg-emerald-600 hover:!bg-emerald-700"
                   >
                     Import {previewMajors.length} ngành vào CSDL
                   </Button>
                 </div>
               </div>
 
-              <div className="max-h-[420px] overflow-auto">
-                <table className="w-full border-collapse text-left text-[11px]">
-                  <thead className="sticky top-0 z-10 bg-slate-50 text-[10px] font-extrabold uppercase text-slate-500 shadow-sm">
+              <div className="max-h-[440px] overflow-x-auto overflow-y-auto">
+                <table className="w-full min-w-[960px] border-collapse text-left text-sm">
+                  <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-600 shadow-sm border-b border-slate-200">
                     <tr>
-                      <th className="border-b border-slate-200 px-2.5 py-2 text-center w-10">STT</th>
-                      <th className="border-b border-slate-200 px-2.5 py-2">Mã TT74</th>
-                      <th className="border-b border-slate-200 px-2.5 py-2">Mã TT09</th>
-                      <th className="border-b border-slate-200 px-2.5 py-2 min-w-[170px]">Tên ngành</th>
-                      <th className="border-b border-slate-200 px-2.5 py-2 text-center">Nhóm</th>
-                      <th className="border-b border-slate-200 px-2.5 py-2 text-center">CIP</th>
-                      <th className="border-b border-slate-200 px-2.5 py-2 text-center">Holland</th>
-                      <th className="border-b border-slate-200 px-2.5 py-2 min-w-[235px]">
+                      <th className="px-3 py-2.5 text-center w-12">STT</th>
+                      <th className="px-3 py-2.5 w-28">Mã TT74</th>
+                      <th className="px-3 py-2.5 w-28">Mã TT09</th>
+                      <th className="px-3 py-2.5 min-w-[200px]">Tên ngành</th>
+                      <th className="px-3 py-2.5 text-center w-24">Nhóm</th>
+                      <th className="px-3 py-2.5 text-center w-24">CIP</th>
+                      <th className="px-3 py-2.5 text-center w-24">Holland</th>
+                      <th className="px-3 py-2.5 min-w-[260px]">
                         Vector RIASEC (R·I·A·S·E·C)
                       </th>
-                      <th className="border-b border-slate-200 px-2.5 py-2">Khối thi</th>
-                      <th className="border-b border-slate-200 px-2.5 py-2">Nhận thức</th>
+                      <th className="px-3 py-2.5 min-w-[130px]">Khối thi</th>
+                      <th className="px-3 py-2.5 w-28">Nhận thức</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
@@ -797,37 +907,41 @@ export function AdminHITLDashboard() {
                       const cog = item.cognitive || {}
                       return (
                         <tr key={`${stt}-${item.major_code}`} className="hover:bg-sky-50/40">
-                          <td className="px-2.5 py-1.5 text-center font-bold text-slate-500">{stt}</td>
-                          <td className="px-2.5 py-1.5 font-mono font-bold text-sky-700">
+                          <td className="px-3 py-2 text-center text-xs font-bold text-slate-400 tabular-nums">
+                            {stt}
+                          </td>
+                          <td className="px-3 py-2 font-mono text-xs font-bold text-sky-700">
                             {item.major_code}
                           </td>
                           <td
-                            className="max-w-[110px] truncate px-2.5 py-1.5 font-mono text-[10px] text-slate-500"
+                            className="max-w-[120px] truncate px-3 py-2 font-mono text-xs text-slate-500"
                             title={item.legacy_tt09_codes}
                           >
-                            {item.legacy_tt09_codes || "-"}
+                            {item.legacy_tt09_codes || "—"}
                           </td>
-                          <td className="px-2.5 py-1.5 font-semibold text-slate-800">{item.name}</td>
-                          <td className="px-2.5 py-1.5 text-center font-mono text-slate-600">
-                            {item.group_code || "-"}
+                          <td className="px-3 py-2 font-semibold text-slate-900">
+                            {item.name}
                           </td>
-                          <td className="px-2.5 py-1.5 text-center font-mono font-bold text-emerald-700">
-                            {item.cip_code || "-"}
+                          <td className="px-3 py-2 text-center font-mono text-xs text-slate-600">
+                            {item.group_code || "—"}
                           </td>
-                          <td className="px-2.5 py-1.5 text-center">
-                            <span className="rounded bg-indigo-50 px-1.5 py-0.5 font-mono text-[10px] font-extrabold text-indigo-700">
-                              {item.holland_code || "-"}
+                          <td className="px-3 py-2 text-center font-mono text-xs font-bold text-emerald-700">
+                            {item.cip_code || "—"}
+                          </td>
+                          <td className="px-3 py-2 text-center">
+                            <span className="rounded bg-indigo-50 px-2 py-0.5 font-mono text-xs font-bold text-indigo-700">
+                              {item.holland_code || "—"}
                             </span>
                           </td>
-                          <td className="px-2.5 py-1.5 font-mono text-[10px]">
-                            <div className="flex gap-1">
+                          <td className="px-3 py-2 font-mono text-xs">
+                            <div className="flex gap-1 tabular-nums">
                               {(["R", "I", "A", "S", "E", "C"] as const).map((dim) => (
                                 <span
                                   key={dim}
-                                  className={`rounded px-1 py-0.5 ${
+                                  className={`rounded px-1.5 py-0.5 ${
                                     (rv[dim] ?? 0) >= 0.7
                                       ? "bg-sky-100 font-bold text-sky-800"
-                                      : "bg-slate-100 text-slate-500"
+                                      : "bg-slate-100 text-slate-600"
                                   }`}
                                 >
                                   {dim}:{Number(rv[dim] ?? 0).toFixed(2)}
@@ -835,10 +949,10 @@ export function AdminHITLDashboard() {
                               ))}
                             </div>
                           </td>
-                          <td className="px-2.5 py-1.5 font-mono text-[10px] font-semibold text-slate-700">
-                            {(item.blocks || []).join(", ")}
+                          <td className="px-3 py-2 font-mono text-xs font-semibold text-slate-700">
+                            {(item.blocks || []).join(", ") || "—"}
                           </td>
-                          <td className="px-2.5 py-1.5 text-[10px] text-slate-500">
+                          <td className="px-3 py-2 text-xs text-slate-600 capitalize">
                             {cog.abstract_thinking || "med"}/{cog.analytical_reasoning || "med"}
                           </td>
                         </tr>
@@ -848,9 +962,9 @@ export function AdminHITLDashboard() {
                 </table>
               </div>
 
-              <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-3 py-2 text-[11px] text-slate-600">
+              <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-4 py-2.5 text-xs text-slate-600 tabular-nums">
                 <span>
-                  {paginatedPreviewMajors.length} / {indexedPreviewMajors.length} ngành
+                  Hiển thị {paginatedPreviewMajors.length} / {indexedPreviewMajors.length} ngành
                 </span>
                 {totalPreviewPages > 1 && (
                   <div className="flex items-center gap-1.5">
@@ -858,20 +972,20 @@ export function AdminHITLDashboard() {
                       type="button"
                       disabled={previewPage <= 1}
                       onClick={() => setPreviewPage((p) => Math.max(1, p - 1))}
-                      className="grid size-6 place-items-center rounded border border-slate-200 bg-white disabled:opacity-40"
+                      className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white transition hover:border-sky-300 disabled:opacity-40 cursor-pointer"
                     >
-                      <ChevronLeft size={13} />
+                      <ChevronLeft size={14} />
                     </button>
-                    <span className="px-1.5 font-bold">
-                      {previewPage}/{totalPreviewPages}
+                    <span className="px-2 font-bold text-slate-800">
+                      {previewPage} / {totalPreviewPages}
                     </span>
                     <button
                       type="button"
                       disabled={previewPage >= totalPreviewPages}
                       onClick={() => setPreviewPage((p) => Math.min(totalPreviewPages, p + 1))}
-                      className="grid size-6 place-items-center rounded border border-slate-200 bg-white disabled:opacity-40"
+                      className="grid size-7 place-items-center rounded-lg border border-slate-200 bg-white transition hover:border-sky-300 disabled:opacity-40 cursor-pointer"
                     >
-                      <ChevronRight size={13} />
+                      <ChevronRight size={14} />
                     </button>
                   </div>
                 )}
@@ -881,135 +995,193 @@ export function AdminHITLDashboard() {
         </div>
 
         {/* Danh mục ngành đào tạo đang hoạt động trong CSDL */}
-        <MajorsCatalogPanel refreshKey={catalogRefreshKey} onNotify={showToast} />
+        <div className="mb-5">
+          <MajorsCatalogPanel refreshKey={catalogRefreshKey} onNotify={showToast} />
+        </div>
 
-        {/* Minimal HITL Review */}
+        {/* Human-in-the-loop (HITL) Review Panel */}
         <div className="glass-card overflow-hidden rounded-3xl">
-          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/70 p-3.5">
-            <div className="flex items-center gap-2">
-              <Layers3 size={16} className="text-sky-600" />
-              <h2 className="text-sm font-black text-slate-900">Kiểm duyệt HITL</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="flex rounded-xl bg-white/60 p-0.5 ring-1 ring-slate-200">
-                {(["ALL", "PENDING", "APPROVED", "REJECTED"] as (Status | "ALL")[]).map((st) => (
-                  <button
-                    key={st}
-                    type="button"
-                    onClick={() => setStatusFilter(st)}
-                    className={`rounded-lg px-2 py-1 text-[10px] font-extrabold transition ${
-                      statusFilter === st ? "bg-sky-600 text-white" : "text-slate-500"
-                    }`}
-                  >
-                    {st === "ALL" ? "Tất cả" : st}
-                  </button>
-                ))}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-white/70 p-4">
+            <div className="flex items-center gap-2.5">
+              <span className="grid size-9 place-items-center rounded-xl bg-sky-600 text-white shadow-xs">
+                <Layers3 size={18} />
+              </span>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Kiểm duyệt HITL (Staging Records)</h2>
+                <p className="text-xs text-slate-500">Phê duyệt lộ trình học tập và bản ghi trích xuất RAG</p>
               </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex rounded-xl bg-white/70 p-1 ring-1 ring-slate-200 shadow-2xs">
+                {(["ALL", "PENDING", "APPROVED", "REJECTED"] as (Status | "ALL")[]).map((st) => {
+                  const isActive = statusFilter === st
+                  return (
+                    <button
+                      key={st}
+                      type="button"
+                      onClick={() => setStatusFilter(st)}
+                      className={`relative rounded-lg px-2.5 py-1 text-xs font-bold transition cursor-pointer ${
+                        isActive ? "text-white shadow-xs" : "text-slate-600 hover:text-sky-700"
+                      }`}
+                    >
+                      {isActive && (
+                        <motion.span
+                          layoutId="hitl-status-filter-pill"
+                          transition={{ duration: 0.2, ease: SMOOTH_EASE }}
+                          className="absolute inset-0 rounded-lg bg-sky-600"
+                        />
+                      )}
+                      <span className="relative z-10">
+                        {st === "ALL" ? "Tất cả" : st}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+
               <div className="relative">
-                <Search size={13} className="absolute left-2.5 top-2.5 text-slate-400" />
+                <Search size={14} className="absolute left-2.5 top-2.5 text-slate-400" />
                 <input
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Tìm..."
-                  className="h-8 w-36 rounded-xl border border-slate-200 bg-white/80 pl-8 pr-2 text-xs outline-none"
+                  placeholder="Tìm bản ghi..."
+                  className="h-8 w-40 rounded-xl border border-slate-200 bg-white/90 pl-8 pr-2.5 text-xs outline-none focus:ring-2 focus:ring-sky-200"
                 />
               </div>
             </div>
           </div>
 
-          <div className="grid min-h-[340px] lg:grid-cols-[310px_1fr]">
-            <div className="max-h-[360px] divide-y divide-slate-100 overflow-y-auto border-b border-white/70 lg:border-b-0 lg:border-r">
-              {filteredRecords.map((record) => (
-                <button
-                  key={record.id}
-                  type="button"
-                  onClick={() => setSelectedId(record.id)}
-                  className={`flex w-full items-center gap-2.5 p-3 text-left transition ${
-                    selected?.id === record.id ? "bg-sky-50/90" : "hover:bg-white/50"
-                  }`}
-                >
-                  <FileText size={15} className="shrink-0 text-sky-600" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-bold text-slate-800">{record.title}</p>
-                    <div className="mt-1 flex items-center gap-1.5">
-                      <Badge
-                        tone={
-                          record.status === "APPROVED"
-                            ? "emerald"
-                            : record.status === "REJECTED"
-                              ? "rose"
-                              : "amber"
-                        }
-                      >
-                        {record.status}
-                      </Badge>
-                      <span className="text-[10px] text-slate-400">{record.majorCode}</span>
+          <div className="grid min-h-[360px] lg:grid-cols-[330px_1fr]">
+            {/* Records List (Left Pane) */}
+            <div className="max-h-[380px] divide-y divide-slate-100 overflow-y-auto border-b border-white/70 lg:border-b-0 lg:border-r">
+              {filteredRecords.length === 0 ? (
+                <div className="p-8 text-center text-xs font-medium text-slate-400">
+                  Không tìm thấy bản ghi nào phù hợp.
+                </div>
+              ) : (
+                filteredRecords.map((record) => (
+                  <button
+                    key={record.id}
+                    type="button"
+                    onClick={() => setSelectedId(record.id)}
+                    className={`flex w-full items-center gap-3 p-3.5 text-left transition cursor-pointer ${
+                      selected?.id === record.id
+                        ? "bg-sky-50/90 border-l-3 border-sky-600"
+                        : "hover:bg-white/60"
+                    }`}
+                  >
+                    <FileText
+                      size={17}
+                      className={`shrink-0 ${
+                        selected?.id === record.id ? "text-sky-600" : "text-slate-400"
+                      }`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold text-slate-800">{record.title}</p>
+                      <div className="mt-1 flex items-center gap-2">
+                        <Badge
+                          tone={
+                            record.status === "APPROVED"
+                              ? "emerald"
+                              : record.status === "REJECTED"
+                                ? "rose"
+                                : "amber"
+                          }
+                        >
+                          {record.status}
+                        </Badge>
+                        <span className="font-mono text-xs text-slate-500">{record.majorCode}</span>
+                        <span className="text-xs text-slate-400 ml-auto">{record.updated}</span>
+                      </div>
                     </div>
-                  </div>
-                </button>
-              ))}
+                  </button>
+                ))
+              )}
             </div>
 
-            {selected && (
+            {/* Selected Record Detail (Right Pane) */}
+            {selected ? (
               <div className="flex min-w-0 flex-col justify-between">
-                <div className="p-4">
-                  <div className="mb-3 flex items-center justify-between border-b border-slate-100 pb-2.5">
+                <div className="p-4 sm:p-5">
+                  <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
                     <div>
-                      <h3 className="text-sm font-black text-slate-900">{selected.title}</h3>
-                      <p className="text-[10px] text-slate-400">
-                        {selected.majorCode} · {selected.source}
+                      <h3 className="text-base font-bold text-slate-900">{selected.title}</h3>
+                      <p className="text-xs text-slate-500 font-medium">
+                        Mã: <span className="font-mono font-semibold text-sky-700">{selected.majorCode}</span> · Nguồn: {selected.source} · Loại: {selected.type}
                       </p>
                     </div>
-                    <div className="flex rounded-lg bg-white/70 p-0.5 ring-1 ring-slate-200">
+
+                    <div className="flex rounded-lg bg-slate-100/90 p-0.5 ring-1 ring-slate-200">
                       <button
                         type="button"
                         onClick={() => setPreviewMode("markdown")}
-                        className={`rounded px-2 py-0.5 text-[10px] font-bold ${
-                          previewMode === "markdown" ? "bg-sky-600 text-white" : "text-slate-500"
+                        className={`relative rounded-md px-3 py-1 text-xs font-bold transition cursor-pointer ${
+                          previewMode === "markdown" ? "text-white" : "text-slate-600 hover:text-sky-700"
                         }`}
                       >
-                        Text
+                        {previewMode === "markdown" && (
+                          <motion.span
+                            layoutId="hitl-preview-mode-pill"
+                            transition={{ duration: 0.2, ease: SMOOTH_EASE }}
+                            className="absolute inset-0 rounded-md bg-sky-600 shadow-2xs"
+                          />
+                        )}
+                        <span className="relative z-10">Văn bản</span>
                       </button>
                       <button
                         type="button"
                         onClick={() => setPreviewMode("json")}
-                        className={`rounded px-2 py-0.5 text-[10px] font-bold ${
-                          previewMode === "json" ? "bg-sky-600 text-white" : "text-slate-500"
+                        className={`relative rounded-md px-3 py-1 text-xs font-bold transition cursor-pointer ${
+                          previewMode === "json" ? "text-white" : "text-slate-600 hover:text-sky-700"
                         }`}
                       >
-                        JSON
+                        {previewMode === "json" && (
+                          <motion.span
+                            layoutId="hitl-preview-mode-pill"
+                            transition={{ duration: 0.2, ease: SMOOTH_EASE }}
+                            className="absolute inset-0 rounded-md bg-sky-600 shadow-2xs"
+                          />
+                        )}
+                        <span className="relative z-10">JSON</span>
                       </button>
                     </div>
                   </div>
 
-                  <div className="max-h-[220px] overflow-auto rounded-2xl border border-sky-100 bg-sky-50/40 p-3.5 text-xs leading-5 text-slate-700">
+                  <div className="max-h-[250px] overflow-auto rounded-2xl border border-sky-100 bg-sky-50/40 p-4 text-sm leading-relaxed text-slate-700">
                     {previewMode === "markdown" ? (
-                      <Markdown remarkPlugins={[remarkGfm]}>{selected.markdown}</Markdown>
+                      <div className="prose prose-sm max-w-none text-slate-700">
+                        <Markdown remarkPlugins={[remarkGfm]}>{selected.markdown}</Markdown>
+                      </div>
                     ) : (
-                      <pre className="font-mono text-[11px] text-sky-900">
+                      <pre className="font-mono text-xs leading-relaxed text-sky-950 bg-slate-900/5 p-3 rounded-xl overflow-x-auto">
                         {JSON.stringify(selected, null, 2)}
                       </pre>
                     )}
                   </div>
                 </div>
 
-                <div className="flex items-center justify-end gap-2 border-t border-white/70 bg-white/40 p-3">
+                <div className="flex items-center justify-end gap-2.5 border-t border-white/70 bg-white/40 p-3 sm:px-5">
                   <Button
                     variant="secondary"
                     icon={RefreshCw}
                     onClick={() => updateStatus("REJECTED")}
-                    className="!min-h-8 !px-3.5 !text-xs"
+                    className="!min-h-9 !px-4 !text-xs !text-rose-700 hover:!bg-rose-50"
                   >
                     Từ chối
                   </Button>
                   <Button
                     icon={Check}
                     onClick={() => updateStatus("APPROVED")}
-                    className="!min-h-8 !px-3.5 !text-xs"
+                    className="!min-h-9 !px-4 !text-xs !bg-emerald-600 hover:!bg-emerald-700"
                   >
                     Phê duyệt
                   </Button>
                 </div>
+              </div>
+            ) : (
+              <div className="grid place-items-center p-12 text-sm text-slate-400">
+                Chọn một bản ghi bên trái để xem nội dung kiểm duyệt.
               </div>
             )}
           </div>

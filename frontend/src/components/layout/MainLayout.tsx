@@ -10,7 +10,9 @@ export function MainLayout() {
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
-  const [desktop, setDesktop] = useState(() => window.innerWidth >= 1024)
+  const [desktop, setDesktop] = useState(() =>
+    typeof window !== "undefined" ? window.innerWidth >= 1024 : true,
+  )
   const location = useLocation()
 
   useEffect(() => {
@@ -25,6 +27,7 @@ export function MainLayout() {
       <div className="mesh-blob mesh-blob-sky" />
       <div className="mesh-blob mesh-blob-blue" />
       <div className="mesh-blob mesh-blob-cyan" />
+
       <Sidebar
         collapsed={collapsed}
         mobileOpen={mobileOpen}
@@ -33,37 +36,45 @@ export function MainLayout() {
         onMobileOpen={() => setMobileOpen(true)}
         onOpenChat={() => setChatOpen(true)}
       />
+
       <motion.div
         initial={false}
-        animate={{ paddingLeft: desktop ? (collapsed ? 76 : 300) : 0 }}
-        transition={{ type: "spring", stiffness: 300, damping: 30 }}
-        className="relative z-10 flex min-h-screen flex-col pt-20 lg:pt-0"
+        animate={{ paddingLeft: desktop ? (collapsed ? 84 : 284) : 0 }}
+        transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
+        className="relative z-10 flex min-h-screen flex-col pt-18 lg:pt-0"
       >
         <AnimatePresence mode="wait">
           <motion.main
             key={location.pathname}
             className="flex-1"
-            initial={{ opacity: 0, y: 12, filter: "blur(4px)" }}
-            animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: -6, filter: "blur(3px)" }}
-            transition={{ duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -4 }}
+            transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
           >
             <Outlet />
           </motion.main>
         </AnimatePresence>
         <Footer />
       </motion.div>
+
       <AIChatAdvisor open={chatOpen} onClose={() => setChatOpen(false)} />
+
       {!chatOpen && (
         <motion.button
+          type="button"
           onClick={() => setChatOpen(true)}
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.04, y: -2 }}
           whileTap={{ scale: 0.96 }}
-          className="fixed bottom-5 right-5 z-50 grid size-14 place-items-center rounded-2xl bg-gradient-to-br from-sky-400 via-sky-500 to-cyan-500 text-white shadow-xl shadow-sky-300/50"
-          aria-label="Mở AI Career Advisor"
+          transition={{ duration: 0.18 }}
+          className="fixed bottom-5 right-5 z-50 flex items-center gap-2.5 rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-600 px-4 py-3.5 text-sm font-bold text-white shadow-lg shadow-sky-600/25 ring-1 ring-white/30"
+          aria-label="Mở Cố vấn AI"
         >
-          <MessageCircle size={22} />
-          <i className="absolute -right-1 -top-1 size-3 rounded-full border-2 border-white bg-emerald-400" />
+          <span className="relative grid place-items-center">
+            <MessageCircle size={20} />
+            <span className="absolute -right-1 -top-1 size-2.5 rounded-full border-2 border-sky-500 bg-emerald-400" />
+          </span>
+          <span className="hidden sm:inline">Cố vấn AI</span>
         </motion.button>
       )}
       <ScrollRestoration />

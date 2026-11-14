@@ -809,12 +809,16 @@ async def _refine_tiers_with_llm(
     - Chấm hạng theo thang đo vĩ mô toàn thị trường 2026 (TIER_1 > TIER_2 > TIER_3),
       KHÔNG xếp hạng tương đối cục bộ, KHÔNG bịa mã ngành mới, KHÔNG bỏ sót mã nào.
     """
+    api_key = getattr(settings, "LLM_API_KEY", "") or settings.OPENAI_API_KEY
+    base_url = getattr(settings, "LLM_BASE_URL", "") or settings.OPENAI_BASE_URL
+    model_name = getattr(settings, "LLM_MODEL", "") or "gpt-6-luna"
+
     if (
         not candidates
-        or not settings.OPENAI_API_KEY
+        or not api_key
         or settings.ENVIRONMENT == "test"
-        or settings.OPENAI_API_KEY.startswith("sk-test")
-        or settings.OPENAI_API_KEY == "your-openai-api-key"
+        or api_key.startswith("sk-test")
+        or api_key == "your-openai-api-key"
     ):
         return None
 
@@ -823,9 +827,9 @@ async def _refine_tiers_with_llm(
         from app.core.llm_client import resolve_model_token_limits
 
         token_limits = await resolve_model_token_limits()
-        client_kwargs: Dict[str, Any] = {"api_key": settings.OPENAI_API_KEY}
-        if settings.OPENAI_BASE_URL:
-            client_kwargs["base_url"] = settings.OPENAI_BASE_URL
+        client_kwargs: Dict[str, Any] = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
         client = AsyncOpenAI(**client_kwargs)
 
         headlines = "\n".join(
@@ -873,7 +877,7 @@ async def _refine_tiers_with_llm(
         async def _call() -> str:
             try:
                 resp = await client.chat.completions.create(
-                    model=settings.LLM_MODEL,
+                    model=model_name,
                     messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": user_prompt},
@@ -1065,21 +1069,17 @@ async def apply_trending_markers(
         try:
             res = await db.execute(select(Major).where(Major.is_active == True))
             db_majors = list(res.scalars().all())
-            existing_db_codes = {str(m.major_code).strip() for m in db_majors}
 
-            # Đảm bảo mọi ngành được đánh dấu xu hướng đều có bản ghi trong bảng `majors`
-            missing_trending_codes = [c for c in majors_map.keys() if c not in existing_db_codes]
-            if missing_trending_codes:
+            # Chỉ tự seed từ file JSON khi bảng `majors` trong CSDL đang hoàn toàn trống.
+            # Tuyệt đối KHÔNG chèn ngược mã ngành cũ từ seed JSON khi Admin đã import danh mục Excel mới vào DB.
+            if not db_majors and majors_map:
                 from app.services.taxonomy.service import bulk_sync_majors, load_seed_majors
 
                 seed_list = load_seed_majors()
                 if seed_list:
-                    missing_set = set(missing_trending_codes)
-                    to_insert = [s for s in seed_list if str(s.get("major_code") or "").strip() in missing_set]
-                    if to_insert:
-                        await bulk_sync_majors(db, to_insert)
-                        res = await db.execute(select(Major))
-                        db_majors = list(res.scalars().all())
+                    await bulk_sync_majors(db, seed_list)
+                    res = await db.execute(select(Major).where(Major.is_active == True))
+                    db_majors = list(res.scalars().all())
 
             for db_m in db_majors:
                 t_info = expanded_lookup.get(str(db_m.major_code).strip())
@@ -1121,18 +1121,25 @@ async def run_trend_discovery_agent(
 
     from app.services.taxonomy.service import load_seed_majors
 
-    catalog_majors = load_seed_majors()
-    if not catalog_majors and db is not None:
-        res = await db.execute(select(Major).where(Major.is_active == True))
-        catalog_majors = [
-            {
-                "major_code": m.major_code,
-                "name": m.name,
-                "category": m.category,
-                "outlook": m.industry_outlook,
-            }
-            for m in res.scalars().all()
-        ]
+    catalog_majors: List[Dict[str, Any]] = []
+    if db is not None:
+        try:
+            res = await db.execute(select(Major).where(Major.is_active == True))
+            db_rows = list(res.scalars().all())
+            if db_rows:
+                catalog_majors = [
+                    {
+                        "major_code": m.major_code,
+                        "name": m.name,
+                        "category": m.category,
+                        "outlook": m.industry_outlook,
+                    }
+                    for m in db_rows
+                ]
+        except Exception:
+            catalog_majors = []
+    if not catalog_majors:
+        catalog_majors = load_seed_majors()
 
     articles = (
         override_articles

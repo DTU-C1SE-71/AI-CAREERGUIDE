@@ -53,7 +53,7 @@ export function QuestionIllustrationFrame({
   const meta = RIASEC_META[item.dimension]
 
   return (
-    <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-white/85 bg-gradient-to-br from-sky-100 via-sky-50 to-cyan-100 shadow-sm">
+    <div className="relative aspect-[16/10] sm:aspect-[16/9] lg:aspect-[2.1/1] max-h-60 sm:max-h-72 w-full overflow-hidden rounded-2xl border border-white/85 bg-gradient-to-br from-sky-100 via-sky-50 to-cyan-100 shadow-sm">
       {/* Skeleton Loading State */}
       {!loaded && !errored && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-r from-sky-100/80 via-white/90 to-sky-100/80 animate-pulse">
@@ -90,11 +90,11 @@ export function QuestionIllustrationFrame({
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-slate-950/45 via-slate-900/5 to-transparent" />
 
       {/* Top Badges: Index + RIASEC Group Tag */}
-      <div className="absolute inset-x-3 top-3 flex items-center justify-between gap-2">
-        <span className="rounded-full border border-white/80 bg-white/85 px-3 py-1 text-xs font-black text-sky-900 shadow-sm backdrop-blur-md">
+      <div className="absolute inset-x-3.5 top-3.5 flex items-center justify-between gap-2">
+        <span className="rounded-full border border-white/80 bg-white/90 px-3 py-1 text-xs font-black tabular-nums text-sky-950 shadow-sm backdrop-blur-md">
           {index + 1} / {total}
         </span>
-        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/75 bg-white/85 px-3 py-1 text-xs font-extrabold text-sky-800 shadow-sm backdrop-blur-md">
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-white/80 bg-white/90 px-3 py-1 text-xs font-extrabold text-sky-900 shadow-sm backdrop-blur-md">
           <Icon className="size-3.5 text-sky-600" />
           <span>{meta.tag}</span>
         </span>

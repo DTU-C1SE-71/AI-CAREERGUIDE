@@ -1,5 +1,14 @@
 import type { AssessmentState } from "../types/assessment"
 
+const CANONICAL_30_CODES: string[] = [
+  "R1", "R2", "R3", "R4", "R5",
+  "I1", "I2", "I3", "I4", "I5",
+  "A1", "A2", "A3", "A4", "A5",
+  "S1", "S2", "S3", "S4", "S5",
+  "E1", "E2", "E3", "E4", "E5",
+  "C1", "C2", "C3", "C4", "C5",
+]
+
 /**
  * Chuẩn hóa dữ liệu bài làm từ AssessmentContext thành payload gửi cho Backend `/recommender/evaluate`.
  */
@@ -9,11 +18,19 @@ export function buildEvaluateProfilePayload(
     "answers" | "cognitive" | "scores" | "aspiration"
   >,
   topK = 435,
+  extraProfile?: { gender?: string; grade_level?: string },
 ) {
   const riasecAnswers: Record<string, number> = {}
   Object.entries(assessment.answers || {}).forEach(([key, val]) => {
-    if (/^[RIASEC]\d+$/i.test(key) && typeof val === "number") {
-      riasecAnswers[key.toUpperCase()] = val
+    if (typeof val === "number") {
+      if (/^[RIASEC]\d+$/i.test(key)) {
+        riasecAnswers[key.toUpperCase()] = val
+      } else if (/^1-(\d+)$/.test(key)) {
+        const idx = parseInt(key.split("-")[1], 10)
+        if (idx >= 0 && idx < CANONICAL_30_CODES.length) {
+          riasecAnswers[CANONICAL_30_CODES[idx]] = val
+        }
+      }
     }
   })
 
@@ -47,6 +64,8 @@ export function buildEvaluateProfilePayload(
     grades_by_subject:
       Object.keys(gradesBySubject).length > 0 ? gradesBySubject : undefined,
     aspiration: aspirationPayload,
+    gender: extraProfile?.gender || undefined,
+    grade_level: extraProfile?.grade_level || undefined,
     top_k: topK,
   }
 }

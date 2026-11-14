@@ -1,9 +1,11 @@
 import { useGoogleLogin } from "@react-oauth/google"
+import { AnimatePresence, motion } from "framer-motion"
 import {
   AlertCircle,
   ArrowRight,
   BrainCircuit,
   Check,
+  CheckCircle2,
   GraduationCap,
   LoaderCircle,
   LockKeyhole,
@@ -98,10 +100,10 @@ function GoogleSignInButton({
       type="button"
       disabled={disabled || googleBusy}
       onClick={handleClick}
-      className="inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-bold text-slate-700 shadow-2xs transition-all hover:border-sky-300 hover:bg-sky-50/60 focus:outline-none focus:ring-4 focus:ring-sky-100 disabled:opacity-50 cursor-pointer"
+      className="inline-flex min-h-12 w-full items-center justify-center gap-3 rounded-2xl border border-slate-200/90 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-xs transition-all duration-200 hover:border-sky-300 hover:bg-sky-50/50 hover:shadow-sm focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-sky-500/15 disabled:cursor-not-allowed disabled:opacity-50"
     >
       {googleBusy ? (
-        <LoaderCircle className="size-4 animate-spin text-sky-600" />
+        <LoaderCircle className="size-5 animate-spin text-sky-600" />
       ) : (
         <svg className="size-5 shrink-0" viewBox="0 0 24 24">
           <path
@@ -123,7 +125,7 @@ function GoogleSignInButton({
         </svg>
       )}
       <span>
-        {googleBusy ? "Đang kết nối Google..." : "Tiếp tục với Google"}
+        {googleBusy ? "Đang kết nối Google..." : "Tiếp tục với tài khoản Google"}
       </span>
     </button>
   )
@@ -131,7 +133,9 @@ function GoogleSignInButton({
 
 export function Login() {
   const [searchParams] = useSearchParams()
-  const [isRegister, setIsRegister] = useState(() => searchParams.get("tab") === "register")
+  const [isRegister, setIsRegister] = useState(
+    () => searchParams.get("tab") === "register",
+  )
   const [fullName, setFullName] = useState("")
   const [gender, setGender] = useState<string>("Nam")
   const [gradeLevel, setGradeLevel] = useState<string>("Lớp 12")
@@ -200,11 +204,11 @@ export function Login() {
         return
       }
       if (!gender || !gender.trim()) {
-        setErrorMsg("Vui lòng chọn giới tính (không được phép để trống).")
+        setErrorMsg("Vui lòng chọn giới tính.")
         return
       }
       if (!gradeLevel || !gradeLevel.trim()) {
-        setErrorMsg("Vui lòng chọn lớp bạn đang học hoặc đã tốt nghiệp (không được phép để trống).")
+        setErrorMsg("Vui lòng chọn khối lớp bạn đang học hoặc đã tốt nghiệp.")
         return
       }
       if (password.length < 8) {
@@ -240,7 +244,9 @@ export function Login() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ""
-      if (/HTTP (404|405|502|503|504)|Failed to fetch|NetworkError/i.test(msg)) {
+      if (
+        /HTTP (404|405|502|503|504)|Failed to fetch|NetworkError/i.test(msg)
+      ) {
         const inferredRole =
           trimmedEmail.toLowerCase() === "admin@careerguide.vn"
             ? "ADMIN"
@@ -304,45 +310,77 @@ export function Login() {
   }
 
   return (
-    <section className="relative flex min-h-[calc(100vh-72px)] items-center justify-center overflow-hidden p-4 sm:p-8">
-      <div className="absolute -left-20 top-10 size-80 rounded-full bg-sky-200/50 blur-3xl" />
-      <div className="absolute right-0 top-1/4 size-96 rounded-full bg-cyan-200/40 blur-3xl" />
-      <div className="absolute bottom-0 left-1/3 size-72 rounded-full bg-blue-200/40 blur-3xl" />
-      <div className="relative mx-auto grid w-full max-w-6xl overflow-hidden rounded-[32px] border border-white/80 bg-white/45 shadow-[0_24px_80px_rgba(14,165,233,0.16)] backdrop-blur-2xl lg:grid-cols-2">
-        <div className="hidden border-r border-white/70 bg-gradient-to-br from-sky-400/20 via-blue-400/15 to-cyan-300/20 p-12 text-slate-800 backdrop-blur-2xl lg:flex lg:flex-col lg:justify-between">
-          <div className="flex items-center gap-2 font-extrabold">
-            <span className="grid size-10 place-items-center rounded-2xl bg-gradient-to-br from-sky-400 to-blue-600 text-white shadow-lg shadow-sky-200">
-              <BrainCircuit size={21} />
+    <section className="relative flex min-h-[calc(100vh-72px)] items-center justify-center p-4 sm:p-6 lg:p-10">
+      {/* Ambient background glows */}
+      <div className="pointer-events-none absolute -left-20 top-10 size-80 rounded-full bg-sky-200/40 blur-3xl" />
+      <div className="pointer-events-none absolute right-0 top-1/4 size-96 rounded-full bg-cyan-200/35 blur-3xl" />
+      <div className="pointer-events-none absolute bottom-0 left-1/3 size-72 rounded-full bg-blue-200/30 blur-3xl" />
+
+      {/* Main Adaptive Auth Card Container */}
+      <div className="relative mx-auto grid w-full max-w-5xl overflow-hidden rounded-3xl border border-slate-200/90 bg-white/80 shadow-2xl shadow-sky-950/10 backdrop-blur-2xl lg:grid-cols-12">
+        {/* Left Branding Showcase Panel (desktop only) */}
+        <div className="hidden border-r border-slate-200/80 bg-gradient-to-br from-sky-50 via-sky-50/50 to-cyan-50/70 p-10 lg:col-span-5 lg:flex lg:flex-col lg:justify-between">
+          <div className="flex items-center gap-3">
+            <span className="grid size-11 place-items-center rounded-2xl bg-sky-600 text-white shadow-md shadow-sky-600/25">
+              <BrainCircuit size={22} />
             </span>
-            AI CareerGuide
+            <div>
+              <span className="text-base font-black tracking-tight text-slate-900">
+                AI CareerGuide
+              </span>
+              <p className="text-xs font-semibold text-sky-700">
+                Định hướng tương lai
+              </p>
+            </div>
           </div>
-          <div>
-            <p className="text-xs font-bold uppercase tracking-[.2em] text-sky-700">
-              AI CareerGuide · XAI
-            </p>
-            <h1 className="mt-4 max-w-xl text-4xl font-black leading-tight text-slate-900 sm:text-5xl">
-              Mọi lựa chọn tốt đều bắt đầu bằng một câu hỏi đúng.
+
+          <div className="my-auto py-8">
+            <h1 className="text-3xl font-black leading-tight tracking-tight text-slate-900 xl:text-4xl">
+              Mọi lựa chọn tốt đều bắt đầu bằng câu hỏi đúng.
             </h1>
-            <p className="mt-4 max-w-md text-sm leading-relaxed text-slate-600">
-              Khám phá sở thích, năng lực học tập và lộ trình ngành học cá nhân hóa.
+
+            <p className="mt-4 text-sm leading-relaxed text-slate-600">
+              Khám phá sở thích cá nhân, đối chiếu năng lực học tập và nhận đề
+              xuất ngành học với tỷ lệ tương thích minh bạch.
             </p>
+
+            <div className="mt-8 space-y-3 pt-2">
+              {[
+                "Trắc nghiệm Holland RIASEC 30 câu hỏi",
+                "Chuẩn hóa Z-Score với 435 ngành học",
+                "Giải thích AI minh bạch kèm lộ trình 4 tuần",
+              ].map((point) => (
+                <div
+                  key={point}
+                  className="flex items-start gap-2.5 text-xs font-semibold text-slate-700"
+                >
+                  <span className="mt-0.5 grid size-4.5 shrink-0 place-items-center rounded-full bg-sky-100 text-sky-700">
+                    <Check size={12} strokeWidth={3} />
+                  </span>
+                  <span>{point}</span>
+                </div>
+              ))}
+            </div>
           </div>
-          <p className="text-xs font-medium text-slate-400">
-            © 2026 AI CareerGuide
-          </p>
+
+          <div className="border-t border-slate-200/70 pt-4 text-xs font-medium text-slate-500">
+            Hệ thống tư vấn tuyển sinh & hướng nghiệp thông minh
+          </div>
         </div>
 
-        <div className="flex items-center justify-center bg-white/50 p-5 backdrop-blur-2xl sm:p-10">
+        {/* Right Auth Form Panel */}
+        <div className="flex items-center justify-center p-6 sm:p-10 lg:col-span-7 lg:p-12">
           <div className="w-full max-w-md">
-            <div className="mb-8 lg:hidden">
-              <div className="flex items-center gap-2 font-extrabold">
-                <BrainCircuit className="text-sky-600" />
-                AI CareerGuide
-              </div>
+            {/* Mobile Brand Header */}
+            <div className="mb-6 flex items-center gap-2.5 font-black text-slate-900 lg:hidden">
+              <span className="grid size-9 place-items-center rounded-xl bg-sky-600 text-white shadow-sm">
+                <BrainCircuit size={18} />
+              </span>
+              <span className="text-lg">AI CareerGuide</span>
             </div>
 
             {/* Login vs Register Switcher */}
-            <div className="mb-6 flex rounded-2xl border border-white/80 bg-white/55 p-1 backdrop-blur-md">
+            <div className="mb-6 flex min-h-11 rounded-2xl border border-slate-200/90 bg-slate-100/80 p-1">
               <button
                 type="button"
                 onClick={() => {
@@ -350,9 +388,9 @@ export function Login() {
                   setErrorMsg(null)
                   setSuccessMsg(null)
                 }}
-                className={`flex-1 rounded-xl py-2 text-xs font-bold transition-all ${
+                className={`flex-1 rounded-xl py-2.5 text-xs sm:text-sm font-bold transition-all duration-200 ${
                   !isRegister
-                    ? "bg-sky-600 text-white shadow-xs"
+                    ? "bg-white text-slate-900 shadow-xs"
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
@@ -365,214 +403,271 @@ export function Login() {
                   setErrorMsg(null)
                   setSuccessMsg(null)
                 }}
-                className={`flex-1 rounded-xl py-2 text-xs font-bold transition-all ${
+                className={`flex-1 rounded-xl py-2.5 text-xs sm:text-sm font-bold transition-all duration-200 ${
                   isRegister
-                    ? "bg-sky-600 text-white shadow-xs"
+                    ? "bg-white text-slate-900 shadow-xs"
                     : "text-slate-500 hover:text-slate-800"
                 }`}
               >
-                Đăng ký
+                Đăng ký tài khoản
               </button>
             </div>
 
-            <h2 className="text-2xl font-black text-slate-900 sm:text-3xl">
-              {isRegister ? "Tạo tài khoản mới" : "Chào mừng trở lại"}
-            </h2>
+            {/* Header Title */}
+            <div>
+              <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
+                {isRegister ? "Tạo tài khoản mới" : "Chào mừng trở lại"}
+              </h2>
+              <p className="mt-1.5 text-xs sm:text-sm text-slate-500">
+                {isRegister
+                  ? "Bắt đầu hành trình định hướng ngành học cá nhân hóa."
+                  : "Đăng nhập để tiếp tục lộ trình và tra cứu đề xuất ngành học."}
+              </p>
+            </div>
 
+            {/* Error Message */}
             {errorMsg && (
-              <div className="mt-4 flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/80 p-3 text-xs font-bold text-rose-700 backdrop-blur-md">
-                <AlertCircle size={16} className="shrink-0 text-rose-600" />
+              <div
+                role="alert"
+                className="mt-5 flex items-start gap-2.5 rounded-2xl border border-rose-200 bg-rose-50/90 p-3.5 text-xs sm:text-sm font-medium text-rose-700 backdrop-blur-sm"
+              >
+                <AlertCircle
+                  size={18}
+                  className="mt-0.5 shrink-0 text-rose-600"
+                />
                 <span>{errorMsg}</span>
               </div>
             )}
 
+            {/* Success Message */}
             {successMsg && (
-              <div className="mt-4 flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50/80 p-3 text-xs font-bold text-sky-800 backdrop-blur-md">
-                <Check size={16} className="shrink-0 text-sky-600" />
+              <div
+                role="status"
+                className="mt-5 flex items-start gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/90 p-3.5 text-xs sm:text-sm font-medium text-emerald-800 backdrop-blur-sm"
+              >
+                <CheckCircle2
+                  size={18}
+                  className="mt-0.5 shrink-0 text-emerald-600"
+                />
                 <span>{successMsg}</span>
               </div>
             )}
 
+            {/* Auth Form with Smooth State Transition */}
             <form className="mt-6 space-y-4" onSubmit={submit}>
-              {isRegister && (
-                <>
+              <AnimatePresence mode="wait">
+                <motion.div
+                  key={isRegister ? "register-form" : "login-form"}
+                  initial={{ opacity: 0, y: 6 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -6 }}
+                  transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+                  className="space-y-4"
+                >
+                  {isRegister && (
+                    <>
+                      {/* Full Name */}
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-bold text-slate-700">
+                          Họ và tên <span className="text-rose-500">*</span>
+                        </span>
+                        <div className="relative">
+                          <UserIcon
+                            size={18}
+                            className="absolute left-4 top-3.5 text-slate-400"
+                          />
+                          <input
+                            required
+                            type="text"
+                            placeholder="Nhập họ và tên đầy đủ của bạn"
+                            value={fullName}
+                            onChange={(e) => setFullName(e.target.value)}
+                            className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                          />
+                        </div>
+                      </label>
+
+                      {/* Gender Selection */}
+                      <div className="block">
+                        <span className="mb-1.5 block text-xs font-bold text-slate-700">
+                          Giới tính <span className="text-rose-500">*</span>
+                        </span>
+                        <div className="grid grid-cols-3 gap-2">
+                          {(["Nam", "Nữ", "Khác"] as const).map((g) => (
+                            <button
+                              key={g}
+                              type="button"
+                              onClick={() => setGender(g)}
+                              className={`flex min-h-11 items-center justify-center rounded-xl border text-xs sm:text-sm font-bold transition-all duration-200 ${
+                                gender === g
+                                  ? "border-sky-500 bg-sky-50 text-sky-700 shadow-xs ring-2 ring-sky-500/20"
+                                  : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                              }`}
+                            >
+                              {g}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Grade Level Selection */}
+                      <div className="block">
+                        <div className="mb-1.5 flex items-center justify-between">
+                          <span className="text-xs font-bold text-slate-700">
+                            Hiện đang học lớp mấy{" "}
+                            <span className="text-rose-500">*</span>
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            Cá nhân hóa đề xuất AI
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                          {(
+                            [
+                              "Lớp 10",
+                              "Lớp 11",
+                              "Lớp 12",
+                              "Đã tốt nghiệp",
+                            ] as const
+                          ).map((lvl) => {
+                            const actualValue =
+                              lvl === "Đã tốt nghiệp"
+                                ? "Đã tốt nghiệp cấp 3"
+                                : lvl
+                            return (
+                              <button
+                                key={lvl}
+                                type="button"
+                                onClick={() => setGradeLevel(actualValue)}
+                                className={`flex min-h-11 items-center justify-center rounded-xl border px-2 text-center text-xs font-bold transition-all duration-200 ${
+                                  gradeLevel === actualValue
+                                    ? "border-sky-500 bg-sky-50 text-sky-700 shadow-xs ring-2 ring-sky-500/20"
+                                    : "border-slate-200 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50"
+                                }`}
+                              >
+                                {lvl}
+                              </button>
+                            )
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Class and School Information */}
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <label className="block">
+                          <span className="mb-1.5 block text-xs font-bold text-slate-700">
+                            Lớp học (tùy chọn)
+                          </span>
+                          <div className="relative">
+                            <GraduationCap
+                              size={18}
+                              className="absolute left-4 top-3.5 text-slate-400"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Ví dụ: 12A1"
+                              value={schoolClass}
+                              onChange={(e) => setSchoolClass(e.target.value)}
+                              className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                            />
+                          </div>
+                        </label>
+
+                        <label className="block">
+                          <span className="mb-1.5 block text-xs font-bold text-slate-700">
+                            Trường THPT (tùy chọn)
+                          </span>
+                          <div className="relative">
+                            <School
+                              size={18}
+                              className="absolute left-4 top-3.5 text-slate-400"
+                            />
+                            <input
+                              type="text"
+                              placeholder="Ví dụ: THPT Lê Hồng Phong"
+                              value={schoolName}
+                              onChange={(e) => setSchoolName(e.target.value)}
+                              className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                            />
+                          </div>
+                        </label>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Email Field */}
                   <label className="block">
-                    <span className="mb-2 block text-xs font-bold text-slate-700">
-                      Họ và tên <span className="text-rose-500">*</span>
+                    <span className="mb-1.5 block text-xs font-bold text-slate-700">
+                      Địa chỉ Email <span className="text-rose-500">*</span>
                     </span>
                     <div className="relative">
-                      <UserIcon
-                        size={17}
+                      <Mail
+                        size={18}
                         className="absolute left-4 top-3.5 text-slate-400"
                       />
                       <input
                         required
-                        type="text"
-                        placeholder="Nhập họ và tên đầy đủ của bạn"
-                        value={fullName}
-                        onChange={(e) => setFullName(e.target.value)}
-                        className="h-12 w-full rounded-xl border border-sky-200 bg-white/80 pl-11 pr-4 text-sm outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                        type="email"
+                        placeholder="tenban@example.com"
+                        value={email}
+                        onChange={(e) => setEmail(e.target.value)}
+                        className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
                       />
                     </div>
                   </label>
 
-                  {/* Giới tính (Bắt buộc) */}
-                  <div className="block">
-                    <span className="mb-2 block text-xs font-bold text-slate-700">
-                      Giới tính <span className="text-rose-500">*</span>
+                  {/* Password Field */}
+                  <label className="block">
+                    <span className="mb-1.5 block text-xs font-bold text-slate-700">
+                      Mật khẩu <span className="text-rose-500">*</span>
                     </span>
-                    <div className="grid grid-cols-3 gap-2">
-                      {(["Nam", "Nữ", "Khác"] as const).map((g) => (
-                        <button
-                          key={g}
-                          type="button"
-                          onClick={() => setGender(g)}
-                          className={`flex h-11 items-center justify-center rounded-xl border text-xs font-bold transition-all ${
-                            gender === g
-                              ? "border-sky-500 bg-sky-50 text-sky-700 shadow-xs ring-2 ring-sky-500/20"
-                              : "border-slate-200 bg-white/80 text-slate-600 hover:border-sky-200 hover:bg-slate-50"
-                          }`}
-                        >
-                          {g}
-                        </button>
-                      ))}
+                    <div className="relative">
+                      <LockKeyhole
+                        size={18}
+                        className="absolute left-4 top-3.5 text-slate-400"
+                      />
+                      <input
+                        required
+                        type="password"
+                        placeholder={
+                          isRegister ? "Tối thiểu 8 ký tự" : "Nhập mật khẩu"
+                        }
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                      />
                     </div>
-                  </div>
+                  </label>
+                </motion.div>
+              </AnimatePresence>
 
-                  {/* Hiện đang học lớp mấy (Bắt buộc) */}
-                  <div className="block">
-                    <div className="mb-2 flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-700">
-                        Hiện đang học lớp mấy <span className="text-rose-500">*</span>
-                      </span>
-                      <span className="text-[10px] text-slate-500">
-                        Hỗ trợ cá nhân hóa đề xuất AI
-                      </span>
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                      {(["Lớp 10", "Lớp 11", "Lớp 12", "Đã tốt nghiệp cấp 3"] as const).map((lvl) => (
-                        <button
-                          key={lvl}
-                          type="button"
-                          onClick={() => setGradeLevel(lvl)}
-                          className={`flex h-11 items-center justify-center rounded-xl border px-2 text-center text-xs font-bold transition-all ${
-                            gradeLevel === lvl
-                              ? "border-sky-500 bg-sky-50 text-sky-700 shadow-xs ring-2 ring-sky-500/20"
-                              : "border-slate-200 bg-white/80 text-slate-600 hover:border-sky-200 hover:bg-slate-50"
-                          }`}
-                        >
-                          {lvl}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Thông tin lớp & trường học (Tùy chọn) */}
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <label className="block">
-                      <span className="mb-2 block text-xs font-bold text-slate-700">
-                        Lớp học
-                      </span>
-                      <div className="relative">
-                        <GraduationCap
-                          size={17}
-                          className="absolute left-4 top-3.5 text-slate-400"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: 12A1"
-                          value={schoolClass}
-                          onChange={(e) => setSchoolClass(e.target.value)}
-                          className="h-12 w-full rounded-xl border border-sky-200 bg-white/80 pl-11 pr-4 text-sm outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
-                        />
-                      </div>
-                    </label>
-
-                    <label className="block">
-                      <span className="mb-2 block text-xs font-bold text-slate-700">
-                        Trường THPT
-                      </span>
-                      <div className="relative">
-                        <School
-                          size={17}
-                          className="absolute left-4 top-3.5 text-slate-400"
-                        />
-                        <input
-                          type="text"
-                          placeholder="Ví dụ: THPT Chuyên Lê Hồng Phong"
-                          value={schoolName}
-                          onChange={(e) => setSchoolName(e.target.value)}
-                          className="h-12 w-full rounded-xl border border-sky-200 bg-white/80 pl-11 pr-4 text-sm outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
-                        />
-                      </div>
-                    </label>
-                  </div>
-                </>
-              )}
-
-              <label className="block">
-                <span className="mb-2 block text-xs font-bold text-slate-600">
-                  Email
-                </span>
-                <div className="relative">
-                  <Mail
-                    size={17}
-                    className="absolute left-4 top-3.5 text-slate-400"
-                  />
-                  <input
-                    required
-                    type="email"
-                    placeholder="Nhập địa chỉ email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="h-12 w-full rounded-xl border border-sky-200 bg-white/80 pl-11 pr-4 text-sm outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
-                  />
-                </div>
-              </label>
-
-              <label className="block">
-                <span className="mb-2 block text-xs font-bold text-slate-600">
-                  Mật khẩu
-                </span>
-                <div className="relative">
-                  <LockKeyhole
-                    size={17}
-                    className="absolute left-4 top-3.5 text-slate-400"
-                  />
-                  <input
-                    required
-                    type="password"
-                    placeholder={
-                      isRegister ? "Tối thiểu 8 ký tự" : "Nhập mật khẩu"
-                    }
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="h-12 w-full rounded-xl border border-sky-200 bg-white/80 pl-11 pr-4 text-sm outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
-                  />
-                </div>
-              </label>
-
-              <Button
-                type="submit"
-                className="w-full"
-                icon={ArrowRight}
-                loading={loading}
-                disabled={loading}
-              >
-                {loading
-                  ? "Đang xác thực..."
-                  : isRegister
-                    ? "Tạo tài khoản mới"
-                    : "Đăng nhập"}
-              </Button>
+              {/* Submit CTA */}
+              <div className="pt-2">
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full min-h-12"
+                  icon={ArrowRight}
+                  loading={loading}
+                  disabled={loading}
+                >
+                  {loading
+                    ? "Đang xác thực thông tin..."
+                    : isRegister
+                      ? "Tạo tài khoản mới"
+                      : "Đăng nhập ngay"}
+                </Button>
+              </div>
             </form>
 
-            <div className="my-5 flex items-center gap-3 text-[10px] font-bold uppercase text-slate-400">
-              <span className="h-px flex-1 bg-slate-200" />
-              Hoặc đăng nhập nhanh
-              <span className="h-px flex-1 bg-slate-200" />
+            {/* Quick divider */}
+            <div className="my-6 flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+              <span className="h-px flex-1 bg-slate-200/90" />
+              <span>Hoặc tiếp tục với</span>
+              <span className="h-px flex-1 bg-slate-200/90" />
             </div>
 
+            {/* Google OAuth Login */}
             <GoogleSignInButton
               onTokenSuccess={handleGoogleAccessToken}
               onError={(msg) => setErrorMsg(msg)}

@@ -34,7 +34,9 @@ import {
   type RiasecRadarPoint,
 } from "../services/mockData"
 import type {
+  AcademicScore,
   AspirationAnalysisPayload,
+  AssessmentState,
   CareerAspirationInput,
 } from "../types/assessment"
 import type { StudentSkillAnalysis } from "../types/insight"
@@ -447,9 +449,37 @@ export function Dashboard() {
     selectHistoryAttempt,
     deleteHistoryAttempt,
   } = useAssessment()
+
+  const activeAttemptIndex = useMemo(() => {
+    if (!activeHistoryId) return 0
+    const idx = history.findIndex((h) => h.id === activeHistoryId)
+    return idx >= 0 ? idx : 0
+  }, [history, activeHistoryId])
+  const activeAttempt = history[activeAttemptIndex] || null
+
+  const effectiveAssessment = useMemo<AssessmentState>(() => {
+    const hasCurrentAnswers = Object.keys(assessment.answers || {}).length >= 3
+    if (hasCurrentAnswers) {
+      return assessment
+    }
+    if (activeAttempt) {
+      return {
+        step: 4,
+        answers: activeAttempt.answers || {},
+        cognitive: activeAttempt.cognitive || {},
+        scores: activeAttempt.scores || [],
+        aspiration: activeAttempt.aspiration,
+        completed: true,
+        completedAt: activeAttempt.createdAt,
+      }
+    }
+    return assessment
+  }, [assessment, activeAttempt])
+
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [data, setData] = useState<DashboardOverviewPayload | null>(null)
+  const [isEvaluating, setIsEvaluating] = useState(false)
   const [isAnalyzingAspiration, setIsAnalyzingAspiration] = useState(false)
   const [catalog, setCatalog] = useState<TaxonomyCatalogItem[]>(MOET_435_MAJORS)
   const [searchQuery, setSearchQuery] = useState("")
@@ -463,18 +493,22 @@ export function Dashboard() {
   const reportTopRef = useRef<HTMLDivElement>(null)
 
   const hasCompletedAssessment = useMemo(() => {
-    const hasAnswers = Object.keys(assessment.answers || {}).length >= 3
-    const hasScores = (assessment.scores || []).length >= 2
+    const hasAnswers = Object.keys(effectiveAssessment.answers || {}).length >= 3
+    const hasScores = (effectiveAssessment.scores || []).length >= 2
     return Boolean(
-      (assessment.completed && (hasAnswers || hasScores)) || history.length > 0,
+      (effectiveAssessment.completed && (hasAnswers || hasScores)) || history.length > 0,
     )
-  }, [assessment.completed, assessment.answers, assessment.scores, history.length])
+  }, [effectiveAssessment.completed, effectiveAssessment.answers, effectiveAssessment.scores, history.length])
 
   useEffect(() => {
     let mounted = true
     if (hasCompletedAssessment) {
+      setIsEvaluating(true)
       setIsAnalyzingAspiration(true)
-      const payload = buildEvaluateProfilePayload(assessment, 435)
+      const payload = buildEvaluateProfilePayload(effectiveAssessment, 435, {
+        gender: user?.gender,
+        grade_level: user?.grade_level,
+      })
       apiRequest<DashboardOverviewPayload | null>(
         "/recommender/evaluate",
         null,
@@ -490,18 +524,23 @@ export function Dashboard() {
         })
         .catch(() => {})
         .finally(() => {
-          if (mounted) setIsAnalyzingAspiration(false)
+          if (mounted) {
+            setIsEvaluating(false)
+            setIsAnalyzingAspiration(false)
+          }
         })
     } else {
       setData(null)
+      setIsEvaluating(false)
+      setIsAnalyzingAspiration(false)
     }
 
     apiRequest<TaxonomyCatalogItem[] | null>(
-      "/taxonomy/majors?limit=500",
+      "/taxonomy/majors?limit=1000",
       MOET_435_MAJORS,
     )
       .then((list) => {
-        if (mounted && list && Array.isArray(list) && list.length >= 400) {
+        if (mounted && list && Array.isArray(list) && list.length > 0) {
           setCatalog(list)
         }
       })
@@ -512,10 +551,11 @@ export function Dashboard() {
     }
   }, [
     hasCompletedAssessment,
-    assessment.answers,
-    assessment.cognitive,
-    assessment.scores,
-    assessment.aspiration,
+    effectiveAssessment.answers,
+    effectiveAssessment.cognitive,
+    effectiveAssessment.scores,
+    effectiveAssessment.aspiration,
+    activeHistoryId,
   ])
 
   // Agent "Phân tích kỹ năng": ưu/nhược điểm học tập + kỹ năng cần bổ sung
@@ -532,7 +572,7 @@ export function Dashboard() {
     for (const dim of ["R", "I", "A", "S", "E", "C"]) {
       const vals: number[] = []
       for (let i = 1; i <= 5; i++) {
-        const v = assessment.answers?.[`${dim}${i}`]
+        const v = effectiveAssessment.answers?.[`${dim}${i}`]
         if (typeof v === "number" && v > 0) vals.push(v)
       }
       if (vals.length > 0) {
@@ -542,7 +582,7 @@ export function Dashboard() {
     }
 
     const gradesBySubject: Record<string, number> = Object.fromEntries(
-      (assessment.scores || []).map((s) => [s.subject, s.score]),
+      (effectiveAssessment.scores || []).map((s: AcademicScore) => [s.subject, s.score]),
     )
 
     // Không có dữ liệu bài test thực tế (chỉ có lịch sử cũ) → không chấm điểm
@@ -567,10 +607,10 @@ export function Dashboard() {
           grades_by_subject:
             Object.keys(gradesBySubject).length > 0 ? gradesBySubject : undefined,
           cognitive_preferences:
-            Object.keys(assessment.cognitive || {}).length > 0
-              ? assessment.cognitive
+            Object.keys(effectiveAssessment.cognitive || {}).length > 0
+              ? effectiveAssessment.cognitive
               : undefined,
-          aspiration: assessment.aspiration || undefined,
+          aspiration: effectiveAssessment.aspiration || undefined,
         }),
       },
     )
@@ -587,10 +627,10 @@ export function Dashboard() {
     }
   }, [
     hasCompletedAssessment,
-    assessment.answers,
-    assessment.scores,
-    assessment.cognitive,
-    assessment.aspiration,
+    effectiveAssessment.answers,
+    effectiveAssessment.scores,
+    effectiveAssessment.cognitive,
+    effectiveAssessment.aspiration,
     data?.majors,
   ])
 
@@ -612,15 +652,15 @@ export function Dashboard() {
     }
     const base = fallbackRiasec
 
-    const hasUserAnswers = Object.keys(assessment.answers || {}).length >= 3
-    const hasUserScores = (assessment.scores || []).length >= 2
+    const hasUserAnswers = Object.keys(effectiveAssessment.answers || {}).length >= 3
+    const hasUserScores = (effectiveAssessment.scores || []).length >= 2
 
     if (!hasUserAnswers && !hasUserScores) {
       return base
     }
 
     const scoreMap = Object.fromEntries(
-      (assessment.scores || []).map((s) => [s.subject, s.score]),
+      (effectiveAssessment.scores || []).map((s: AcademicScore) => [s.subject, s.score]),
     )
     const getSubjPct = (s1: string, s2: string, fallbackVal: number) => {
       const v1 = scoreMap[s1]
@@ -637,7 +677,7 @@ export function Dashboard() {
       if (hasUserAnswers) {
         const dimVals: number[] = []
         for (let i = 1; i <= 5; i++) {
-          const v = assessment.answers[`${point.key}${i}`]
+          const v = effectiveAssessment.answers[`${point.key}${i}`]
           if (typeof v === "number" && v > 0) dimVals.push(v)
         }
         if (dimVals.length > 0) {
@@ -668,7 +708,7 @@ export function Dashboard() {
         academicValue: acadVal,
       }
     })
-  }, [data?.riasecData, assessment.answers, assessment.scores])
+  }, [data?.riasecData, effectiveAssessment.answers, effectiveAssessment.scores])
 
   const top3Dimensions = useMemo(() => {
     return [...displayedRiasec]
@@ -697,7 +737,7 @@ export function Dashboard() {
       }
     }
 
-    if (!assessment.scores || assessment.scores.length < 3) {
+    if (!effectiveAssessment.scores || effectiveAssessment.scores.length < 3) {
       return {
         block: "Chưa đủ môn",
         rawSum: 0,
@@ -707,7 +747,7 @@ export function Dashboard() {
       }
     }
     const sm = Object.fromEntries(
-      assessment.scores.map((s) => [s.subject, s.score]),
+      (effectiveAssessment.scores || []).map((s: AcademicScore) => [s.subject, s.score]),
     )
     const failingSubjects = Object.entries(sm)
       .filter(([, val]) => typeof val === "number" && val <= 1.0)
@@ -746,12 +786,12 @@ export function Dashboard() {
       percentile: pct,
       failingSubjects,
     }
-  }, [data?.bestBlockStats, assessment.scores])
+  }, [data?.bestBlockStats, effectiveAssessment.scores])
 
   const cognitiveScorePct = useMemo(() => {
-    const cogCount = Object.keys(assessment.cognitive || {}).length
+    const cogCount = Object.keys(effectiveAssessment.cognitive || {}).length
     return Math.min(96, 82 + Math.min(14, cogCount * 2))
-  }, [assessment.cognitive])
+  }, [effectiveAssessment.cognitive])
 
   // Offline fallback when Backend API is temporarily unavailable
   const displayedFunnel: FunnelRecommendationData = useMemo(() => {
@@ -878,11 +918,71 @@ export function Dashboard() {
     if (data?.funnel?.tier1_fields && data.funnel.tier1_fields.length > 0) {
       return data.funnel
     }
+    return displayedFunnel
+  }, [data?.funnel, displayedFunnel])
+
+  const fallbackAspirationAnalysis = useMemo<AspirationAnalysisPayload | null>(() => {
+    if (!hasCompletedAssessment) return null
+    const topMajor = activeFunnel.all_majors?.[0]
+    const topField = activeFunnel.tier1_fields?.[0]
+    const top3 = [...displayedRiasec].sort((a, b) => b.value - a.value).slice(0, 3)
+    const hollandCode = top3.map((d) => d.key).join(" · ")
+    const dreamJob = effectiveAssessment.aspiration?.dreamJob || "Khám phá theo năng lực trắc nghiệm"
+    const hasAsp = Boolean(effectiveAssessment.aspiration?.dreamJob)
+
     return {
-      tier1_fields: [],
-      all_majors: [],
+      has_aspiration: hasAsp,
+      dream_job: dreamJob,
+      desired_field: effectiveAssessment.aspiration?.desiredField || topField?.field_name,
+      work_values: effectiveAssessment.aspiration?.workValues || [],
+      preferred_environment: effectiveAssessment.aspiration?.preferredEnvironment,
+      score_strategy: effectiveAssessment.aspiration?.scoreStrategy || "FLEXIBLE_PATHWAY",
+      alignment_status: hasAsp ? "ALIGNED_AND_ELIGIBLE" : "EXPLORATORY_DISCOVERY",
+      alignment_label: hasAsp ? "Đam mê Hòa hợp Thiên hướng" : "Định hướng Mở theo Hồ sơ Trắc nghiệm",
+      alignment_score: topMajor?.match || 85,
+      holland_code: hollandCode,
+      best_block_summary: bestBlockStats.block,
+      dream_majors: topMajor
+        ? [
+            {
+              major_code: topMajor.code,
+              major_name: topMajor.name,
+              category: topMajor.category || "Công nghệ & Kỹ thuật",
+              overall_match: topMajor.match || 85,
+              riasec_fit: topMajor.fit?.interest || 85,
+              academic_fit: topMajor.fit?.academic || 75,
+              cognitive_fit: topMajor.fit?.cognitive || 80,
+              feasibility_tier: (topMajor.feasibility === "REACH" ? "REACH" : "TARGET") as "TARGET" | "REACH",
+              feasibility_label: topMajor.feasibility_label || "Khả thi cao",
+              benchmark_cutoff: topMajor.benchmark_cutoff ?? 24.0,
+              best_matching_block: topMajor.best_matching_block,
+              best_block_score: topMajor.best_block_score,
+              constraint_passed: topMajor.constraint_passed ?? true,
+              constraint_violations: topMajor.constraint_violations || [],
+              role_tag: "DREAM" as const,
+            },
+          ]
+        : [],
+      recommended_substitutes: [],
+      bridge_majors: [],
+      agent_verdict: `Dựa trên hồ sơ trắc nghiệm khách quan (${hollandCode}), Trợ lý Navi đề xuất bạn khám phá nhóm ngành ${topField?.field_name || "Công nghệ & Kỹ thuật"} với ngành tiêu biểu là ${topMajor?.name || "Công nghệ thông tin"}. Bạn có thể nhập thêm nghề nghiệp mơ ước để Navi đối chiếu chuyên sâu.`,
+      key_takeaways: [
+        `Thiên hướng nổi trội từ bài test: ${hollandCode}.`,
+        topMajor
+          ? `Đề xuất dẫn đầu: ${topMajor.name} (Mã ${topMajor.code}, độ khớp ${topMajor.match}%).`
+          : "Đã hoàn thành bài test hướng nghiệp.",
+        "Bạn có thể nhập thêm điểm học lực để nhận đánh giá phân tầng TARGET/REACH chuẩn xác nhất.",
+      ],
+      is_llm_enriched: false,
+      has_academic_data: bestBlockStats.rawSum > 0,
     }
-  }, [data?.funnel])
+  }, [
+    hasCompletedAssessment,
+    activeFunnel,
+    displayedRiasec,
+    effectiveAssessment.aspiration,
+    bestBlockStats,
+  ])
 
   const categories = useMemo(() => {
     const set = new Set<string>()
@@ -925,16 +1025,11 @@ export function Dashboard() {
   const handleSelectHistory = (attemptId: string) => {
     selectHistoryAttempt(attemptId)
     setShowHistoryDrawer(false)
+    setData(null)
     reportTopRef.current?.scrollIntoView({ behavior: "smooth" })
   }
 
   const displayName = user?.name || data?.user_name || "Học sinh"
-  const activeAttemptIndex = useMemo(() => {
-    if (!activeHistoryId) return 0
-    const idx = history.findIndex((h) => h.id === activeHistoryId)
-    return idx >= 0 ? idx : 0
-  }, [history, activeHistoryId])
-  const activeAttempt = history[activeAttemptIndex] || null
 
   return (
     <section className="py-9 sm:py-12" ref={reportTopRef}>
@@ -1088,16 +1183,16 @@ export function Dashboard() {
             )}
 
             {/* 1. Hồ sơ RIASEC & Phễu Ngành đề xuất 2 tầng */}
-            <div className="mb-6 grid gap-6 lg:grid-cols-[.82fr_1.18fr]">
+            <div className="mb-8 grid gap-6 lg:grid-cols-12 xl:gap-8">
               {/* Left Column: Single Unified Profile Card */}
-              <div>
-                <Card className="rounded-3xl p-6">
+              <div className="lg:col-span-5 xl:col-span-4">
+                <Card className="rounded-2xl p-5 sm:rounded-3xl sm:p-6 sticky top-4">
                   <div className="flex items-start justify-between">
                     <div>
-                      <p className="text-[11px] font-extrabold uppercase tracking-widest text-sky-600">
-                        Hồ sơ RIASEC
+                      <p className="text-xs font-bold uppercase tracking-wider text-sky-700">
+                        Hồ sơ Định hướng
                       </p>
-                      <h2 className="mt-1 text-xl font-black text-slate-900">
+                      <h2 className="mt-1 text-xl font-bold text-slate-900 sm:text-2xl">
                         {archetypeTitle}
                       </h2>
                     </div>
@@ -1106,39 +1201,39 @@ export function Dashboard() {
 
                   <RiasecRadarChart data={displayedRiasec} />
 
-                  <div className="mt-2 grid grid-cols-3 gap-2">
+                  <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-2.5">
                     {top3Dimensions.map((item) => (
                       <div
-                        className="rounded-2xl border border-white/80 bg-white/55 p-3 text-center backdrop-blur-md"
+                        className="rounded-xl border border-slate-200/80 bg-white/70 p-2.5 text-center sm:p-3"
                         key={item.key}
                       >
-                        <p className="text-base font-black text-sky-600">
+                        <p className="text-base font-bold text-sky-600 sm:text-lg">
                           {item.key}
                         </p>
-                        <p className="text-[11px] font-semibold text-slate-500">
+                        <p className="text-xs font-medium text-slate-500">
                           {item.label}
                         </p>
-                        <p className="mt-1 text-sm font-black text-slate-900">
+                        <p className="mt-1 text-sm font-bold tabular-nums text-slate-900">
                           {item.value}%
                         </p>
                       </div>
                     ))}
                   </div>
 
-                  <div className="mt-4 flex items-center justify-between rounded-2xl border border-white/80 bg-white/55 px-4 py-3 backdrop-blur-md">
-                    <div className="flex items-center gap-2.5">
-                      <GraduationCap size={17} className="text-sky-600" />
-                      <span className="text-xs font-extrabold text-slate-800">
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200/80 bg-white/70 px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <GraduationCap size={18} className="text-sky-600" />
+                      <span className="text-xs font-bold text-slate-800">
                         {formatBlockWithSubjects(bestBlockStats.block, { short: true })}
                         {bestBlockStats.rawSum ? ` · ${bestBlockStats.rawSum}đ` : ""}
                       </span>
                     </div>
-                    <span className="text-xs font-extrabold text-sky-700">
+                    <span className="text-xs font-semibold tabular-nums text-sky-700">
                       Z-Score {bestBlockStats.zScore} · {bestBlockStats.percentile}
                     </span>
                   </div>
                   {bestBlockStats.failingSubjects.length > 0 && (
-                    <div className="mt-2 rounded-xl border border-slate-200/80 bg-slate-50/90 px-3 py-2 text-[11px] font-bold text-slate-700">
+                    <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
                       Cảnh báo điểm liệt: {bestBlockStats.failingSubjects.join(", ")}
                     </div>
                   )}
@@ -1146,18 +1241,18 @@ export function Dashboard() {
               </div>
 
               {/* Right Column: 2-Tier Recommendation Funnel */}
-              <div>
+              <div className="lg:col-span-7 xl:col-span-8">
                 <TwoTierFunnelRecommendation
                   funnelData={activeFunnel}
-                  isLoading={isAnalyzingAspiration || (!data?.funnel && hasCompletedAssessment)}
+                  isLoading={isEvaluating && (!activeFunnel.tier1_fields || activeFunnel.tier1_fields.length === 0)}
                 />
               </div>
             </div>
 
             {/* 2. AI Đối chiếu nguyện vọng */}
             <AspirationAlignmentCard
-              analysis={data?.aspirationAnalysis ?? null}
-              currentAspiration={assessment.aspiration}
+              analysis={data?.aspirationAnalysis ?? fallbackAspirationAnalysis}
+              currentAspiration={effectiveAssessment.aspiration}
               onUpdateAspiration={handleUpdateAspiration}
               isAnalyzing={isAnalyzingAspiration}
             />
@@ -1210,7 +1305,7 @@ export function Dashboard() {
               </div>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="mt-6 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-4">
               {visibleCatalog.map((item) => {
                 const blocks = item.subject_blocks || item.blocks || []
                 const majorName = item.name_vi || item.name || item.major_code
@@ -1218,12 +1313,12 @@ export function Dashboard() {
                   <Link
                     key={item.major_code}
                     to={`/majors/${item.major_code}`}
-                    className="group flex flex-col justify-between rounded-2xl border border-white/80 bg-white/55 p-4 backdrop-blur-md transition hover:-translate-y-0.5 hover:bg-white/80"
+                    className="group flex flex-col justify-between rounded-2xl border border-slate-200/80 bg-white/75 p-4 transition hover:-translate-y-0.5 hover:border-sky-300 hover:bg-white hover:shadow-md"
                   >
                     <div>
-                      <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="rounded-md bg-sky-500/12 px-2 py-0.5 text-[10px] font-extrabold text-sky-700">
+                          <span className="rounded-md bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">
                             Mã {item.major_code}
                           </span>
                           <TrendBadge
@@ -1233,22 +1328,22 @@ export function Dashboard() {
                           />
                         </div>
                         {blocks.length > 0 && (
-                          <span className="text-[10px] font-bold text-slate-500">
+                          <span className="text-xs font-medium text-slate-500">
                             {blocks.slice(0, 3).join(", ")}
                           </span>
                         )}
                       </div>
-                      <h3 className="mt-2 text-sm font-extrabold text-slate-900 group-hover:text-sky-700">
+                      <h3 className="mt-2.5 text-sm font-bold text-slate-900 group-hover:text-sky-700 leading-snug">
                         {majorName}
                       </h3>
-                      <p className="mt-0.5 text-[11px] font-medium text-slate-400">
+                      <p className="mt-1 text-xs text-slate-500">
                         {item.category || "Danh mục ngành"}
                       </p>
                     </div>
-                    <div className="mt-3 flex items-center justify-between border-t border-slate-200/50 pt-2 text-[11px] font-bold text-sky-600">
-                      <span>Chi tiết</span>
+                    <div className="mt-3.5 flex items-center justify-between border-t border-slate-100 pt-2.5 text-xs font-bold text-sky-600">
+                      <span>Xem chi tiết</span>
                       <ChevronRight
-                        size={14}
+                        size={15}
                         className="transition-transform group-hover:translate-x-0.5"
                       />
                     </div>

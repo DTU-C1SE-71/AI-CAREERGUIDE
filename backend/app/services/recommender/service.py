@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 
 from fastapi import HTTPException, status
+from app.models.identity import User
 from app.models.taxonomy import Major, MajorSubjectBlock, MajorSkill, Skill, SkillPrerequisite
 from app.models.assessment import StudentAssessment, StudentGrade, StudentDiagnosticTest
 from app.models.recommender import RecommendationHistory
@@ -18,6 +19,11 @@ from app.schemas.recommender import (
     RecommendationRequest,
     MajorRecommendationItem,
     RecommendationResponse,
+)
+from app.services.recommender.horizon_gender_engine import (
+    get_grade_horizon_config,
+    apply_horizon_gender_reranking,
+    build_horizon_gender_xai_explanation,
 )
 from app.services.recommender.engine import (
     RIASEC_DIMENSIONS,
@@ -271,8 +277,13 @@ async def calculate_3pillar_recommendations(
     assessment = None
     grade = None
     diagnostic_tests: List[Any] = []
+    user_row = None
     if db is not None:
         try:
+            if user_id:
+                u_res = await db.execute(select(User).where(User.id == user_id))
+                user_row = u_res.scalars().first()
+
             assess_res = await db.execute(
                 select(StudentAssessment)
                 .where(StudentAssessment.user_id == user_id)
@@ -295,11 +306,24 @@ async def calculate_3pillar_recommendations(
             assessment = None
             grade = None
             diagnostic_tests = []
+            user_row = None
 
     inline = inline_profile or {}
     inline_riasec = inline.get("riasec_scores") or _riasec_vector_from_answers(inline.get("riasec_answers"))
     inline_pref = inline.get("cognitive_preferences") or inline.get("cognitive_answers")
     inline_grades = normalize_grades_dict(inline.get("grades_by_subject"))
+
+    # Nhận diện Giới tính và Khối lớp cho động cơ HA-GAE v3.1
+    student_gender = (
+        payload.gender
+        or inline.get("gender")
+        or (user_row.gender if user_row else None)
+    )
+    student_grade_level = (
+        payload.grade_level
+        or inline.get("grade_level")
+        or (user_row.grade_level if user_row else None)
+    )
 
     has_db_assess = bool(assessment and (assessment.riasec_scores or assessment.cognitive_preferences))
     has_db_grades = bool(grade and (grade.grades_by_subject or grade.computed_block_zscores))
@@ -346,10 +370,11 @@ async def calculate_3pillar_recommendations(
     ])
     mastered_skills.update(diag_mastered)
 
-    # 2. Trọng số chuẩn 3 trụ cột (0.45, 0.35, 0.20)
-    w_riasec = settings.WEIGHT_RIASEC
-    w_academic = settings.WEIGHT_ACADEMIC
-    w_pref = settings.WEIGHT_PREFERENCE
+    # 2. HA-GAE v3.1 Trọng số thích ứng theo chân trời thời gian khối lớp (Simplex Harmonization)
+    horizon_cfg = get_grade_horizon_config(student_grade_level)
+    w_riasec = float(horizon_cfg.get("w_riasec", settings.WEIGHT_RIASEC))
+    w_academic = float(horizon_cfg.get("w_academic", settings.WEIGHT_ACADEMIC))
+    w_pref = float(horizon_cfg.get("w_preference", settings.WEIGHT_PREFERENCE))
     if payload.custom_weights:
         w_riasec = float(payload.custom_weights.get("w_riasec", w_riasec))
         w_academic = float(payload.custom_weights.get("w_academic", w_academic))
@@ -393,12 +418,6 @@ async def calculate_3pillar_recommendations(
 
     if not majors:
         majors = [_MajorSeedAdapter(m, idx) for idx, m in enumerate(seed_data, start=1)]
-    elif len(majors) <= 150 and len(seed_data) >= 400:
-        # Bổ sung các ngành TT74 chưa được import vào DB để luôn chấm đủ 435 ngành chuẩn
-        existing_codes = {m.major_code for m in majors}
-        for idx, m_dict in enumerate(seed_data, start=1):
-            if m_dict.get("major_code") not in existing_codes:
-                majors.append(_MajorSeedAdapter(m_dict, idx))
 
     from app.services.taxonomy.trend_agent import (
         load_trending_registry_map,
@@ -562,6 +581,29 @@ async def calculate_3pillar_recommendations(
             reason_snip = f" — {trend_info['trend_reason']}" if trend_info.get("trend_reason") else ""
             top_factors.insert(1, f"{trend_info['trend_label']}{reason_snip}")
 
+        # HA-GAE v3.1 Thích ứng chân trời khối lớp và bối cảnh giới tính (3-Sentence XAI)
+        horizon_xai = build_horizon_gender_xai_explanation(
+            major_name=major.name,
+            major_code=major.major_code,
+            category=getattr(major, "category", "") or "",
+            score_riasec=score_riasec,
+            score_academic=score_academic,
+            score_pref=score_pref,
+            feasibility_tier=feasibility["feasibility_tier"],
+            grade_level=student_grade_level,
+            gender=student_gender,
+            best_matching_block=best_block,
+            score_gap=feasibility.get("score_gap"),
+        )
+
+        init_tactic = "NV3-5 (Vừa sức)"
+        if feasibility["feasibility_tier"] == "REACH":
+            init_tactic = "NV1-2 (Bứt phá)"
+        elif feasibility.get("score_gap") is not None and feasibility.get("score_gap", 0) >= 2.0:
+            init_tactic = "NV6+ (Dự phòng)"
+        elif feasibility["feasibility_tier"] == "UNKNOWN":
+            init_tactic = "Định hướng sở thích"
+
         scored_items.append(MajorRecommendationItem(
             rank=0,
             major_id=major.id,
@@ -588,7 +630,7 @@ async def calculate_3pillar_recommendations(
             competency_gaps=overall_gaps[:5],
             missing_prerequisites=missing_pre[:3],
             missing_target_skills=missing_tar[:3],
-            explanation=summary_expl,
+            explanation=horizon_xai or summary_expl,
             feasibility_tier=feasibility["feasibility_tier"],
             feasibility_label=feasibility["feasibility_label"],
             benchmark_cutoff=feasibility["benchmark_cutoff"],
@@ -606,6 +648,9 @@ async def calculate_3pillar_recommendations(
             trend_label=trend_info["trend_label"],
             trend_reason=trend_info["trend_reason"],
             trend_sources=trend_info["trend_sources"],
+            nudge_badge=None,
+            advisory_note=None,
+            admission_tactic=init_tactic,
         ))
 
     # =========================================================================
@@ -656,14 +701,17 @@ async def calculate_3pillar_recommendations(
             best_sub.admission_advice = sub_msg
             best_sub.top_supporting_factors.insert(0, sub_msg)
 
-    # Phân tầng đa dạng hóa vị trí & Đảm bảo ngành xu hướng (Constrained Diversity Gate)
+    # HA-GAE v3.1 Tái xếp hạng thích ứng khối lớp, giới tính và bảo toàn trần 40%
     has_academic = has_any_grades and any(v is not None and v > 0 for v in norm_raw_grades.values())
-    top_results = apply_constrained_diversity_reranking(
+    top_results = apply_horizon_gender_reranking(
         scored_items=scored_items,
+        grade_level=student_grade_level,
+        gender=student_gender,
         top_k=payload.top_k,
         has_academic_scores=has_academic,
         target_trending_top5=1,
         target_trending_top10=2,
+        student_riasec_dict=student_riasec,
     )
 
     # Lưu lịch sử đề xuất cho người dùng đã đăng nhập
@@ -725,25 +773,89 @@ def _resolve_field_icon(category_name: str) -> str:
     return "🎓"
 
 
+STANDARD_FIELD_DISPLAY_MAP: Dict[str, str] = {
+    "máy tính và công nghệ thông tin": "Máy tính & Công nghệ thông tin",
+    "kinh doanh và quản lý": "Kinh doanh & Quản lý",
+    "công nghệ kỹ thuật": "Công nghệ kỹ thuật",
+    "kỹ thuật": "Kỹ thuật",
+    "sức khỏe": "Sức khỏe",
+    "khoa học giáo dục và đào tạo giáo viên": "Khoa học giáo dục & Đào tạo giáo viên",
+    "khoa học xã hội và hành vi": "Khoa học xã hội & Hành vi",
+    "kiến trúc và xây dựng": "Kiến trúc & Xây dựng",
+    "nghệ thuật": "Nghệ thuật",
+    "nhân văn": "Nhân văn",
+    "báo chí và thông tin": "Báo chí & Thông tin",
+    "pháp luật": "Pháp luật",
+    "nông lâm nghiệp và thủy sản": "Nông, lâm nghiệp & Thủy sản",
+    "môi trường và bảo vệ môi trường": "Môi trường & Bảo vệ môi trường",
+    "du lịch khách sạn thể thao và dịch vụ cá nhân": "Du lịch, Khách sạn, Thể thao & Dịch vụ cá nhân",
+    "du lịch khách sạn thể thao và dịch và cá nhân": "Du lịch, Khách sạn, Thể thao & Dịch vụ cá nhân",
+    "an ninh quốc phòng": "An ninh, Quốc phòng",
+    "toán và thống kê": "Toán & Thống kê",
+    "khoa học tự nhiên": "Khoa học tự nhiên",
+    "khoa học sự sống": "Khoa học sự sống",
+    "dịch vụ vận tải": "Dịch vụ vận tải",
+    "dịch vụ xã hội": "Dịch vụ xã hội",
+    "sản xuất và chế biến": "Sản xuất & Chế biến",
+    "thú y": "Thú y",
+}
+
+
+def _canonical_field_key(category_name: str) -> str:
+    import re
+    import unicodedata
+
+    norm = unicodedata.normalize("NFC", (category_name or "Khác")).strip().lower()
+    norm = norm.replace("&", " và ")
+    norm = re.sub(r"[,;/\-]+", " ", norm)
+    norm = re.sub(r"\s+", " ", norm).strip()
+    return norm or "khác"
+
+
+def _format_vietnamese_field_name(category_name: str) -> str:
+    import unicodedata
+
+    raw = unicodedata.normalize("NFC", (category_name or "Khác")).strip()
+    if not raw:
+        return "Khác"
+    canon = _canonical_field_key(raw)
+    if canon in STANDARD_FIELD_DISPLAY_MAP:
+        return STANDARD_FIELD_DISPLAY_MAP[canon]
+    if raw.isupper():
+        lowered = raw.lower()
+        return lowered[:1].upper() + lowered[1:]
+    return raw
+
+
 def build_two_tier_funnel_payload(
     recommendations: List[MajorRecommendationItem],
     top_fields: int = 3,
     majors_per_field: int = 3,
+    grade_level: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Xây dựng dữ liệu Phễu Đề xuất 2 Tầng (Tầng 1: Top 3 lĩnh vực -> Tầng 2: Top 3 ngành mỗi lĩnh vực).
     Ưu tiên đưa các ngành ĐẠT ràng buộc điểm (TARGET) lên trước trong từng lĩnh vực.
+    Tích hợp nhãn chân trời thời gian theo khối lớp (HA-GAE v3.1).
     """
     from collections import defaultdict
     from app.services.taxonomy.trend_agent import get_trend_rank_boost
 
+    horizon_cfg = get_grade_horizon_config(grade_level)
+
     groups: Dict[str, List[MajorRecommendationItem]] = defaultdict(list)
+    raw_cat_by_key: Dict[str, str] = {}
     for item in recommendations:
         cat = item.category or "Khác"
-        groups[cat].append(item)
+        key = _canonical_field_key(cat)
+        if key not in raw_cat_by_key:
+            raw_cat_by_key[key] = cat
+        groups[key].append(item)
 
     tier1_fields: List[Dict[str, Any]] = []
-    for cat_name, items in groups.items():
+    for key, items in groups.items():
+        cat_name = raw_cat_by_key[key]
+        display_name = _format_vietnamese_field_name(cat_name)
         sorted_items = sorted(
             items,
             key=lambda m: (
@@ -769,9 +881,9 @@ def build_two_tier_funnel_payload(
         )
         trend_field_bonus = 0.08 if max_trend_pri == 3 else (0.04 if max_trend_pri == 2 else 0.0)
         tier1_fields.append({
-            "field_name": cat_name.title() if cat_name.isupper() else cat_name,
+            "field_name": display_name,
             "raw_category": cat_name,
-            "icon": _resolve_field_icon(cat_name),
+            "icon": _resolve_field_icon(display_name),
             "match": int(round(avg_score * 100)),
             "rank_score": avg_score + (max_trend_boost * 1.2) + trend_field_bonus,
             "max_trend_priority": max_trend_pri,
@@ -781,9 +893,10 @@ def build_two_tier_funnel_payload(
             "majors": sample_top,
         })
 
-    # Ưu tiên các lĩnh vực có ngành đạt chuẩn trước, sau đó xét ưu tiên ngành xu hướng và % phù hợp
+    # Ưu tiên các lĩnh vực chuyên môn cụ thể (tránh đưa nhóm "Khác" mã 9090 lên đầu), có ngành đạt chuẩn, xu hướng và % phù hợp
     tier1_fields.sort(
         key=lambda f: (
+            0 if _canonical_field_key(f["field_name"]) == "khác" else 1,
             1 if f["has_eligible"] else 0,
             f["max_trend_priority"] >= 2,
             round(f["rank_score"], 4),
@@ -795,6 +908,8 @@ def build_two_tier_funnel_payload(
     selected_tier1 = tier1_fields[:top_fields]
 
     return {
+        "horizon_label": horizon_cfg.get("label"),
+        "horizon_tau": horizon_cfg.get("tau"),
         "tier1_fields": selected_tier1,
         "all_majors": recommendations[:30],
         "total_evaluated": len(recommendations),
@@ -812,12 +927,34 @@ async def evaluate_dashboard_profile_bundle(
     raise_if_unassessed: bool = False,
     persist_history: bool = False,
     user_name: Optional[str] = None,
+    gender: Optional[str] = None,
+    grade_level: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
     Tính toán trọn bộ dữ liệu Dashboard & Ràng buộc Điểm trên toàn bộ 435 ngành TT74:
-    - Trả về 2-Tier Funnel, danh sách ngành kèm trạng thái TARGET/REACH, biểu đồ Radar và Khối mạnh nhất.
+    - Trả về 2-Tier Funnel, danh sách ngành kèm trạng thái TARGET/REACH/SAFETY, biểu đồ Radar và Khối mạnh nhất.
+    - Tự động thích ứng theo chân trời thời gian khối lớp và công thái học giới tính (HA-GAE v3.1).
     """
-    req = RecommendationRequest(top_k=max(top_k, 435), custom_weights=custom_weights)
+    inline = inline_profile or {}
+    effective_gender = gender or inline.get("gender")
+    effective_grade_level = grade_level or inline.get("grade_level")
+
+    if db is not None and user_id is not None and (not effective_gender or not effective_grade_level):
+        try:
+            u_res = await db.execute(select(User).where(User.id == user_id))
+            u_row = u_res.scalars().first()
+            if u_row:
+                effective_gender = effective_gender or u_row.gender
+                effective_grade_level = effective_grade_level or u_row.grade_level
+        except Exception:
+            pass
+
+    req = RecommendationRequest(
+        top_k=max(top_k, 435),
+        custom_weights=custom_weights,
+        gender=effective_gender,
+        grade_level=effective_grade_level,
+    )
     rec_resp = await calculate_3pillar_recommendations(
         db=db,
         user_id=user_id,
@@ -828,7 +965,6 @@ async def evaluate_dashboard_profile_bundle(
     )
 
     # Tái sử dụng đúng vector đã chuẩn hóa để xuất Radar & Best Block Summary đồng nhất 100%
-    inline = inline_profile or {}
     student_riasec = inline.get("riasec_scores") or _riasec_vector_from_answers(inline.get("riasec_answers"))
     norm_raw_grades = normalize_grades_dict(inline.get("grades_by_subject"))
     aspiration_data = inline.get("aspiration")
@@ -862,7 +998,7 @@ async def evaluate_dashboard_profile_bundle(
     effective_riasec = student_riasec or {"R": 0.5, "I": 0.5, "A": 0.5, "S": 0.5, "E": 0.5, "C": 0.5}
     student_zscores = compute_block_zscores_from_grades(norm_raw_grades) if norm_raw_grades else {}
     has_academic_data = bool(norm_raw_grades) or any(
-        m.feasibility_tier in ("TARGET", "REACH") for m in rec_resp.recommendations
+        m.feasibility_tier in ("TARGET", "REACH", "SAFETY") for m in rec_resp.recommendations
     )
     riasec_data, best_block_stats = build_radar_and_block_summary(
         effective_riasec,
@@ -871,7 +1007,10 @@ async def evaluate_dashboard_profile_bundle(
     )
     best_block_stats["has_academic_data"] = has_academic_data
 
-    funnel_payload = build_two_tier_funnel_payload(rec_resp.recommendations)
+    funnel_payload = build_two_tier_funnel_payload(
+        rec_resp.recommendations,
+        grade_level=effective_grade_level,
+    )
 
     # Thực thi AI Agent Phân tích Nguyện vọng & Đối chiếu Trắc nghiệm 3 Trụ cột
     from app.services.recommender.aspiration_agent import analyze_career_aspiration
@@ -887,6 +1026,10 @@ async def evaluate_dashboard_profile_bundle(
         "has_assessment": True,
         "has_academic_data": has_academic_data,
         "user_name": user_name or "Học sinh",
+        "gender": effective_gender,
+        "grade_level": effective_grade_level,
+        "horizon_label": funnel_payload.get("horizon_label"),
+        "horizon_tau": funnel_payload.get("horizon_tau"),
         "total_majors_evaluated": rec_resp.total_majors_evaluated,
         "weights_applied": rec_resp.weights_applied,
         "riasecData": riasec_data,

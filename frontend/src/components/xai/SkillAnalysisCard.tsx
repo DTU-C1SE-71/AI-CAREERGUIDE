@@ -52,42 +52,42 @@ export function SkillAnalysisCard({
   if (!loading && !data) return null
 
   return (
-    <div className="glass-card rounded-3xl p-6">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-extrabold text-slate-800">
+    <div className="glass-card rounded-2xl p-5 sm:rounded-3xl sm:p-6">
+      <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
+        <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
           <Sparkles size={16} className="text-sky-600" />
-          Phân tích kỹ năng của bạn
+          <span>Phân tích Năng lực & Kỹ năng cá nhân</span>
         </div>
         {loading && (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-white/75 px-2.5 py-1 text-[10px] font-bold text-sky-700 ring-1 ring-white/90">
-            <Loader2 size={12} className="animate-spin text-sky-600" />
-            Đang chấm...
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
+            <Loader2 size={13} className="animate-spin text-sky-600" />
+            Đang phân tích...
           </span>
         )}
       </div>
 
       {data ? (
         <>
-          <p className="rounded-2xl bg-sky-500/8 px-4 py-3 text-xs font-semibold leading-5 text-slate-700">
+          <p className="rounded-2xl border border-sky-100 bg-sky-50/50 px-4 py-3 text-sm leading-relaxed text-slate-700">
             {formatSkillSummary(data.summary)}
           </p>
 
-          <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div className="mt-5 grid gap-5 sm:grid-cols-2">
             <div>
-              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide text-emerald-700">
-                <CircleCheck size={13} /> Ưu điểm
+              <p className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-700">
+                <CircleCheck size={14} /> Điểm mạnh nổi trội
               </p>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {data.strengths.map((item) => (
                   <li
                     key={item.title}
-                    className="rounded-xl border border-white/85 bg-white/65 px-3 py-2"
+                    className="rounded-xl border border-slate-200/80 bg-white/70 p-3"
                   >
-                    <span className="block text-xs font-bold text-slate-800">
+                    <span className="block text-sm font-bold text-slate-800">
                       {item.title}
                     </span>
                     {item.detail && (
-                      <span className="block text-[11px] leading-4 text-slate-600">
+                      <span className="mt-1 block text-xs leading-relaxed text-slate-600">
                         {item.detail}
                       </span>
                     )}
@@ -97,20 +97,20 @@ export function SkillAnalysisCard({
             </div>
 
             <div>
-              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide text-amber-700">
-                <CircleAlert size={13} /> Cần cải thiện
+              <p className="mb-2.5 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-700">
+                <CircleAlert size={14} /> Điểm cần bồi dưỡng
               </p>
-              <ul className="space-y-1.5">
+              <ul className="space-y-2">
                 {data.weaknesses.map((item) => (
                   <li
                     key={item.title}
-                    className="rounded-xl border border-white/85 bg-white/65 px-3 py-2"
+                    className="rounded-xl border border-slate-200/80 bg-white/70 p-3"
                   >
-                    <span className="block text-xs font-bold text-slate-800">
+                    <span className="block text-sm font-bold text-slate-800">
                       {item.title}
                     </span>
                     {item.detail && (
-                      <span className="block text-[11px] leading-4 text-slate-600">
+                      <span className="mt-1 block text-xs leading-relaxed text-slate-600">
                         {item.detail}
                       </span>
                     )}
@@ -120,23 +120,23 @@ export function SkillAnalysisCard({
             </div>
           </div>
 
-          {data.skill_gaps.length > 0 && (
-            <div className="mt-4">
-              <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-wide text-sky-700">
-                <Target size={13} /> Kỹ năng cần bổ sung
+          {data.skill_gaps && data.skill_gaps.length > 0 && (
+            <div className="mt-6 border-t border-slate-100 pt-5">
+              <p className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-sky-700">
+                <Target size={14} /> Kỹ năng cần bổ sung (Action Items)
               </p>
-              <div className="space-y-2">
+              <div className="space-y-2.5">
                 {data.skill_gaps.map((gap) => (
                   <div
                     key={gap.skill}
-                    className="rounded-xl border border-white/85 bg-white/65 px-3 py-2"
+                    className="rounded-xl border border-slate-200/80 bg-white/75 p-3.5"
                   >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="text-xs font-bold text-slate-800">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-sm font-bold text-slate-800">
                         {gap.skill}
                       </span>
                       <span
-                        className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${
+                        className={`rounded-full border px-2.5 py-0.5 text-xs font-semibold ${
                           PRIORITY_STYLE[gap.priority] || PRIORITY_STYLE.MEDIUM
                         }`}
                       >
@@ -144,19 +144,19 @@ export function SkillAnalysisCard({
                       </span>
                     </div>
                     {gap.why && (
-                      <p className="mt-0.5 text-[11px] leading-4 text-slate-600">
+                      <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
                         {gap.why}
                       </p>
                     )}
-                    {gap.how_to_improve.length > 0 && (
-                      <ul className="mt-1 space-y-0.5">
+                    {gap.how_to_improve && gap.how_to_improve.length > 0 && (
+                      <ul className="mt-2 space-y-1 border-t border-slate-100 pt-2">
                         {gap.how_to_improve.map((step) => (
                           <li
                             key={step}
-                            className="flex gap-1.5 text-[11px] leading-4 text-slate-700"
+                            className="flex items-start gap-2 text-xs text-slate-700"
                           >
                             <Lightbulb
-                              size={11}
+                              size={13}
                               className="mt-0.5 shrink-0 text-sky-500"
                             />
                             <span>{step}</span>
@@ -172,8 +172,7 @@ export function SkillAnalysisCard({
         </>
       ) : (
         <p className="text-xs text-slate-500">
-          Hoàn thành bài test để nhận phân tích ưu điểm, điểm cần cải thiện và kỹ
-          năng nên bổ sung.
+          Hoàn thành bài đánh giá để nhận phân tích chi tiết kỹ năng của bạn.
         </p>
       )}
     </div>

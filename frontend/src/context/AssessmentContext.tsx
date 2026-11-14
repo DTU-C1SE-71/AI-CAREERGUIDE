@@ -178,12 +178,29 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
   const assessmentStorageKey = `career-guide:assessment:${userKey}`
   const historyStorageKey = `career-guide:assessment-history:${userKey}`
 
-  const [assessment, setAssessment] = useState<AssessmentState>(() =>
-    readStorage<AssessmentState>(assessmentStorageKey, initial),
-  )
   const [history, setHistory] = useState<AssessmentHistoryItem[]>(() =>
     readStorage<AssessmentHistoryItem[]>(historyStorageKey, []),
   )
+  const [assessment, setAssessment] = useState<AssessmentState>(() => {
+    const stored = readStorage<AssessmentState>(assessmentStorageKey, initial)
+    const storedHistory = readStorage<AssessmentHistoryItem[]>(historyStorageKey, [])
+    if (
+      (!stored || Object.keys(stored.answers || {}).length === 0) &&
+      storedHistory.length > 0
+    ) {
+      const latest = storedHistory[0]
+      return {
+        step: 4,
+        answers: { ...latest.answers },
+        cognitive: { ...latest.cognitive },
+        scores: [...latest.scores],
+        aspiration: latest.aspiration ? { ...latest.aspiration } : undefined,
+        completed: true,
+        completedAt: latest.createdAt,
+      }
+    }
+    return stored
+  })
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null)
 
   // Reload user-scoped assessment & history when logged-in user changes
@@ -196,7 +213,24 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
       historyStorageKey,
       [],
     )
-    setAssessment(loadedAssessment)
+    let effective = loadedAssessment
+    if (
+      (!loadedAssessment || Object.keys(loadedAssessment.answers || {}).length === 0) &&
+      loadedHistory.length > 0
+    ) {
+      const latest = loadedHistory[0]
+      effective = {
+        step: 4,
+        answers: { ...latest.answers },
+        cognitive: { ...latest.cognitive },
+        scores: [...latest.scores],
+        aspiration: latest.aspiration ? { ...latest.aspiration } : undefined,
+        completed: true,
+        completedAt: latest.createdAt,
+      }
+      writeStorage(assessmentStorageKey, effective)
+    }
+    setAssessment(effective)
     setHistory(loadedHistory)
     setActiveHistoryId(loadedHistory[0]?.id || null)
   }, [assessmentStorageKey, historyStorageKey])

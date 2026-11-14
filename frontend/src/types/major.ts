@@ -33,6 +33,9 @@ export interface Major {
   trend_label?: string | null
   trend_reason?: string | null
   trend_sources?: TrendSourceItem[]
+  nudge_badge?: string | null
+  advisory_note?: string | null
+  admission_tactic?: string | null
   fit: MajorFit
   explanation: string
   gaps: string[]
@@ -48,6 +51,8 @@ export interface FunnelTier1Field {
 }
 
 export interface FunnelRecommendationData {
+  horizon_label?: string
+  horizon_tau?: number
   tier1_fields: FunnelTier1Field[]
   all_majors?: Major[]
   total_evaluated?: number

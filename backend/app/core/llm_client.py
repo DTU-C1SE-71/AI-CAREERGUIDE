@@ -109,9 +109,9 @@ async def resolve_model_token_limits(
     Lấy giới hạn token đầu ra tối đa (`max_output_tokens`) và ngữ cảnh (`context_window`)
     cho API Key & Model hiện tại (tự động đọc từ `/v1/models`, cache 10 phút).
     """
-    eff_key = (api_key if api_key is not None else settings.OPENAI_API_KEY) or ""
-    eff_base = ((base_url if base_url is not None else settings.OPENAI_BASE_URL) or "https://api.openai.com/v1").rstrip("/")
-    eff_model = (model if model is not None else settings.LLM_MODEL) or ""
+    eff_key = (api_key if api_key is not None else (getattr(settings, "LLM_API_KEY", "") or settings.OPENAI_API_KEY)) or ""
+    eff_base = ((base_url if base_url is not None else (getattr(settings, "LLM_BASE_URL", "") or settings.OPENAI_BASE_URL)) or "https://api.openai.com/v1").rstrip("/")
+    eff_model = (model if model is not None else (getattr(settings, "LLM_MODEL", "") or "gpt-6-luna")) or ""
 
     if _is_mock_or_test_key(eff_key):
         return _parse_capabilities(None)

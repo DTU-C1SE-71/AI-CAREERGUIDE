@@ -1040,9 +1040,9 @@ async def test_llm_connection(payload: LLMConnectionTestRequest) -> LLMConnectio
     if payload.api_key is not None:
         key = payload.api_key.strip()
     else:
-        key = (settings.OPENAI_API_KEY or "").strip()
-    base_url = (payload.base_url or settings.OPENAI_BASE_URL or "https://api.xkiro.com/v1").strip()
-    model = (payload.model or settings.LLM_MODEL or "mistralai/mistral-large-2512").strip()
+        key = (settings.LLM_API_KEY or settings.OPENAI_API_KEY or "").strip()
+    base_url = (payload.base_url or settings.LLM_BASE_URL or settings.OPENAI_BASE_URL or "https://codex.fosta.app/v1").strip()
+    model = (payload.model or settings.LLM_MODEL or "gpt-6-luna").strip()
 
     if not key:
         return LLMConnectionTestResponse(
@@ -1050,7 +1050,7 @@ async def test_llm_connection(payload: LLMConnectionTestRequest) -> LLMConnectio
             status_code=400,
             latency_ms=0.0,
             model_used=model,
-            base_url=base_url or settings.OPENAI_BASE_URL or "https://api.xkiro.com/v1",
+            base_url=base_url or settings.LLM_BASE_URL or settings.OPENAI_BASE_URL or "https://codex.fosta.app/v1",
             is_configured=False,
             message="Chưa cấu hình API Key. Vui lòng nhập API Key để kiểm tra kết nối.",
             preview_reply=None,
@@ -1105,7 +1105,7 @@ async def test_llm_connection(payload: LLMConnectionTestRequest) -> LLMConnectio
             friendly = "Xác thực thất bại (401 Unauthorized): API Key không chính xác, đã hết hạn hoặc không có quyền truy cập."
         elif "402" in error_msg or "insufficient_quota" in error_msg.lower() or "insufficient balance" in error_msg.lower():
             status_code = 402
-            friendly = "Hết hạn mức / Số dư tài khoản (402 Insufficient Quota): Tài khoản API trên nhà cung cấp (api.xah.io) đã hết số dư. Vui lòng nạp thêm credit hoặc sử dụng API Key khác."
+            friendly = f"Hết hạn mức / Số dư tài khoản (402 Insufficient Quota): Tài khoản API trên nhà cung cấp ({base_url or 'LLM'}) đã hết số dư. Vui lòng nạp thêm credit hoặc sử dụng API Key khác."
         elif "404" in error_msg or "NotFoundError" in type(e).__name__:
             status_code = 404
             friendly = f"Mô hình không tồn tại (404 NotFound): Mô hình '{model}' không được endpoint '{base_url or 'api.openai.com'}' hỗ trợ. Hãy kiểm tra lại tên model."
@@ -1138,8 +1138,12 @@ def update_llm_config(model: str = None, base_url: str = None, api_key: str = No
     if model and model.strip():
         settings.LLM_MODEL = model.strip()
     if base_url and base_url.strip():
-        settings.OPENAI_BASE_URL = base_url.strip()
+        clean_base = base_url.strip()
+        settings.OPENAI_BASE_URL = clean_base
+        settings.LLM_BASE_URL = clean_base
     if api_key and api_key.strip():
-        settings.OPENAI_API_KEY = api_key.strip()
+        clean_key = api_key.strip()
+        settings.OPENAI_API_KEY = clean_key
+        settings.LLM_API_KEY = clean_key
     clear_model_caps_cache()
     return get_llm_status()

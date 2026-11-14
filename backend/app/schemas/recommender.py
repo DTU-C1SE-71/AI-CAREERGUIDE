@@ -10,6 +10,8 @@ class RecommendationRequest(BaseModel):
         default=None,
         description="Optional custom weights: {'w_riasec': 0.45, 'w_academic': 0.35, 'w_preference': 0.20}"
     )
+    gender: Optional[str] = None
+    grade_level: Optional[str] = None
     top_k: int = Field(default=10, ge=1, le=500)
 
 
@@ -68,6 +70,11 @@ class MajorRecommendationItem(BaseModel):
     trend_reason: Optional[str] = Field(default=None)
     trend_sources: List[Dict[str, str]] = Field(default_factory=list)
 
+    # HA-GAE v3.1 Horizon & Gender-Aware Adaptive Fields
+    nudge_badge: Optional[str] = None
+    advisory_note: Optional[str] = None
+    admission_tactic: Optional[str] = None
+
     # Tương thích ngược với DTO Frontend
     id: Optional[str] = None
     code: Optional[str] = None
@@ -121,6 +128,8 @@ class EvaluateProfileRequest(BaseModel):
         default=None,
         description="Nguyện vọng nghề nghiệp tương lai của học sinh (dream_job, desired_field, work_values, preferred_environment, score_strategy)"
     )
+    gender: Optional[str] = None
+    grade_level: Optional[str] = None
     custom_weights: Optional[Dict[str, float]] = None
     top_k: int = Field(default=15, ge=1, le=500)
 

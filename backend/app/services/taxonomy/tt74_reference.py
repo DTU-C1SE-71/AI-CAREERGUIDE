@@ -166,8 +166,37 @@ def auto_enrich_major_record(raw: Dict[str, Any]) -> Dict[str, Any]:
     f_code = str(raw.get("field_code") or raw.get("ma_linh_vuc") or raw_6[:2]).strip()
     g_code = str(raw.get("group_code") or raw.get("ma_nhom_nganh") or raw_6[:4]).strip()
     m_name = str(raw.get("major_name") or raw.get("ten_nganh") or raw.get("name") or f"Ngành {raw_6}").strip()
-    f_name = str(raw.get("field_name") or raw.get("ten_linh_vuc") or raw.get("category") or "Khác").strip()
-    g_name = str(raw.get("group_name") or raw.get("ten_nhom_nganh") or f_name).strip()
+
+    field_code_fallback = {
+        "14": "KHOA HỌC GIÁO DỤC VÀ ĐÀO TẠO GIÁO VIÊN",
+        "21": "NGHỆ THUẬT",
+        "22": "NHÂN VĂN",
+        "31": "KHOA HỌC XÃ HỘI VÀ HÀNH VI",
+        "32": "BÁO CHÍ VÀ THÔNG TIN",
+        "34": "KINH DOANH VÀ QUẢN LÝ",
+        "38": "PHÁP LUẬT",
+        "42": "KHOA HỌC SỰ SỐNG",
+        "44": "KHOA HỌC TỰ NHIÊN",
+        "46": "TOÁN VÀ THỐNG KÊ",
+        "48": "MÁY TÍNH VÀ CÔNG NGHỆ THÔNG TIN",
+        "51": "CÔNG NGHỆ KỸ THUẬT",
+        "52": "KỸ THUẬT",
+        "54": "SẢN XUẤT VÀ CHẾ BIẾN",
+        "58": "KIẾN TRÚC VÀ XÂY DỰNG",
+        "62": "NÔNG, LÂM NGHIỆP VÀ THỦY SẢN",
+        "64": "THÚ Y",
+        "72": "SỨC KHỎE",
+        "76": "DỊCH VỤ XÃ HỘI",
+        "81": "DU LỊCH, KHÁCH SẠN, THỂ THAO VÀ DỊCH VỤ CÁ NHÂN",
+        "84": "DỊCH VỤ VẬN TẢI",
+        "85": "MÔI TRƯỜNG VÀ BẢO VỆ MÔI TRƯỜNG",
+        "86": "AN NINH, QUỐC PHÒNG",
+    }
+
+    raw_f_name = str(raw.get("field_name") or raw.get("ten_linh_vuc") or raw.get("category") or "").strip()
+    raw_g_name = str(raw.get("group_name") or raw.get("ten_nhom_nganh") or "").strip()
+    f_name = raw_f_name or raw_g_name or field_code_fallback.get(f_code, "Khác")
+    g_name = raw_g_name or f_name
 
     # Tier 1: Lookup Group Reference
     default_cip, default_hol, base_vec, default_blocks = GROUP_CIP_RIASEC.get(
@@ -399,12 +428,12 @@ def _extract_majors_from_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]
     header_idx = -1
     header_map: Dict[int, str] = {}
     known_headers = {
-        "field_code": "field_code", "mã lv": "field_code", "ma_linh_vuc": "field_code",
-        "field_name": "field_name", "lĩnh vực đào tạo": "field_name", "ten_linh_vuc": "field_name",
-        "group_code": "group_code", "mã nhóm": "group_code", "ma_nhom_nganh": "group_code",
-        "group_name": "group_name", "nhóm ngành đào tạo": "group_name", "ten_nhom_nganh": "group_name",
+        "field_code": "field_code", "mã lv": "field_code", "ma_linh_vuc": "field_code", "mã lĩnh vực": "field_code",
+        "field_name": "field_name", "lĩnh vực đào tạo": "field_name", "lĩnh vực": "field_name", "tên lĩnh vực": "field_name", "ten_linh_vuc": "field_name", "category": "field_name",
+        "group_code": "group_code", "mã nhóm": "group_code", "ma_nhom_nganh": "group_code", "mã nhóm ngành": "group_code",
+        "group_name": "group_name", "nhóm ngành đào tạo": "group_name", "nhóm ngành": "group_name", "tên nhóm ngành": "group_name", "ten_nhom_nganh": "group_name",
         "major_code": "major_code", "mã ngành": "major_code", "ma_nganh": "major_code",
-        "major_name": "major_name", "tên ngành đào tạo": "major_name", "ten_nganh": "major_name",
+        "major_name": "major_name", "tên ngành đào tạo": "major_name", "tên ngành": "major_name", "ten_nganh": "major_name", "name": "major_name",
         "legacy_tt09_codes": "legacy_tt09_codes", "ma_nganh_cu_tt09": "legacy_tt09_codes",
         "degree_levels": "degree_levels", "trinh_do_dao_tao": "degree_levels",
         "circular_note": "circular_note", "ghi chú": "circular_note", "ghi_chu_thong_tu": "circular_note",
