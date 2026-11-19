@@ -59,9 +59,9 @@ export function SkillAnalysisCard({
           <span>Gợi ý tìm hiểu kỹ năng theo hồ sơ</span>
         </div>
         {loading ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
-            <Loader2 size={13} className="animate-spin text-sky-600" />
-            Đang phân tích bằng AI...
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
+            <Loader2 size={13} className="animate-spin text-indigo-600" />
+            AI đang phân tích...
           </span>
         ) : data?.cached ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
@@ -181,6 +181,21 @@ export function SkillAnalysisCard({
             </div>
           )}
         </>
+      ) : loading ? (
+        <div
+          role="status"
+          className="flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-indigo-100 bg-indigo-50/50 px-4 py-8 text-center"
+        >
+          <span className="grid size-10 place-items-center rounded-2xl bg-indigo-600 text-white shadow-sm">
+            <Loader2 size={20} className="animate-spin" />
+          </span>
+          <p className="text-sm font-extrabold text-indigo-950">
+            AI đang phân tích hồ sơ &amp; kỹ năng của bạn...
+          </p>
+          <p className="max-w-md text-xs leading-relaxed text-slate-600">
+            Quá trình này thường mất 5–15 giây ở lần đầu. Sau khi hoàn tất, kết quả sẽ được lưu vào lịch sử CSDL để những lần sau tải ngay lập tức.
+          </p>
+        </div>
       ) : (
         <p className="text-xs text-slate-500">
           Hoàn thành bài đánh giá để nhận phân tích chi tiết kỹ năng của bạn.

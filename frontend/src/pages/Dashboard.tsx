@@ -10,6 +10,7 @@ import {
   Eye,
   GraduationCap,
   History,
+  Loader2,
   RotateCcw,
   Sparkles,
   Trash2,
@@ -677,14 +678,18 @@ export function Dashboard() {
                   type="button"
                   onClick={handleOpenAiMode}
                   disabled={skillLoading && recommendationMode === "ai"}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition disabled:cursor-wait disabled:opacity-75 sm:rounded-2xl sm:text-sm ${
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition disabled:cursor-wait disabled:opacity-80 sm:rounded-2xl sm:text-sm ${
                     recommendationMode === "ai"
                       ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
                       : "text-slate-600 hover:bg-white hover:text-indigo-700"
                   }`}
                 >
-                  <Sparkles size={15} className="shrink-0" />
-                  <span>Đề xuất ngành có AI</span>
+                  {skillLoading ? (
+                    <Loader2 size={15} className="shrink-0 animate-spin" />
+                  ) : (
+                    <Sparkles size={15} className="shrink-0" />
+                  )}
+                  <span>{skillLoading ? "AI đang phân tích..." : "Đề xuất ngành có AI"}</span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                       recommendationMode === "ai"
@@ -692,7 +697,7 @@ export function Dashboard() {
                         : "bg-indigo-100 text-indigo-700"
                     }`}
                   >
-                    Phân tích sâu
+                    {skillLoading ? "Đang tải" : "Phân tích sâu"}
                   </span>
                 </button>
               </div>
@@ -709,14 +714,22 @@ export function Dashboard() {
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200/80 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-900 sm:rounded-3xl sm:px-5 sm:py-3.5 sm:text-sm">
                   <div className="flex items-center gap-2.5">
                     <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-indigo-600 text-white">
-                      <Sparkles size={16} />
+                      {skillLoading || isAnalyzingAspiration ? (
+                        <Loader2 size={16} className="animate-spin" />
+                      ) : (
+                        <Sparkles size={16} />
+                      )}
                     </span>
                     <div>
                       <p className="font-extrabold text-indigo-950">
-                        Chế độ Đề xuất ngành có AI phân tích chuyên sâu
+                        {skillLoading || isAnalyzingAspiration
+                          ? "AI đang phân tích chuyên sâu hồ sơ của bạn..."
+                          : "Chế độ Đề xuất ngành có AI phân tích chuyên sâu"}
                       </p>
                       <p className="text-xs font-medium text-indigo-700">
-                        AI đối chiếu nguyện vọng nghề nghiệp, đánh giá điểm mạnh/yếu kỹ năng dựa trên kết quả thuật toán.
+                        {skillLoading || isAnalyzingAspiration
+                          ? "Vui lòng chờ vài giây trong lúc AI xử lý; kết quả sẽ được lưu lại trong lịch sử CSDL."
+                          : "AI đối chiếu nguyện vọng nghề nghiệp, đánh giá điểm mạnh/yếu kỹ năng dựa trên kết quả thuật toán."}
                       </p>
                     </div>
                   </div>
@@ -853,12 +866,19 @@ export function Dashboard() {
                   </div>
                   <Button
                     type="button"
-                    icon={Sparkles}
+                    icon={skillLoading ? undefined : Sparkles}
                     onClick={handleOpenAiMode}
                     disabled={skillLoading}
-                    className="shrink-0 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-extrabold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-75 sm:text-sm"
+                    className="shrink-0 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-extrabold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-80 sm:text-sm"
                   >
-                    {skillLoading ? "Đang phân tích AI..." : "Mở đề xuất ngành có AI"}
+                    {skillLoading ? (
+                      <span className="inline-flex items-center gap-2">
+                        <Loader2 size={15} className="animate-spin" />
+                        AI đang phân tích...
+                      </span>
+                    ) : (
+                      "Mở đề xuất ngành có AI"
+                    )}
                   </Button>
                 </div>
               </div>

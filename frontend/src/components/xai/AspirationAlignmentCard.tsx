@@ -85,7 +85,12 @@ export function AspirationAlignmentCard({ analysis, currentAspiration, onUpdateA
     </p>}
     {analysis?.interest_evidence && <div className="mt-4"><HollandInterestSummary evidence={analysis.interest_evidence} /></div>}
     <div className="mt-4 space-y-5">
-      {isAnalyzing && <p role="status" className="text-sm text-slate-600">Đang đối chiếu hồ sơ…</p>}
+      {isAnalyzing && (
+        <div role="status" className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-800 sm:text-sm">
+          <Loader2 className="size-4 shrink-0 animate-spin text-indigo-600" />
+          <span>AI đang phân tích &amp; đối chiếu nguyện vọng...</span>
+        </div>
+      )}
       {!isAnalyzing && !modern && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Chưa có phân tích được xác minh cho nguyện vọng này. Kết nối lại và phân tích lại để đối chiếu dữ liệu.</p>}
       {!isAnalyzing && modern && analysis?.match_status === "UNRECOGNIZED" && <p className="text-sm text-slate-700">Chưa nhận diện được nghề trong danh mục. Hãy nhập một nghề cụ thể; điều này không có nghĩa bạn không thể theo đuổi nghề đó.</p>}
       {!isAnalyzing && modern && analysis?.match_status === "AMBIGUOUS" && <div className="rounded-xl bg-amber-50 p-4"><p className="text-sm text-amber-900">Có nhiều nghề trong nguyện vọng. Chọn một nghề để đối chiếu:</p><div className="mt-2 flex flex-wrap gap-2">{analysis.intent_candidates?.map(candidate => <button key={candidate.id} type="button" disabled={readOnly || saving || isAnalyzing} onClick={() => { setDraft(candidate.canonicalDreamJob); setEditing(true); void apply(candidate.canonicalDreamJob) }} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm disabled:opacity-50">{candidate.label}</button>)}</div></div>}
