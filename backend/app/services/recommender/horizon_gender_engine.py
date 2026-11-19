@@ -300,6 +300,15 @@ def apply_horizon_gender_reranking(
     pool_other: List[MajorRecommendationItem] = []
 
     for item in scored_items:
+        is_strong_veto = (
+            (item.score_breakdown or {}).get("subfacet_gate", {}).get("status") == "STRONG_VETO"
+        )
+        if is_strong_veto:
+            # STRICT VETO ISOLATION: Học sinh chọn "Rất không thích" (1/5) hoạt động đặc thù của ngành
+            # -> không áp dụng gender nudge, cách ly khỏi các vị trí đầu bảng & quota đề xuất.
+            pool_unrealistic.append(item)
+            continue
+
         d_boost, adv_note, n_badge, ergo_debug = compute_gender_ergonomic_adjustment(
             gender=gender,
             major_code=item.major_code,

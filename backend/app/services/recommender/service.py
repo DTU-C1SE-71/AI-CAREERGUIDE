@@ -26,6 +26,7 @@ from app.services.recommender.horizon_gender_engine import (
     apply_horizon_gender_reranking,
     build_horizon_gender_xai_explanation,
 )
+from app.services.recommender.subfacet_gate import evaluate_subfacet_gate
 from app.services.recommender.engine import (
     RIASEC_DIMENSIONS,
     calculate_riasec_cosine_similarity,
@@ -619,6 +620,35 @@ async def calculate_3pillar_recommendations(
         # A bounded preference contribution can refine fit, never academic eligibility.
         if preferences["score"] is not None and any(availability.values()):
             overall_score = round(0.9 * overall_score + 0.1 * preferences["score"], 4)
+
+        # --- SUB-FACET AFFINITY & ASYMMETRIC VETO GATE (PA 3) ---
+        # Chống hiệu ứng nén trung bình 6 chiều RIASEC (vd: thích A1/A2/A3/A5 nhưng chọn A4=1 ghét Âm nhạc).
+        if availability["w_riasec"]:
+            subfacet_gate = evaluate_subfacet_gate(
+                major.major_code,
+                major.name,
+                inline.get("riasec_answers"),
+            )
+            if subfacet_gate["status"] != "NEUTRAL":
+                score_riasec = round(
+                    max(0.0, min(1.0, score_riasec * subfacet_gate["riasec_multiplier"] + subfacet_gate["riasec_boost"])),
+                    4,
+                )
+                overall_score = round(
+                    max(0.0, min(1.0, overall_score * subfacet_gate["overall_multiplier"] + subfacet_gate["overall_boost"])),
+                    4,
+                )
+        else:
+            subfacet_gate = {
+                "status": "NEUTRAL",
+                "riasec_multiplier": 1.0,
+                "overall_multiplier": 1.0,
+                "riasec_boost": 0.0,
+                "overall_boost": 0.0,
+                "matched_items": [],
+                "note": None,
+            }
+
         if not availability["w_riasec"]:
             score_riasec = 0.0
         if not availability["w_academic"]:
@@ -732,6 +762,12 @@ async def calculate_3pillar_recommendations(
             reason_snip = f" — {trend_info['trend_reason']}" if trend_info.get("trend_reason") else ""
             top_factors.insert(1, f"{trend_info['trend_label']}{reason_snip}")
 
+        if subfacet_gate.get("note"):
+            if subfacet_gate["status"] in ("STRONG_VETO", "SOFT_PENALTY"):
+                top_factors.insert(0, subfacet_gate["note"])
+            else:
+                top_factors.append(subfacet_gate["note"])
+
         # HA-GAE v3.1 Thích ứng chân trời khối lớp và bối cảnh giới tính (3-Sentence XAI)
         horizon_xai = build_horizon_gender_xai_explanation(
             major_name=major.name,
@@ -785,6 +821,7 @@ async def calculate_3pillar_recommendations(
                 "trend_priority_boost": trend_compat["rank_boost"],
                 "trend_compat_score": trend_compat["trend_compat_score"],
                 "affinity": trend_compat["affinity"],
+                "subfacet_gate": subfacet_gate,
             },
             top_supporting_factors=top_factors,
             competency_gaps=overall_gaps[:5],
@@ -1103,13 +1140,18 @@ def build_two_tier_funnel_payload(
     for key, items in groups.items():
         cat_name = raw_cat_by_key[key]
         display_name = _format_vietnamese_field_name(cat_name)
+        def _is_strong_veto(m: MajorRecommendationItem) -> bool:
+            return (m.score_breakdown or {}).get("subfacet_gate", {}).get("status") == "STRONG_VETO"
+
+        non_vetoed = [m for m in items if not _is_strong_veto(m)]
+        candidate_items = non_vetoed if non_vetoed else items
         if tau >= 0.65:
-            sorted_items = sorted(items, key=lambda m: (m.admission_tactic == "Nguy cơ cao", m.rank))
+            sorted_items = sorted(candidate_items, key=lambda m: (_is_strong_veto(m), m.admission_tactic == "Nguy cơ cao", m.rank))
         else:
-            sorted_items = sorted(items, key=lambda m: (m.feasibility_tier != "TARGET", m.rank))
+            sorted_items = sorted(candidate_items, key=lambda m: (_is_strong_veto(m), m.feasibility_tier != "TARGET", m.rank))
         sample_top = sorted_items[:majors_per_field]
         target_cnt = sum(
-            1 for m in items
+            1 for m in candidate_items
             if m.readiness.get("status") == "READY_REFERENCE" or m.feasibility_tier == "TARGET"
         )
         avg_score = sum(m.overall_score for m in sample_top) / len(sample_top)
@@ -1131,14 +1173,16 @@ def build_two_tier_funnel_payload(
             "max_trend_priority": max_trend_pri,
             "majors_count": len(items),
             "eligible_count": target_cnt,
-            "has_eligible": target_cnt > 0,
+            "has_eligible": target_cnt > 0 and bool(non_vetoed),
+            "has_non_vetoed": bool(non_vetoed),
             "majors": sample_top,
         })
 
-    # Ưu tiên các lĩnh vực chuyên môn cụ thể (tránh đưa nhóm "Khác" mã 9090 lên đầu), có ngành đạt chuẩn, xu hướng và % phù hợp
+    # Ưu tiên các lĩnh vực chuyên môn cụ thể (tránh đưa nhóm "Khác" mã 9090 lên đầu), không bị phủ quyết, có ngành đạt chuẩn & % phù hợp
     tier1_fields.sort(
         key=lambda f: (
             0 if _canonical_field_key(f["field_name"]) == "khác" else 1,
+            1 if f["has_non_vetoed"] else 0,
             1 if f["has_eligible"] else 0,
             round(f["rank_score"], 4),
             f["match"] if f["match"] is not None else -1
@@ -1151,7 +1195,11 @@ def build_two_tier_funnel_payload(
         "horizon_label": horizon_cfg.get("label"),
         "horizon_tau": horizon_cfg.get("tau"),
         "tier1_fields": selected_tier1,
-        "all_majors": [m for m in recommendations if m.feasibility_tier != "REACH"][:30],
+        "all_majors": [
+            m for m in recommendations
+            if m.feasibility_tier != "REACH"
+            and (m.score_breakdown or {}).get("subfacet_gate", {}).get("status") != "STRONG_VETO"
+        ][:30],
         "total_evaluated": len(recommendations),
         "total_eligible": sum(1 for m in recommendations if m.readiness.get("status") == "READY_REFERENCE"),
         "total_blocked": sum(1 for m in recommendations if m.feasibility_tier == "REACH"),
