@@ -7,13 +7,13 @@ from app.models.identity import UserRole
 
 class UserRegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, description="Minimum 8 characters compliant with OWASP ASVS")
+    password: str = Field(min_length=8, max_length=1024, description="Minimum 8 characters compliant with OWASP ASVS")
     full_name: str = Field(min_length=2, max_length=255)
     role: UserRole = Field(default=UserRole.STUDENT)
-    gender: str = Field(default="Khác", description="Giới tính: Nam, Nữ, Khác (bắt buộc)")
-    grade_level: str = Field(default="Lớp 12", description="Hiện đang học lớp mấy: Lớp 10, Lớp 11, Lớp 12, Đã tốt nghiệp THPT (bắt buộc)")
-    school_class: Optional[str] = None
-    school_name: Optional[str] = None
+    gender: str = Field(default="Khác", max_length=50, description="Giới tính: Nam, Nữ, Khác (bắt buộc)")
+    grade_level: str = Field(default="Lớp 12", max_length=50, description="Hiện đang học lớp mấy: Lớp 10, Lớp 11, Lớp 12, Đã tốt nghiệp THPT (bắt buộc)")
+    school_class: Optional[str] = Field(None, max_length=50)
+    school_name: Optional[str] = Field(None, max_length=255)
 
     @model_validator(mode="after")
     def validate_profile_fields(self):
@@ -26,15 +26,16 @@ class UserRegisterRequest(BaseModel):
 
 class UserLoginRequest(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(min_length=1, max_length=1024)
 
 
 class UserProfileUpdateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     full_name: Optional[str] = Field(None, min_length=2, max_length=255)
-    gender: Optional[str] = None
-    grade_level: Optional[str] = None
-    school_class: Optional[str] = None
-    school_name: Optional[str] = None
+    gender: Optional[str] = Field(None, max_length=50)
+    grade_level: Optional[str] = Field(None, max_length=50)
+    school_class: Optional[str] = Field(None, max_length=50)
+    school_name: Optional[str] = Field(None, max_length=255)
 
 
 class UserResponse(BaseModel):
@@ -45,10 +46,10 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
     grade: Optional[int] = 12
-    gender: Optional[str] = None
-    grade_level: Optional[str] = None
-    school_class: Optional[str] = None
-    school_name: Optional[str] = None
+    gender: Optional[str] = Field(None, max_length=50)
+    grade_level: Optional[str] = Field(None, max_length=50)
+    school_class: Optional[str] = Field(None, max_length=50)
+    school_name: Optional[str] = Field(None, max_length=255)
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
@@ -93,11 +94,11 @@ class UserConsentResponse(BaseModel):
 class GoogleLoginRequest(BaseModel):
     email: Optional[EmailStr] = None
     full_name: Optional[str] = None
-    access_token: Optional[str] = None
-    credential: Optional[str] = None
+    access_token: Optional[str] = Field(None, max_length=16384)
+    credential: Optional[str] = Field(None, min_length=1, max_length=16384)
     google_id: Optional[str] = None
     avatar_url: Optional[str] = None
 
 class GoogleOAuthCallbackRequest(BaseModel):
-    code: str
-    redirect_uri: Optional[str] = None
+    code: str = Field(min_length=1, max_length=4096)
+    redirect_uri: Optional[str] = Field(None, max_length=2048)

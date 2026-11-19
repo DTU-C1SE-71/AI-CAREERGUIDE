@@ -143,6 +143,25 @@ def compute_holland_code_from_vector(vec: Dict[str, float]) -> str:
     return "".join(ranked[:3])
 
 
+def _validate_raw_major_record(raw: Dict[str, Any]) -> tuple[str, str, bool]:
+    """Chuẩn hóa chỉ mã 6/7 chữ số thật; không tự tạo mã/tên khi đầu vào lỗi."""
+    if not isinstance(raw, dict):
+        raise ValueError("Ngành phải là object.")
+    code = str(raw.get("major_code") or raw.get("ma_nganh") or raw.get("raw_code") or "").strip()
+    name = raw.get("major_name") or raw.get("ten_nganh") or raw.get("name")
+    if not re.fullmatch(r"(?:[0-9]{6}|[789][0-9]{6})", code) or not isinstance(name, str) or not 2 <= len(name.strip()) <= 255:
+        raise ValueError("Mỗi ngành cần mã 6/7 chữ số và tên từ nguồn.")
+    active = raw.get("is_active", True)
+    if isinstance(active, str):
+        mapped = {"true": True, "false": False, "1": True, "0": False}
+        if active.strip().lower() not in mapped:
+            raise ValueError("Trạng thái hoạt động không hợp lệ.")
+        active = mapped[active.strip().lower()]
+    if not isinstance(active, bool):
+        raise ValueError("Trạng thái hoạt động phải là boolean.")
+    return code, name.strip(), active
+
+
 def auto_enrich_major_record(raw: Dict[str, Any]) -> Dict[str, Any]:
     """
     3-Tier Automatic Matching & Enrichment Pipeline when Admin imports an Excel/CSV row:
@@ -151,21 +170,12 @@ def auto_enrich_major_record(raw: Dict[str, Any]) -> Dict[str, Any]:
     - Auto-matches CIP code, Holland 3-letter code, and 6-dim RIASEC vector via Group + Keyword fine-tuning.
     - Auto-populates cognitive attributes, subject blocks, and career paths if omitted.
     """
-    m_code_raw = str(raw.get("major_code") or raw.get("ma_nganh") or raw.get("raw_code") or "").strip()
-    digits = re.sub(r"\D", "", m_code_raw)
-    if len(digits) == 7 and digits.startswith(("7", "8", "9")):
-        raw_6 = digits[1:]
-        full_7 = digits
-    elif len(digits) == 6:
-        raw_6 = digits
-        full_7 = f"7{digits}"
-    else:
-        raw_6 = digits or "909001"
-        full_7 = f"7{raw_6}" if len(raw_6) == 6 else raw_6
+    digits, m_name, is_active = _validate_raw_major_record(raw)
+    raw_6 = digits[1:] if len(digits) == 7 else digits
+    full_7 = digits if len(digits) == 7 else f"7{digits}"
 
     f_code = str(raw.get("field_code") or raw.get("ma_linh_vuc") or raw_6[:2]).strip()
     g_code = str(raw.get("group_code") or raw.get("ma_nhom_nganh") or raw_6[:4]).strip()
-    m_name = str(raw.get("major_name") or raw.get("ten_nganh") or raw.get("name") or f"Ngành {raw_6}").strip()
 
     field_code_fallback = {
         "14": "KHOA HỌC GIÁO DỤC VÀ ĐÀO TẠO GIÁO VIÊN",
@@ -308,7 +318,8 @@ def auto_enrich_major_record(raw: Dict[str, Any]) -> Dict[str, Any]:
         "outlook": f"Ngành đào tạo chính thức (Mã {raw_6} - CIP {cip_code} - Holland {holland_code}) theo Thông tư 74/2026/TT-BGDĐT.",
         "industry_outlook": f"Ngành đào tạo chính thức (Mã {raw_6} - CIP {cip_code} - Holland {holland_code}) theo Thông tư 74/2026/TT-BGDĐT.",
         "description": f"Chương trình đào tạo ngành {m_name} thuộc nhóm ngành {g_name} ({f_name}).",
-        "is_active": True,
+        "is_active": is_active,
+        "profile_source": "DETERMINISTIC_REFERENCE",
     }
 
 
@@ -365,6 +376,9 @@ def _parse_single_sheet_xml(ws_bytes: bytes, shared_strings: List[str]) -> List[
 def _parse_xlsx_all_sheets(file_bytes: bytes) -> Tuple[List[Tuple[str, List[List[str]]]], int]:
     """Reads all sheets from an .xlsx archive in tab order returning ((sheet_name, rows), active_tab_idx)."""
     with zipfile.ZipFile(io.BytesIO(file_bytes)) as zf:
+        entries = zf.infolist()
+        if len(entries) > 2000 or sum(entry.file_size for entry in entries) > 64 * 1024 * 1024:
+            raise ValueError("Nội dung Excel giải nén vượt giới hạn.")
         names = set(zf.namelist())
         shared_strings: List[str] = []
         if "xl/sharedStrings.xml" in names:
@@ -443,6 +457,7 @@ def _extract_majors_from_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]
         "riasec_s": "riasec_s", "riasec_e": "riasec_e", "riasec_c": "riasec_c",
         "subject_blocks": "subject_blocks", "to_hop_xet_tuyen": "subject_blocks",
         "career_paths": "career_paths", "nghe_nghiep_tieu_bieu": "career_paths",
+        "is_active": "is_active", "hoat_dong": "is_active",
     }
 
     for idx, row in enumerate(raw_rows[:25]):
@@ -466,13 +481,20 @@ def _extract_majors_from_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]
             if c_i < len(row):
                 row_dict[key] = row[c_i]
 
-        m_code_candidate = str(row_dict.get("major_code", "")).strip()
-        digits = re.sub(r"\D", "", m_code_candidate)
-        if len(digits) not in (6, 7):
+        candidate = str(row_dict.get("major_code", "")).strip()
+        # Hàng hướng dẫn của template chuẩn ngay dưới header không phải dữ liệu.
+        if (candidate.startswith("Nhập mã ngành") and str(row_dict.get("major_name", "")).startswith("Nhập tên ngành")):
             continue
-        if digits in seen_codes:
+        # Dòng phân nhóm/mục lục 2 hoặc 4 chữ số không phải bản ghi ngành.
+        if re.fullmatch(r"[0-9]{2}|[0-9]{4}", candidate):
             continue
-        seen_codes.add(digits)
+        if not candidate and not (row_dict.get("major_name") or "").strip():
+            continue
+        digits, _, _ = _validate_raw_major_record(row_dict)
+        canonical = digits if len(digits) == 7 else "7" + digits
+        if canonical in seen_codes:
+            raise ValueError("File có mã ngành trùng lặp; cần chỉnh nguồn trước khi nhập.")
+        seen_codes.add(canonical)
 
         enriched_majors.append(auto_enrich_major_record(row_dict))
 

@@ -3,6 +3,7 @@ import {
   BrainCircuit,
   ClipboardCheck,
   Compass,
+  GraduationCap,
   LogIn,
   LogOut,
   Map,
@@ -45,6 +46,11 @@ const mainLinks = [
   {
     label: "Khám phá ngành",
     href: "/dashboard",
+    icon: GraduationCap,
+  },
+  {
+    label: "Danh mục ngành",
+    href: "/majors",
     icon: Compass,
   },
   {
@@ -110,7 +116,7 @@ function SidebarBody({
 
   const handleQuickSearch = () => {
     onNavigate?.()
-    navigate("/dashboard?search=1")
+    navigate("/majors?search=1")
   }
 
   return (
@@ -118,14 +124,14 @@ function SidebarBody({
       {/* Brand Header */}
       <div
         className={`flex shrink-0 items-center ${
-          collapsed ? "flex-col justify-start gap-2.5 py-1" : "h-13 gap-2 px-1"
+          collapsed ? "flex-col justify-start gap-2.5 py-1" : "flex-wrap gap-2 px-1"
         }`}
       >
         <Link
           to="/"
           onClick={onNavigate}
           className={`flex min-w-0 items-center gap-2.5 ${
-            collapsed ? "" : "flex-1"
+            collapsed ? "" : "w-full py-1"
           }`}
           title={collapsed ? "AI CareerGuide" : undefined}
         >
@@ -191,7 +197,7 @@ function SidebarBody({
       </div>
 
       {/* Primary Navigation */}
-      <div className="sidebar-scroll mt-5 flex-1 overflow-x-hidden overflow-y-auto px-0.5">
+      <div className="sidebar-scroll mt-5 min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-0.5">
         <nav aria-label="Điều hướng chính">
           <div className="space-y-1.5">
             {mainLinks.map(({ label, href, icon: Icon }) => (

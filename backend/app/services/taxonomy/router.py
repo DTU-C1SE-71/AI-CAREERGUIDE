@@ -74,6 +74,7 @@ async def get_skills(
 
 @router.post("/sync-tt09", status_code=status.HTTP_200_OK)
 async def sync_tt09_catalog(
+    admin_actor: dict = Depends(require_admin_actor),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -87,14 +88,9 @@ async def sync_tt09_catalog(
             deactivate_missing=len(seed_data) >= 20,
         )
     except Exception as exc:
-        return {
-            "status": "success",
-            "inserted": 0,
-            "updated": 435,
-            "deactivated": 0,
-            "total": 435,
-            "note": f"Synchronized 435 MOET Level-IV majors (fallback mode: {str(exc)})"
-        }
+        await db.rollback()
+        raise HTTPException(503, "Không thể đồng bộ danh mục; dữ liệu chưa được lưu.") from exc
+
 
 
 from pydantic import BaseModel, Field
@@ -102,7 +98,7 @@ from pydantic import BaseModel, Field
 class PublishMajorsPayload(BaseModel):
     circular_title: Optional[str] = Field(default="Thông tư 74/2026/TT-BGDĐT", description="Full title of the approved circular")
     circular_code: Optional[str] = Field(default="74/2026/TT-BGDĐT", description="Code of the circular")
-    majors: List[dict] = Field(description="Approved Level-IV majors list to persist")
+    majors: List[dict] = Field(min_length=1, max_length=2000, description="Approved Level-IV majors list to persist")
 
 
 @router.get("/template-excel", status_code=status.HTTP_200_OK)
@@ -128,6 +124,7 @@ async def download_standard_excel_template():
 
 @router.post("/import-excel", status_code=status.HTTP_200_OK)
 async def import_majors_from_excel(
+    admin_actor: dict = Depends(require_admin_actor),
     file: UploadFile = File(...),
     preview_only: bool = Query(default=False),
     sheet_name: Optional[str] = Query(default=None),
@@ -142,18 +139,24 @@ async def import_majors_from_excel(
     """
     Standardized Excel/CSV Import Endpoint (No LLM / No Manual Entry Required).
     Automatically parses uploaded Excel/CSV, maps 4-digit group codes to CIP & Holland RIASEC,
-    fine-tunes vectors by major keywords, and syncs directly to PostgreSQL & active seed catalog.
+    fine-tunes vectors by major keywords, and persists the approved catalog in the database.
     Supports preview_only=true and sheet_name selection for multi-sheet workbooks.
     """
-    import json
     import time
-    from pathlib import Path
 
     t0 = time.perf_counter()
-    file_bytes = await file.read()
-    active_sheet, enriched_majors, all_sheets = parse_excel_or_csv_sheets(
-        file_bytes, file.filename or "upload.xlsx", preferred_sheet=sheet_name
-    )
+    if not (file.filename or "").lower().endswith((".xlsx", ".csv")):
+        raise HTTPException(422, "Chỉ hỗ trợ tệp .xlsx hoặc .csv.")
+    file_bytes = await file.read(10 * 1024 * 1024 + 1)
+    if len(file_bytes) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Tệp vượt quá giới hạn 10 MB.")
+    try:
+        active_sheet, enriched_majors, all_sheets = parse_excel_or_csv_sheets(
+            file_bytes, file.filename or "upload.xlsx", preferred_sheet=sheet_name
+        )
+        service.validate_catalog_records(enriched_majors)
+    except (ValueError, TypeError, KeyError):
+        raise HTTPException(422, "Tệp có mã ngành, tên ngành hoặc trạng thái không hợp lệ; chưa thay đổi danh mục.") from None
     parse_ms = round((time.perf_counter() - t0) * 1000, 1)
 
     if not enriched_majors:
@@ -176,8 +179,6 @@ async def import_majors_from_excel(
             "sheets": all_sheets,
         }
 
-    from app.core.config import settings
-
     should_replace = True if replace_catalog is None else bool(replace_catalog)
     deleted_old = 0
 
@@ -191,49 +192,16 @@ async def import_majors_from_excel(
         )
         persisted_to_db = True
     except Exception as db_err:
-        logger.exception("Failed persisting imported Excel majors to DB: %s", db_err)
+        logger.warning("Không lưu được danh mục Excel (%s)", type(db_err).__name__)
         try:
             await db.rollback()
         except Exception:
             pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Không thể lưu {len(enriched_majors)} ngành từ Excel vào CSDL: {db_err}",
+            detail="Không thể lưu danh mục Excel; giao dịch đã được hủy.",
         )
 
-    if settings.ENVIRONMENT != "test" and should_replace:
-        try:
-            seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"
-            # Xóa dữ liệu đánh dấu xu hướng cũ của bộ ngành trước đó
-            reg_path = seeds_dir / "trending_majors_registry.json"
-            if reg_path.exists():
-                with open(reg_path, "w", encoding="utf-8") as rf:
-                    json.dump(
-                        {
-                            "last_run_at": None,
-                            "saved_at": None,
-                            "triggered_by": None,
-                            "focus_query": "",
-                            "articles_scanned": 0,
-                            "search_sources": [],
-                            "majors": {},
-                        },
-                        rf,
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-
-            active_records = [dict(m) for m in enriched_majors]
-            active_path = seeds_dir / "moet_taxonomy_active.json"
-            with open(active_path, "w", encoding="utf-8") as f:
-                json.dump({
-                    "circular_title": circular_title,
-                    "circular_code": circular_code,
-                    "total_majors": len(active_records),
-                    "majors": active_records,
-                }, f, ensure_ascii=False, indent=2)
-        except Exception as exc:
-            logger.warning("Could not write moet_taxonomy_active.json after Excel import: %s", exc)
 
     return {
         "status": "success",
@@ -255,17 +223,21 @@ async def import_majors_from_excel(
 @router.post("/publish-majors", status_code=status.HTTP_200_OK)
 async def publish_majors_to_db(
     payload: PublishMajorsPayload,
+    admin_actor: dict = Depends(require_admin_actor),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Publishes newly extracted and approved majors into PostgreSQL CSDL.
     Automatically runs the 3-tier CIP + RIASEC enrichment on every major row.
     """
-    import json
-    from pathlib import Path
-    from app.core.config import settings
-
-    enriched_list = [auto_enrich_major_record(m) for m in payload.majors]
+    try:
+        service.validate_catalog_records(payload.majors, allow_six_digit=True)
+        enriched_list = [auto_enrich_major_record(m) for m in payload.majors]
+        for raw, enriched in zip(payload.majors, enriched_list):
+            enriched["is_active"] = raw.get("is_active", True)
+        service.validate_catalog_records(enriched_list)
+    except (ValueError, TypeError, KeyError):
+        raise HTTPException(422, "Danh mục có mã ngành, tên ngành hoặc trạng thái không hợp lệ; chưa thay đổi dữ liệu.") from None
     should_replace = len(enriched_list) > 0
     deleted_old = 0
 
@@ -280,47 +252,16 @@ async def publish_majors_to_db(
         )
         persisted_to_db = True
     except Exception as db_err:
-        logger.exception("Failed publishing majors to DB: %s", db_err)
+        logger.warning("Không lưu được danh mục (%s)", type(db_err).__name__)
         try:
             await db.rollback()
         except Exception:
             pass
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Không thể lưu {len(enriched_list)} ngành vào CSDL: {db_err}",
+            detail="Không thể lưu danh mục; giao dịch đã được hủy.",
         )
 
-    # 2. Also persist active seeds JSON file on disk & reset old trending markers
-    if settings.ENVIRONMENT != "test" and should_replace:
-        try:
-            seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"
-            reg_path = seeds_dir / "trending_majors_registry.json"
-            if reg_path.exists():
-                with open(reg_path, "w", encoding="utf-8") as rf:
-                    json.dump(
-                        {
-                            "last_run_at": None,
-                            "saved_at": None,
-                            "triggered_by": None,
-                            "focus_query": "",
-                            "articles_scanned": 0,
-                            "search_sources": [],
-                            "majors": {},
-                        },
-                        rf,
-                        ensure_ascii=False,
-                        indent=2,
-                    )
-            active_path = seeds_dir / "moet_taxonomy_active.json"
-            with open(active_path, "w", encoding="utf-8") as f:
-                json.dump({
-                    "circular_title": payload.circular_title,
-                    "circular_code": payload.circular_code,
-                    "total_majors": len(enriched_list),
-                    "majors": enriched_list
-                }, f, ensure_ascii=False, indent=2)
-        except Exception as exc:
-            logger.warning("Could not write moet_taxonomy_active.json after publish: %s", exc)
 
     return {
         "status": "success",

@@ -1,7 +1,9 @@
+import type { AspirationReadiness } from "./assessment"
+
 export interface MajorFit {
-  interest: number
-  academic: number
-  cognitive: number
+  interest: number | null
+  academic: number | null
+  cognitive: number | null
 }
 
 export interface TrendSourceItem {
@@ -11,12 +13,13 @@ export interface TrendSourceItem {
 }
 
 export interface Major {
+  readiness?: AspirationReadiness
   id: string
   code: string
   name: string
   category?: string
   university: string
-  match: number
+  match: number | null
   feasibility: "TARGET" | "REACH" | string
   feasibility_label?: string
   best_matching_block?: string
@@ -44,7 +47,7 @@ export interface Major {
 export interface FunnelTier1Field {
   field_name: string
   icon?: string
-  match: number
+  match: number | null
   majors_count: number
   eligible_count?: number
   majors: Major[]

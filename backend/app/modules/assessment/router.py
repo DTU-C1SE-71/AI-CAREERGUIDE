@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_optional_current_user
+from app.core.dependencies import get_optional_current_user, require_admin
 from app.models.identity import User
 from app.modules.assessment import service
 from app.modules.assessment.schemas import (
@@ -64,6 +64,7 @@ async def submit_assessment(
     summary="Nạp bộ câu hỏi khảo sát Circular 74/2026/TT-BGDĐT v1.8 vào CSDL PostgreSQL"
 )
 async def seed_questions_endpoint(
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
     """Admin / Setup endpoint to seed the assessment questionnaire into PostgreSQL."""

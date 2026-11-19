@@ -5,11 +5,13 @@ import {
   Brain,
   Check,
   ChevronDown,
+  CircleAlert,
+  CircleCheck,
   GraduationCap,
+  LoaderCircle,
   Maximize2,
   Minimize2,
   Paperclip,
-  ShieldCheck,
   Sparkles,
   Target,
   User,
@@ -18,8 +20,12 @@ import {
 import { type FormEvent, useEffect, useRef, useState } from "react"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { useAssessment } from "../hooks/useAssessment"
-import { apiRequest } from "../services/api"
+import { useSelectedAssessment } from "../hooks/useSelectedAssessment"
+import { useAuth } from "../context/AuthContext"
+import { useLocation } from "react-router"
+import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
+import { MOET_435_MAJORS } from "../data/moetMajors435"
+import { ApiError, requestJSON } from "../services/api"
 
 interface AIChatAdvisorProps {
   open: boolean
@@ -30,141 +36,189 @@ interface AdvisorMessage {
   id: number
   role: "assistant" | "user"
   content: string
+  source?: "verified_guidance" | "offline_guidance"
 }
+
+interface ChatConnectionStatus {
+  available: boolean
+  code: string
+  message: string
+  checked_at: string
+  latency_ms: number
+  revision_token: string
+}
+
+type ConnectionState =
+  | { state: "checking" }
+  | { state: "online"; revisionToken: string; checkedAt: string }
+  | { state: "offline"; message: string }
+
+const CHAT_TIMEOUT_MS = 330_000
+const CONNECTION_TIMEOUT_MS = 90_000
+const CONNECTION_CHECK_FAILED = "Không xác minh được kết nối AI. Thử kiểm tra lại trước khi gửi câu hỏi."
 
 const initialMessages: AdvisorMessage[] = [
   {
     id: 1,
     role: "assistant",
-    content: `## Chào bạn, mình là Cố vấn AI Hướng nghiệp
+    content: `## Chào bạn, mình là Cố vấn Hướng nghiệp
 
-Mình phân tích hồ sơ năng lực 3 trụ cột (Sở thích Holland RIASEC, Học lực chuẩn hóa Z-Score, Phong cách nhận thức) kết hợp dữ liệu 435 ngành chuẩn GD&ĐT để giải thích và tư vấn định hướng.
+Mình giúp tìm hiểu ngành học, giải thích sở thích và học lực theo hồ sơ bạn đang xem. Điểm phù hợp chỉ là gợi ý tham khảo, không phải xác suất trúng tuyển.
 
-### Bạn có thể bắt đầu với:
-- Giải thích chi tiết vì sao một ngành phù hợp với tổ hợp điểm của bạn.
-- Đề xuất các ngành an toàn, vừa sức và ngành thử thách.
-- Xây dựng kế hoạch học tập 4 tuần để trải nghiệm ngành học.`,
+Bạn có thể hỏi về yêu cầu của ngành, dữ liệu còn thiếu hoặc kế hoạch trải nghiệm phù hợp thời gian của mình.`,
   },
 ]
 
 const quickPrompts = [
-  "Giải thích vì sao ngành Kỹ thuật phần mềm đạt mức Khả thi cao?",
-  "Tạo kế hoạch tự học Tuần 1 cho ngành Khoa học máy tính",
-  "Những kỹ năng nào mình cần rèn luyện thêm?",
+  "Hồ sơ của mình còn thiếu dữ liệu gì để đối chiếu ngành học?",
+  "Mình muốn tìm hiểu ngành Khoa học máy tính",
+  "Những kỹ năng nào cần tìm hiểu khi chọn nghề?",
 ]
-
-function buildAnswer(question: string) {
-  const value = question.toLowerCase()
-  if (value.includes("kỹ thuật phần mềm") || value.includes("công nghệ thông tin")) {
-    return `### Phân tích Ngành Kỹ thuật phần mềm & CNTT
-
-1. **Sở thích (I/R):** Năng lực nghiên cứu và tư duy kỹ thuật rất phù hợp với quy trình phát triển sản phẩm công nghệ.
-2. **Học lực:** Điểm số tổ hợp các môn Toán, Tự nhiên hoặc Ngoại ngữ vượt ngưỡng điểm sàn tham chiếu an toàn.
-3. **Chiến lược:** Có thể đặt làm **Nguyện vọng 1 - 2** nếu điểm thực tế đạt mức vượt chuẩn, hoặc chuẩn bị ngành dự phòng tương đồng trong nhóm CNTT.`
-  }
-  if (value.includes("tuần 1") || value.includes("kế hoạch") || value.includes("lộ trình")) {
-    return `### Kế hoạch tuần 1: Nền tảng tư duy & Công cụ
-
-- **Mục tiêu:** Nắm vững cấu trúc ngành, các môn học cơ sở và cài đặt môi trường thực hành.
-- **Nhiệm vụ 1:** Đọc đề cương chi tiết chương trình đào tạo tại 3 trường đại học mục tiêu.
-- **Nhiệm vụ 2:** Hoàn thành 1 bài giảng nhập môn cơ bản (Python hoặc thuật toán tư duy).
-- **Nhiệm vụ 3:** Tự đánh giá mức độ hào hứng sau khi thử nghiệm 3 buổi học đầu tiên.`
-  }
-  return `### Phân tích Định hướng Cá nhân hóa
-
-Dựa trên dữ liệu hồ sơ của bạn, hệ thống khuyến nghị:
-- **Tập trung vào thế mạnh:** Phát huy các môn học có Z-Score cao nhất trong tổ hợp xét tuyển.
-- **Bổ sung kỹ năng:** Rèn luyện khả năng tư duy giải quyết vấn đề và tiếng Anh chuyên ngành.
-- Bạn có muốn tìm hiểu cụ thể về một ngành nào trong danh mục 435 ngành không?`
-}
+const unavailableReply = "Chưa nhận được phản hồi tư vấn. Hãy kiểm tra lại kết nối rồi gửi lại câu hỏi."
 
 export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
   const [messages, setMessages] = useState<AdvisorMessage[]>(initialMessages)
   const [input, setInput] = useState("")
   const [typing, setTyping] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
-  const [context, setContext] = useState("Khoa học máy tính · 7480101")
-  const { assessment } = useAssessment()
+  const [context, setContext] = useState("")
+  const assessment = useSelectedAssessment()
+  const { user, token } = useAuth()
+  const location = useLocation()
+  const requestVersion = useRef(0)
+  const connectionRequest = useRef<AbortController | null>(null)
+  const activeRequest = useRef<AbortController | null>(null)
+  const connectionVersion = useRef(0)
+  const chatBusy = useRef(false)
+  const probeBusy = useRef(false)
+  const snapshotKey = JSON.stringify({ user: user?.id || user?.email, path: location.pathname, profile: assessment })
+  const messageSequence = useRef(1)
   const endRef = useRef<HTMLDivElement | null>(null)
 
   const [activePrompts, setActivePrompts] = useState<string[]>(quickPrompts)
+
+  const [connection, setConnection] = useState<ConnectionState>({ state: "checking" })
+
+  const checkConnection = async () => {
+    if (probeBusy.current) return
+    connectionRequest.current?.abort()
+    const controller = new AbortController()
+    connectionRequest.current = controller
+    const version = ++connectionVersion.current
+    probeBusy.current = true
+    setConnection({ state: "checking" })
+    try {
+      const result = await requestJSON<ChatConnectionStatus>(
+        "/rag-governance/chat/connection",
+        { method: "POST", signal: controller.signal },
+        CONNECTION_TIMEOUT_MS,
+      )
+      if (version !== connectionVersion.current || controller.signal.aborted) return
+      if (!result.available || !result.revision_token) {
+        setConnection({ state: "offline", message: result.message || CONNECTION_CHECK_FAILED })
+        return
+      }
+      setConnection({ state: "online", revisionToken: result.revision_token, checkedAt: result.checked_at })
+    } catch {
+      if (version !== connectionVersion.current || controller.signal.aborted) return
+      setConnection({ state: "offline", message: CONNECTION_CHECK_FAILED })
+    } finally {
+      if (version === connectionVersion.current) probeBusy.current = false
+    }
+  }
+
+  useEffect(() => {
+    requestVersion.current += 1
+    activeRequest.current?.abort()
+    chatBusy.current = false
+    setInput("")
+    setContext("")
+    setMessages(initialMessages)
+    setActivePrompts(quickPrompts)
+    setTyping(false)
+  }, [snapshotKey, token])
+
+  useEffect(() => {
+    if (!open) return
+    setTyping(false)
+    setConnection({ state: "checking" })
+    // StrictMode discards its first effect setup before this task runs.
+    // Profile/topic changes do not spend tokens on another connection probe.
+    const timer = window.setTimeout(() => void checkConnection(), 0)
+    return () => {
+      window.clearTimeout(timer)
+      connectionVersion.current += 1
+      requestVersion.current += 1
+      connectionRequest.current?.abort()
+      activeRequest.current?.abort()
+      chatBusy.current = false
+      probeBusy.current = false
+    }
+  }, [open])
+
+  const changeTopic = (code: string) => {
+    requestVersion.current += 1
+    activeRequest.current?.abort()
+    chatBusy.current = false
+    setContext(code)
+    setMessages(initialMessages)
+    setActivePrompts(quickPrompts)
+    setTyping(false)
+  }
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: "smooth" })
   }, [messages, typing])
 
   const send = async (text: string) => {
-    if (!text.trim() || typing) return
+    if (!text.trim() || text.trim().length > 4000 || typing || chatBusy.current || connection.state !== "online") return
     const userMsg: AdvisorMessage = {
-      id: Date.now(),
+      id: ++messageSequence.current,
       role: "user",
       content: text.trim(),
     }
     setMessages((prev) => [...prev, userMsg])
     setInput("")
     setTyping(true)
+    chatBusy.current = true
+    const version = ++requestVersion.current
+    const controller = new AbortController()
+    activeRequest.current = controller
 
     try {
-      const matchCode = context.match(/\b\d{7}\b/)?.[0]
-
-      const gradesBySubject: Record<string, number> = {}
-      if (Array.isArray(assessment.scores)) {
-        for (const s of assessment.scores) {
-          if (s.subject && typeof s.score === "number") {
-            gradesBySubject[s.subject.toLowerCase()] = s.score
-          }
-        }
-      }
-
-      const riasecScores: Record<string, number> = {}
-      if (assessment.answers && Object.keys(assessment.answers).length > 0) {
-        const counts: Record<string, number> = { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 }
-        const totals: Record<string, number> = { R: 0, I: 0, A: 0, S: 0, E: 0, C: 0 }
-        for (const [k, v] of Object.entries(assessment.answers)) {
-          const dim = k.charAt(0).toUpperCase()
-          if (dim in counts && typeof v === "number") {
-            counts[dim] += v
-            totals[dim] += 5
-          }
-        }
-        for (const dim of ["R", "I", "A", "S", "E", "C"]) {
-          if (totals[dim] > 0) {
-            riasecScores[dim] = Number((counts[dim] / totals[dim]).toFixed(2))
-          }
-        }
-      }
-
       const history = messages.slice(-10).map((m) => ({
         role: m.role,
-        content: m.content,
+        content: m.content.slice(0, 4000),
       }))
 
-      const response = await apiRequest<{
-        reply?: string
-        answer?: string
-        content?: string
+      const response = await requestJSON<{
+        reply: string
         suggested_followups?: string[]
-      }>(
-        "/rag-governance/chat",
-        { reply: "" },
-        {
-          method: "POST",
-          body: JSON.stringify({
-            message: text.trim(),
-            major_code: matchCode || undefined,
-            history,
-            riasec_scores: Object.keys(riasecScores).length > 0 ? riasecScores : undefined,
-            grades_by_subject: Object.keys(gradesBySubject).length > 0 ? gradesBySubject : undefined,
-            cognitive_preferences:
-              Object.keys(assessment.cognitive || {}).length > 0
-                ? assessment.cognitive
-                : undefined,
-          }),
-        },
-      ).catch(() => null)
+        context_major_code?: string | null
+        is_ai_generated: boolean
+        is_fallback: boolean
+        response_source?: string
+        connection_available: boolean
+        connection_revision?: string | null
+        connection_checked_at?: string | null
+      }>("/rag-governance/chat", {
+        method: "POST",
+        signal: controller.signal,
+        body: JSON.stringify({
+          ...buildEvaluateProfilePayload(assessment),
+          message: text.trim(),
+          major_code: context || null,
+          history,
+          connection_revision: connection.revisionToken,
+        }),
+      }, CHAT_TIMEOUT_MS)
 
-      const replyContent =
-        response?.reply || response?.answer || response?.content || buildAnswer(text)
+      if (version !== requestVersion.current || controller.signal.aborted) return
+      if (typeof response.reply !== "string" || !response.reply.trim()) throw new Error("Missing guidance response")
+      setContext(response?.context_major_code || "")
+      if (!response.connection_available && (response.is_ai_generated || response.is_fallback)) {
+        setConnection({ state: "offline", message: "Chưa nhận được phản hồi AI. Bạn có thể kiểm tra lại kết nối." })
+      }
 
       if (response?.suggested_followups && response.suggested_followups.length > 0) {
         setActivePrompts(response.suggested_followups.slice(0, 3))
@@ -173,24 +227,41 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now() + 1,
+          id: ++messageSequence.current,
           role: "assistant",
-          content: replyContent,
+          content: response.reply,
+          source: response.is_fallback ? "offline_guidance" : response.is_ai_generated ? undefined : "verified_guidance",
         },
       ])
-    } catch {
+    } catch (error) {
+      if (version !== requestVersion.current || controller.signal.aborted) return
+      if (error instanceof ApiError && error.status === 409) {
+        setConnection({ state: "offline", message: "Kết nối AI đã thay đổi. Hãy kiểm tra lại trước khi gửi câu hỏi khác." })
+      } else {
+        setConnection({ state: "offline", message: unavailableReply })
+      }
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now() + 1,
+          id: ++messageSequence.current,
           role: "assistant",
-          content: buildAnswer(text),
+          content: unavailableReply,
         },
       ])
     } finally {
-      setTyping(false)
+      if (version === requestVersion.current) {
+        chatBusy.current = false
+        setTyping(false)
+      }
     }
   }
+
+  const connectionLabel = connection.state === "checking"
+    ? "Đang kiểm tra"
+    : connection.state === "online" ? "Đang hoạt động" : "Chưa kết nối"
+  const connectionClass = connection.state === "checking"
+    ? "bg-slate-100 text-slate-600"
+    : connection.state === "online" ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
 
   const attachStudentProfile = () => {
     const scores = assessment.scores || []
@@ -199,7 +270,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
       .join(", ")
     setInput(
       (prev) =>
-        `${prev ? `${prev} ` : ""}Điểm số của mình: ${summary || "Toán 8.5, Lý 8.0, Hóa 8.0"}`,
+        `${prev ? `${prev} ` : ""}Điểm số của mình: ${summary || "chưa có điểm được nhập"}`,
     )
   }
 
@@ -242,9 +313,9 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                       <h2 className="text-base font-bold text-slate-900">
                         Cố vấn AI Hướng nghiệp
                       </h2>
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-semibold text-emerald-700">
-                        <span className="size-1.5 rounded-full bg-emerald-500" />
-                        Trực tuyến
+                      <span role="status" aria-live="polite" className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-semibold ${connectionClass}`}>
+                        {connection.state === "checking" ? <LoaderCircle size={13} className="animate-spin" aria-hidden="true" /> : connection.state === "online" ? <CircleCheck size={13} aria-hidden="true" /> : <CircleAlert size={13} aria-hidden="true" />}
+                        {connectionLabel}
                       </span>
                     </div>
                     <p className="text-xs text-slate-500">
@@ -273,6 +344,15 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                 </div>
               </div>
 
+              {connection.state === "offline" && (
+                <div role="status" className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+                  <span>{connection.message}</span>
+                  <button type="button" onClick={() => void checkConnection()} className="inline-flex shrink-0 items-center gap-1.5 font-semibold underline underline-offset-2" aria-label="Kiểm tra lại kết nối AI">
+                    Kiểm tra lại
+                  </button>
+                </div>
+              )}
+
               <div className="mt-3.5 flex items-center gap-2.5 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-2 text-xs">
                 <GraduationCap size={16} className="text-sky-600 shrink-0" />
                 <span className="font-semibold text-slate-500 shrink-0">
@@ -280,15 +360,12 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                 </span>
                 <select
                   value={context}
-                  onChange={(e) => setContext(e.target.value)}
+                  onChange={(e) => changeTopic(e.target.value)}
+                  aria-label="Ngành quan tâm"
                   className="w-full bg-transparent font-bold text-slate-800 outline-none"
                 >
-                  <option>Khoa học máy tính · 7480101</option>
-                  <option>Trí tuệ nhân tạo · 7480107</option>
-                  <option>Kỹ thuật phần mềm · 7480103</option>
-                  <option>Khoa học dữ liệu · 7460108</option>
-                  <option>Marketing số · 7340115</option>
-                  <option>Quản trị kinh doanh · 7340101</option>
+                  <option value="">Chưa chọn ngành / hỏi hướng nghiệp chung</option>
+                  {MOET_435_MAJORS.map(major => <option key={major.major_code} value={major.major_code}>{major.name_vi} · {major.major_code}</option>)}
                 </select>
                 <ChevronDown size={14} className="text-slate-400 shrink-0" />
               </div>
@@ -325,20 +402,46 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                       )}
                     </span>
                     <div
-                      className={`max-w-[85%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
+                      className={`min-w-0 max-w-[85%] overflow-hidden rounded-2xl px-4 py-3 text-sm leading-relaxed break-words ${
                         message.role === "assistant"
                           ? "rounded-tl-md border border-slate-200/80 bg-white text-slate-800 shadow-xs"
                           : "rounded-tr-md bg-sky-600 text-white shadow-sm"
                       }`}
                     >
                       {message.role === "assistant" ? (
-                        <div className="markdown advisor-markdown">
-                          <Markdown remarkPlugins={[remarkGfm]}>
-                            {message.content}
-                          </Markdown>
-                        </div>
+                        <>
+                          {message.source && <p className={`mb-2 text-[11px] font-semibold ${message.source === "offline_guidance" ? "text-amber-700" : "text-slate-500"}`}>{message.source === "offline_guidance" ? "Hướng dẫn có sẵn — AI chưa kết nối" : "Hướng dẫn từ dữ liệu hệ thống"}</p>}
+                          <div className="markdown advisor-markdown min-w-0 max-w-full">
+                            <Markdown
+                              remarkPlugins={[remarkGfm]}
+                              components={{
+                                pre: ({ children }) => (
+                                  <div className="my-2.5 max-w-full overflow-x-auto rounded-xl border border-slate-200/90 bg-slate-900 text-slate-100 shadow-2xs">
+                                    <pre className="m-0 w-max min-w-full p-3.5 text-xs leading-relaxed font-mono">
+                                      {children}
+                                    </pre>
+                                  </div>
+                                ),
+                                code: ({ className, children, ...props }) => (
+                                  <code className={className} {...props}>
+                                    {children}
+                                  </code>
+                                ),
+                                table: ({ children }) => (
+                                  <div className="my-3 max-w-full overflow-x-auto rounded-xl border border-slate-200/80">
+                                    <table className="w-full min-w-max border-collapse text-xs sm:text-sm">
+                                      {children}
+                                    </table>
+                                  </div>
+                                ),
+                              }}
+                            >
+                              {message.content}
+                            </Markdown>
+                          </div>
+                        </>
                       ) : (
-                        <span>{message.content}</span>
+                        <span className="whitespace-pre-wrap break-words">{message.content}</span>
                       )}
                     </div>
                   </motion.div>
@@ -380,7 +483,8 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                       key={prompt}
                       type="button"
                       onClick={() => send(prompt)}
-                      className="shrink-0 rounded-full border border-sky-200/80 bg-sky-50/70 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-100"
+                      disabled={connection.state !== "online" || typing}
+                      className="shrink-0 rounded-full border border-sky-200/80 bg-sky-50/70 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-100 disabled:opacity-50"
                     >
                       {prompt}
                     </button>
@@ -394,6 +498,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                   <button
                     type="button"
                     onClick={attachStudentProfile}
+                    disabled={connection.state !== "online" || typing}
                     title="Đính kèm điểm học tập"
                     className="grid size-10 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
                   >
@@ -401,10 +506,13 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                   </button>
                   <textarea
                     rows={1}
+                    maxLength={4000}
+                    aria-label="Câu hỏi hướng nghiệp"
                     value={input}
+                    disabled={connection.state !== "online" || typing}
                     onChange={(e) => setInput(e.target.value)}
                     onKeyDown={(e) => {
-                      if (e.key === "Enter" && !e.shiftKey) {
+                      if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
                         e.preventDefault()
                         send(input)
                       }
@@ -414,7 +522,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                   />
                   <button
                     type="submit"
-                    disabled={!input.trim() || typing}
+                    disabled={!input.trim() || typing || connection.state !== "online"}
                     className="grid size-10 shrink-0 place-items-center rounded-xl bg-sky-600 text-white transition hover:bg-sky-700 disabled:opacity-40"
                     aria-label="Gửi tin nhắn"
                   >
@@ -424,10 +532,10 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
 
                 <div className="mt-2 flex items-center justify-center gap-4 text-xs text-slate-400">
                   <span className="flex items-center gap-1">
-                    <Check size={12} className="text-emerald-500" /> Dữ liệu chuẩn
+                    <Check size={12} className="text-emerald-500" /> Thông tin tham khảo
                   </span>
                   <span className="flex items-center gap-1">
-                    <Brain size={12} className="text-sky-500" /> Giải thích XAI
+                    <Brain size={12} className="text-sky-500" /> Giải thích theo hồ sơ
                   </span>
                   <span className="flex items-center gap-1">
                     <Target size={12} className="text-cyan-500" /> Định hướng cá nhân

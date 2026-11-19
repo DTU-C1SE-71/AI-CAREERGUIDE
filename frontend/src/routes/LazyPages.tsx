@@ -1,0 +1,13 @@
+import { lazy } from "react"
+export const AssessmentWizard = lazy(() => import("../pages/AssessmentWizard").then(module => ({ default: module.AssessmentWizard })))
+export const Dashboard = lazy(() => import("../pages/Dashboard").then(module => ({ default: module.Dashboard })))
+export const MajorsCatalog = lazy(() => import("../pages/MajorsCatalog").then(module => ({ default: module.MajorsCatalog })))
+export const Login = lazy(() => import("../pages/Login").then(module => ({ default: module.Login })))
+export const GoogleCallback = lazy(() => import("../pages/GoogleCallback").then(module => ({ default: module.GoogleCallback })))
+export const MajorDetail = lazy(() => import("../pages/MajorDetail").then(module => ({ default: module.MajorDetail })))
+export const RoadmapView = lazy(() => import("../pages/RoadmapView").then(module => ({ default: module.RoadmapView })))
+export const AdminGovernance = lazy(() => import("../pages/AdminHITLDashboard").then(module => ({ default: module.AdminHITLDashboard })))
+export const AdminCatalog = lazy(() => import("../pages/AdminCatalogPage").then(module => ({ default: module.AdminCatalogPage })))
+export const AdminTrends = lazy(() => import("../pages/AdminHITLDashboard").then(module => ({ default: module.AdminTrendsPage })))
+export const AdminAI = lazy(() => import("../pages/AdminHITLDashboard").then(module => ({ default: module.AdminAISettingsPage })))
+export const AdminImport = lazy(() => import("../pages/AdminImportPage").then(module => ({ default: module.AdminImportPage })))

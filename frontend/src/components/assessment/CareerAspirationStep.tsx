@@ -10,54 +10,10 @@ import {
   X,
 } from "lucide-react"
 import { useState } from "react"
-import type { CareerAspirationInput } from "../../types/assessment"
+import type { CareerAspirationInput, InterestEvidence } from "../../types/assessment"
 
-const QUICK_DREAM_JOBS: Array<{
-  label: string
-  dreamJob: string
-  field: string
-}> = [
-  {
-    label: "Kỹ sư AI & Phần mềm",
-    dreamJob: "Kỹ sư Trí tuệ nhân tạo & Kỹ thuật phần mềm",
-    field: "Máy tính và công nghệ thông tin",
-  },
-  {
-    label: "Vi mạch & Tự động hóa",
-    dreamJob: "Kỹ sư Thiết kế vi mạch & Tự động hóa",
-    field: "Công nghệ kỹ thuật",
-  },
-  {
-    label: "Bác sĩ & Dược học",
-    dreamJob: "Bác sĩ Y khoa & Dược học",
-    field: "Sức khỏe",
-  },
-  {
-    label: "Marketing số & Kinh doanh",
-    dreamJob: "Chuyên gia Marketing số & Kinh doanh quốc tế",
-    field: "Kinh doanh và quản lý",
-  },
-  {
-    label: "Tài chính & Fintech",
-    dreamJob: "Chuyên gia Tài chính - Ngân hàng & Fintech",
-    field: "Kinh doanh và quản lý",
-  },
-  {
-    label: "Thiết kế UI/UX & Truyền thông",
-    dreamJob: "Nhà Thiết kế Đồ họa UI/UX & Truyền thông đa phương tiện",
-    field: "Nghệ thuật",
-  },
-  {
-    label: "Sư phạm & Tâm lý học",
-    dreamJob: "Giáo viên Sư phạm & Chuyên gia Tâm lý học",
-    field: "Khoa học giáo dục và đào tạo giáo viên",
-  },
-  {
-    label: "Luật sư & Ngoại giao",
-    dreamJob: "Luật sư Pháp chế & Quan hệ quốc tế",
-    field: "Pháp luật",
-  },
-]
+import { QUICK_DREAM_JOBS } from "./aspirationOptions"
+import { HollandInterestSummary } from "./HollandInterestSummary"
 
 const WORK_VALUE_OPTIONS: Array<{ id: string; label: string; icon: string }> = [
   { id: "HIGH_INCOME_GROWTH", label: "Thu nhập & thăng tiến nhanh", icon: "💰" },
@@ -74,20 +30,20 @@ const STRATEGY_OPTIONS: Array<{
 }> = [
   {
     id: "FLEXIBLE_PATHWAY",
-    title: "Linh hoạt ngành liên thông vừa sức",
-    desc: "Nếu nghề mơ ước vượt điểm, AI tự gợi ý ngành cùng nhóm vừa sức (Mặc định).",
+    title: "Khám phá hướng liên quan",
+    desc: "Xem ngành liên quan; chỉ đánh dấu đạt mốc khi có đủ bằng chứng.",
     icon: "🎯",
   },
   {
     id: "REALISTIC_SAFE",
-    title: "Ưu tiên an toàn đậu Đại học",
-    desc: "Chỉ tập trung các ngành đạt chuẩn điểm tổ hợp môn hiện tại (TARGET).",
+    title: "Ưu tiên mốc hiện tại",
+    desc: "Ưu tiên ngành đạt mốc tham chiếu; không bảo đảm trúng tuyển.",
     icon: "🛡️",
   },
   {
     id: "CHALLENGE_TOP",
-    title: "Quyết tâm bứt phá ngành Top",
-    desc: "Giữ mục tiêu ngành điểm chuẩn cao kèm lộ trình bù đắp môn thiếu hụt.",
+    title: "Giữ mục tiêu dài hạn",
+    desc: "Giữ nguyện vọng và xem phần dữ liệu hoặc học lực cần bổ sung.",
     icon: "🚀",
   },
 ]
@@ -95,14 +51,16 @@ const STRATEGY_OPTIONS: Array<{
 interface CareerAspirationStepProps {
   value: CareerAspirationInput
   onChange: (next: CareerAspirationInput) => void
-  topHollandPreview: string
+  interestEvidence: InterestEvidence
+  readOnly?: boolean
   onSkip?: () => void
 }
 
 export function CareerAspirationStep({
   value,
   onChange,
-  topHollandPreview,
+  interestEvidence,
+  readOnly = false,
   onSkip,
 }: CareerAspirationStepProps) {
   const selectedValues = value.workValues || []
@@ -166,8 +124,7 @@ export function CareerAspirationStep({
               </span>
             </div>
             <p className="mt-0.5 text-xs sm:text-sm text-slate-600">
-              Đối chiếu nguyện vọng cùng mã Holland{" "}
-              <strong className="text-sky-700 font-black">{topHollandPreview}</strong> & dữ liệu 435 ngành đào tạo.
+              Đối chiếu nguyện vọng với sở thích và dữ liệu học tập của bạn.
             </p>
           </div>
         </div>
@@ -184,10 +141,13 @@ export function CareerAspirationStep({
         )}
       </div>
 
+      <HollandInterestSummary evidence={interestEvidence} />
+      <fieldset disabled={readOnly} className="space-y-4 min-w-0">
+      <legend className="sr-only">Nguyện vọng nghề nghiệp</legend>
       {/* Input Nghề mơ ước + Gợi ý nhanh */}
       <div className="space-y-3 rounded-3xl border border-white/90 bg-white/75 p-4 sm:p-6 shadow-sm backdrop-blur-md">
         <div className="flex items-center justify-between">
-          <label className="flex items-center gap-2 text-sm sm:text-base font-extrabold text-slate-900">
+          <label htmlFor="dream-job" className="flex items-center gap-2 text-sm sm:text-base font-extrabold text-slate-900">
             <Compass className="size-4.5 text-sky-600" />
             Nghề nghiệp hoặc lĩnh vực bạn muốn theo đuổi
           </label>
@@ -205,12 +165,15 @@ export function CareerAspirationStep({
         <div className="relative">
           <Search className="absolute left-4 top-1/2 size-4.5 -translate-y-1/2 text-slate-400" />
           <input
+            id="dream-job"
+            name="dreamJob"
             type="text"
             value={value.dreamJob || ""}
             onChange={(e) =>
               onChange({
                 ...value,
                 dreamJob: e.target.value,
+                desiredField: "",
               })
             }
             placeholder="VD: Kỹ sư AI, Bác sĩ, Marketing, Thiết kế UI/UX, Phi công, Luật sư..."
@@ -232,7 +195,7 @@ export function CareerAspirationStep({
         {hasDreamJob ? (
           <div className="flex items-center gap-2 rounded-xl border border-emerald-200 bg-emerald-50/80 px-3 py-1.5 text-xs font-bold text-emerald-800">
             <Check className="size-4 text-emerald-600 stroke-[2.5]" />
-            <span>Mục tiêu đã lưu: <strong>{value.dreamJob}</strong></span>
+            <span>Mục tiêu đang chọn: <strong>{value.dreamJob}</strong></span>
           </div>
         ) : (
           <div className="flex items-center gap-2 rounded-xl border border-amber-200/70 bg-amber-50/60 px-3 py-1.5 text-xs font-medium text-amber-800">
@@ -255,6 +218,7 @@ export function CareerAspirationStep({
                   key={chip.label}
                   type="button"
                   onClick={() => handleSelectChip(chip)}
+                  aria-pressed={isSelected}
                   className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs sm:text-sm font-bold transition-all duration-150 cursor-pointer active:scale-95 ${
                     isSelected
                       ? "border-sky-500 bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-[0_4px_12px_rgba(14,165,233,0.25)] ring-1 ring-sky-400"
@@ -275,6 +239,7 @@ export function CareerAspirationStep({
         <button
           type="button"
           onClick={() => setShowAdvanced(!showAdvanced)}
+          aria-expanded={showAdvanced}
           className="flex w-full items-center justify-between text-left text-xs sm:text-sm font-bold text-slate-700 hover:text-sky-700 cursor-pointer"
         >
           <div className="flex items-center gap-2">
@@ -295,75 +260,28 @@ export function CareerAspirationStep({
 
         {showAdvanced && (
           <div className="mt-4 space-y-4 border-t border-slate-200/70 pt-4">
-            {/* Giá trị công việc */}
-            <div className="space-y-2">
-              <label className="block text-xs sm:text-sm font-bold text-slate-800">
-                Giá trị công việc coi trọng (chọn tối đa 2 mục):
-              </label>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                {WORK_VALUE_OPTIONS.map((opt) => {
-                  const active = selectedValues.includes(opt.id)
-                  return (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      onClick={() => toggleWorkValue(opt.id)}
-                      className={`flex min-h-[48px] items-center justify-between rounded-2xl border px-3.5 py-2.5 text-left text-xs sm:text-sm font-semibold transition-all cursor-pointer active:scale-[0.98] ${
-                        active
-                          ? "border-sky-500 bg-sky-50/90 text-sky-950 ring-1 ring-sky-500/25 shadow-xs"
-                          : "border-slate-200/90 bg-white/85 text-slate-700 hover:border-sky-300 hover:bg-white"
-                      }`}
-                    >
-                      <span className="flex items-center gap-2">
-                        <span className="text-base">{opt.icon}</span>
-                        <span>{opt.label}</span>
-                      </span>
-                      <span
-                        className={`size-2.5 rounded-full ${
-                          active ? "bg-sky-500 ring-2 ring-sky-200" : "bg-slate-300"
-                        }`}
-                      />
-                    </button>
-                  )
-                })}
+            <fieldset className="space-y-2">
+              <legend className="text-sm font-bold text-slate-800">Giá trị công việc coi trọng (chọn tối đa 2 mục)</legend>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {WORK_VALUE_OPTIONS.map(opt => <label key={opt.id} className="flex min-h-12 cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3 text-sm text-slate-700">
+                  <input type="checkbox" name="workValues" value={opt.id} checked={selectedValues.includes(opt.id)} onChange={() => toggleWorkValue(opt.id)} className="size-4 accent-sky-600" />
+                  <span>{opt.icon} {opt.label}</span>
+                </label>)}
               </div>
-            </div>
-
-            {/* Chiến lược đối chiếu điểm chuẩn */}
-            <div className="space-y-2">
-              <label className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-800">
-                <Target className="size-4 text-sky-600" />
-                Định hướng khi AI đối chiếu với điểm chuẩn:
-              </label>
-              <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                {STRATEGY_OPTIONS.map((st) => {
-                  const active = activeStrategy === st.id
-                  return (
-                    <button
-                      key={st.id}
-                      type="button"
-                      onClick={() => onChange({ ...value, scoreStrategy: st.id })}
-                      className={`flex flex-col justify-between rounded-2xl border p-3.5 text-left transition-all cursor-pointer active:scale-[0.98] ${
-                        active
-                          ? "border-sky-500 bg-sky-50/90 ring-1 ring-sky-500/25 shadow-xs"
-                          : "border-slate-200/90 bg-white/85 hover:border-sky-300 hover:bg-white"
-                      }`}
-                    >
-                      <div className="flex items-center gap-1.5 text-xs sm:text-sm font-bold text-slate-900">
-                        <span className="text-base">{st.icon}</span>
-                        <span>{st.title}</span>
-                      </div>
-                      <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
-                        {st.desc}
-                      </p>
-                    </button>
-                  )
-                })}
+            </fieldset>
+            <fieldset className="space-y-2">
+              <legend className="flex items-center gap-2 text-sm font-bold text-slate-800"><Target className="size-4 text-sky-600" />Định hướng khi đối chiếu học lực</legend>
+              <div className="grid gap-2.5 sm:grid-cols-3">
+                {STRATEGY_OPTIONS.map(st => <label key={st.id} className={`cursor-pointer rounded-2xl border p-3.5 ${activeStrategy === st.id ? "border-sky-500 bg-sky-50" : "border-slate-200 bg-white"}`}>
+                  <span className="flex items-center gap-2 text-sm font-bold text-slate-900"><input type="radio" name="scoreStrategy" value={st.id} checked={activeStrategy === st.id} onChange={() => onChange({ ...value, scoreStrategy: st.id })} className="size-4 accent-sky-600" />{st.icon} {st.title}</span>
+                  <span className="mt-2 block text-xs leading-relaxed text-slate-600">{st.desc}</span>
+                </label>)}
               </div>
-            </div>
+            </fieldset>
           </div>
         )}
       </div>
+      </fieldset>
     </div>
   )
 }

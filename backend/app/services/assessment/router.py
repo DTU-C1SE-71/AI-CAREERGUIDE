@@ -58,6 +58,7 @@ async def submit_riasec_assessment(
     assessment = await service.save_riasec_assessment(db, current_user.id, payload)
     return {
         "message": "RIASEC assessment recorded successfully",
+        "assessment_id": str(assessment.id),
         "riasec_scores": assessment.riasec_scores,
         "assessed_at": assessment.assessed_at
     }
@@ -73,6 +74,7 @@ async def submit_cognitive_preferences(
     assessment = await service.save_cognitive_preferences(db, current_user.id, payload)
     return {
         "message": "Cognitive preferences recorded successfully",
+        "assessment_id": str(assessment.id),
         "cognitive_preferences": assessment.cognitive_preferences
     }
 
@@ -90,6 +92,7 @@ async def submit_grades(
     grade_record = await service.process_and_save_grades(db, current_user.id, payload)
     return {
         "message": "Academic grades standardized successfully",
+        "assessment_id": str(grade_record.assessment_id),
         "academic_year": grade_record.academic_year,
         "computed_block_zscores": grade_record.computed_block_zscores
     }

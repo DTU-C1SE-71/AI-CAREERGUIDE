@@ -21,6 +21,10 @@ interface GoogleLoginApiResponse {
     email: string
     full_name: string
     role: string
+    gender?: string
+    grade_level?: string
+    school_class?: string
+    school_name?: string
   }
 }
 
@@ -30,117 +34,65 @@ export function GoogleCallback() {
   const { login } = useAuth()
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [isSuccess, setIsSuccess] = useState(false)
-  const isCalledRef = useRef(false)
+  const requestRef = useRef<Promise<GoogleLoginApiResponse> | null>(null)
+  const incoming = useRef({ code: searchParams.get("code"), state: searchParams.get("state"), error: searchParams.get("error") })
 
   useEffect(() => {
-    if (isCalledRef.current) return
-    isCalledRef.current = true
+    let mounted = true
+    if (!requestRef.current) {
+      const { code, state, error } = incoming.current
+      let saved: { state?: string; redirectUri?: string; created?: number } = {}
+      try {
+        saved = JSON.parse(
+          sessionStorage.getItem("career-guide:oauth-state") ||
+          localStorage.getItem("career-guide:oauth-state") ||
+          "{}"
+        )
+      } catch { /* Phiên OAuth không hợp lệ. */ }
+      sessionStorage.removeItem("career-guide:oauth-state")
+      localStorage.removeItem("career-guide:oauth-state")
+      window.history.replaceState(null, "", window.location.pathname)
 
-    const hash = window.location.hash.startsWith("#")
-      ? window.location.hash.substring(1)
-      : window.location.hash
-    const hashParams = new URLSearchParams(hash)
+      if (error || !code) {
+        setErrorMsg("Đăng nhập Google bị hủy hoặc không thành công. Vui lòng thử lại.")
+        return
+      }
 
-    const accessToken =
-      hashParams.get("access_token") || searchParams.get("access_token")
-    const idToken = hashParams.get("id_token") || searchParams.get("id_token")
-    const code = searchParams.get("code") || hashParams.get("code")
-    const error = searchParams.get("error") || hashParams.get("error")
+      if (state && saved.state && state !== saved.state) {
+        setErrorMsg("Phiên đăng nhập Google không hợp lệ hoặc đã hết hạn. Quay lại trang đăng nhập để thử lại.")
+        return
+      }
 
-    if (error) {
-      setErrorMsg(`Google từ chối đăng nhập hoặc bạn đã hủy: ${error}`)
-      return
+      const redirectUri = saved.redirectUri || `${window.location.origin}/login/callback`
+      requestRef.current = authPost<GoogleLoginApiResponse>("/identity/google/callback", {
+        code,
+        redirect_uri: redirectUri,
+      })
     }
-
-    const finalizeSession = (
-      data: GoogleLoginApiResponse,
-      fallbackEmail?: string,
-      fallbackName?: string,
-    ) => {
-      const rawRole = (
-        data.user?.role ||
-        data.role ||
-        "STUDENT"
-      ).toLowerCase()
-      const mappedRole: UserRole = rawRole === "admin" ? "admin" : "student"
-      const email = data.user?.email || fallbackEmail || ""
-      const name =
-        data.user?.full_name || fallbackName || email.split("@")[0] || "Học sinh"
-
+    requestRef.current.then(data => {
+      if (!mounted || !data.access_token || !data.user) return
+      const mappedRole: UserRole = data.user.role.toUpperCase() === "ADMIN" ? "admin" : "student"
       login(
         mappedRole,
         {
-          id: String(data.user?.id || email),
-          name,
-          email,
+          id: String(data.user.id),
+          name: data.user.full_name,
+          email: data.user.email,
           role: mappedRole,
-          grade: 12,
+          gender: data.user.gender || "Nam",
+          grade_level: data.user.grade_level || "Lớp 12",
+          school_class: data.user.school_class,
+          school_name: data.user.school_name,
         },
         data.access_token,
       )
       setIsSuccess(true)
-      window.setTimeout(() => {
-        navigate(mappedRole === "admin" ? "/admin" : "/dashboard", {
-          replace: true,
-        })
-      }, 700)
-    }
-
-    if (accessToken) {
-      fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-        .then(async (resp) => {
-          if (!resp.ok) {
-            throw new Error(`Google UserInfo trả về mã lỗi HTTP ${resp.status}`)
-          }
-          return await resp.json()
-        })
-        .then(async (profile) => {
-          const res = await authPost<GoogleLoginApiResponse>(
-            "/identity/google-login",
-            {
-              email: profile.email,
-              full_name: profile.name || profile.email?.split("@")[0],
-              avatar_url: profile.picture,
-              google_id: profile.sub,
-              access_token: accessToken,
-              credential: idToken || undefined,
-            },
-          )
-          finalizeSession(res, profile.email, profile.name)
-        })
-        .catch((err: unknown) => {
-          const message =
-            err instanceof Error
-              ? err.message
-              : "Xác thực tài khoản Google thất bại. Vui lòng thử lại."
-          setErrorMsg(message)
-        })
-      return
-    }
-
-    if (code) {
-      const redirectUri = `${window.location.origin}/login/callback`
-      authPost<GoogleLoginApiResponse>("/identity/google/callback", {
-        code,
-        redirect_uri: redirectUri,
-      })
-        .then((res) => {
-          finalizeSession(res)
-        })
-        .catch((err: unknown) => {
-          const message =
-            err instanceof Error
-              ? err.message
-              : "Xác thực mã Google OAuth 2.0 thất bại. Vui lòng thử lại."
-          setErrorMsg(message)
-        })
-      return
-    }
-
-    setErrorMsg("Không tìm thấy mã xác thực từ Google Callback.")
-  }, [searchParams, login, navigate])
+      navigate(mappedRole === "admin" ? "/admin" : "/dashboard", { replace: true })
+    }).catch((error: unknown) => {
+      if (mounted) setErrorMsg(error instanceof Error ? error.message : "Xác thực Google thất bại. Vui lòng thử lại.")
+    })
+    return () => { mounted = false }
+  }, [login, navigate])
 
   return (
     <section className="relative flex min-h-[calc(100vh-72px)] items-center justify-center p-4 sm:p-6 lg:p-10">

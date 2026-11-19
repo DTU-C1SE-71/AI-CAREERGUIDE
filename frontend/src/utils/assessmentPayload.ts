@@ -1,3 +1,5 @@
+import { getValidRiasecAnswer } from "./assessmentEvidence"
+export { getValidRiasecAnswer } from "./assessmentEvidence"
 import type { AssessmentState } from "../types/assessment"
 
 const CANONICAL_30_CODES: string[] = [
@@ -21,17 +23,10 @@ export function buildEvaluateProfilePayload(
   extraProfile?: { gender?: string; grade_level?: string },
 ) {
   const riasecAnswers: Record<string, number> = {}
-  Object.entries(assessment.answers || {}).forEach(([key, val]) => {
-    if (typeof val === "number") {
-      if (/^[RIASEC]\d+$/i.test(key)) {
-        riasecAnswers[key.toUpperCase()] = val
-      } else if (/^1-(\d+)$/.test(key)) {
-        const idx = parseInt(key.split("-")[1], 10)
-        if (idx >= 0 && idx < CANONICAL_30_CODES.length) {
-          riasecAnswers[CANONICAL_30_CODES[idx]] = val
-        }
-      }
-    }
+  const answers = assessment.answers || {}
+  CANONICAL_30_CODES.forEach((code, index) => {
+    const value = getValidRiasecAnswer(answers, code, index)
+    if (value !== undefined) riasecAnswers[code] = value
   })
 
   const cognitiveAnswers: Record<string, string | number> = {
@@ -54,16 +49,14 @@ export function buildEvaluateProfilePayload(
         preferred_environment: asp.preferredEnvironment || "",
         score_strategy: asp.scoreStrategy || "FLEXIBLE_PATHWAY",
       }
-    : undefined
+    : {}
 
   return {
-    riasec_answers:
-      Object.keys(riasecAnswers).length > 0 ? riasecAnswers : undefined,
-    cognitive_answers:
-      Object.keys(cognitiveAnswers).length > 0 ? cognitiveAnswers : undefined,
-    grades_by_subject:
-      Object.keys(gradesBySubject).length > 0 ? gradesBySubject : undefined,
+    riasec_answers: riasecAnswers,
+    cognitive_answers: cognitiveAnswers,
+    grades_by_subject: gradesBySubject,
     aspiration: aspirationPayload,
+    score_context: { kind: "TRANSCRIPT", scale: 10 },
     gender: extraProfile?.gender || undefined,
     grade_level: extraProfile?.grade_level || undefined,
     top_k: topK,

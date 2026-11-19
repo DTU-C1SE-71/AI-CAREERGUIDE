@@ -3,7 +3,7 @@ import { Calculator } from "lucide-react"
 export interface SubjectGrade {
   subject: string
   score: number
-  zScore: number
+  zScore?: number | null
   group?: "Bắt buộc" | "Khoa học tự nhiên" | "Khoa học xã hội & Công nghệ"
 }
 
@@ -25,37 +25,25 @@ export const HIGH_SCHOOL_SUBJECTS: Array<{
   { name: "Tin học / Công nghệ", code: "TECH", group: "Khoa học xã hội & Công nghệ", blocks: "A00-IT · A01-IT · STEM" },
 ]
 
-function clampGrade(raw: number): number {
-  if (!Number.isFinite(raw)) return 0
-  const clamped = Math.min(10, Math.max(0, raw))
-  return Math.round(clamped * 100) / 100
-}
-
 export function AcademicInputForm({
   scores,
   onChange,
 }: {
   scores: Record<string, number>
-  onChange: (subject: string, value: number) => void
+  onChange: (subject: string, value: number | undefined) => void
 }) {
   const values = HIGH_SCHOOL_SUBJECTS.map((s) => scores[s.name]).filter(
-    (v): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0
+    (v): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 10
   )
   const average = values.length
     ? values.reduce((a, b) => a + b, 0) / values.length
     : 0
-  const zScore = (average - 7.1) / 1.2
 
   const handleNumberInputChange = (subjectName: string, rawValue: string) => {
-    // Strip invalid characters except digits and decimal point
-    const cleaned = rawValue.replace(/[^0-9.]/g, "")
-    if (cleaned === "") {
-      onChange(subjectName, 0)
-      return
-    }
-    const parsed = Number.parseFloat(cleaned)
-    if (Number.isNaN(parsed)) return
-    onChange(subjectName, clampGrade(parsed))
+    if (rawValue.trim() === "") { onChange(subjectName, undefined); return }
+    const value = Number(rawValue)
+    if (Number.isFinite(value)) onChange(subjectName, value)
+
   }
 
   return (
@@ -63,15 +51,11 @@ export function AcademicInputForm({
       {/* Scrollable Responsive Bento Grid for All 10 High School Subjects (Multi-Column on Desktop) */}
       <div className="custom-scrollbar grid max-h-[62vh] grid-cols-1 gap-3.5 overflow-y-auto pr-1.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
         {HIGH_SCHOOL_SUBJECTS.map((subj) => {
-          const val = clampGrade(scores[subj.name] ?? 0)
-          const fillPct = Math.min(100, Math.max(0, (val / 10) * 100))
+          const val = scores[subj.name]
+          const invalid = val !== undefined && (!Number.isFinite(val) || val < 0 || val > 10)
+          const fillPct = Math.min(100, Math.max(0, ((val ?? 0) / 10) * 100))
 
-          const groupBadgeClass =
-            subj.group === "Bắt buộc"
-              ? "bg-sky-50 text-sky-800 border-sky-200/80"
-              : subj.group === "Khoa học tự nhiên"
-                ? "bg-emerald-50 text-emerald-800 border-emerald-200/80"
-                : "bg-purple-50 text-purple-800 border-purple-200/80"
+          const groupBadgeClass = "bg-sky-50 text-sky-800 border-sky-200/80"
 
           return (
             <div
@@ -98,8 +82,10 @@ export function AcademicInputForm({
                     inputMode="decimal"
                     min={0}
                     max={10}
-                    step={0.1}
-                    value={val}
+                    step="any"
+                    value={val ?? ""}
+                    placeholder="Chưa nhập"
+                    aria-invalid={invalid}
                     onKeyDown={(e) => {
                       if (["-", "+", "e", "E"].includes(e.key)) {
                         e.preventDefault()
@@ -108,29 +94,27 @@ export function AcademicInputForm({
                     onChange={(e) =>
                       handleNumberInputChange(subj.name, e.target.value)
                     }
-                    onBlur={(e) =>
-                      handleNumberInputChange(subj.name, e.target.value)
-                    }
                     aria-label={`Điểm môn ${subj.name}`}
                     className="h-10 w-20 shrink-0 rounded-xl border border-sky-200 bg-white text-center font-mono text-base font-black tabular-nums text-sky-900 shadow-inner outline-none transition focus:border-sky-500 focus:ring-2 focus:ring-sky-400/25"
                   />
                 </div>
               </div>
 
-              {/* Synchronized Two-Way Range Slider (0.0 - 10.0) */}
+              {invalid && <p role="alert" className="mb-2 text-sm text-rose-700">Điểm cần nằm trong khoảng 0 đến 10.</p>}
+              {/* Thanh trượt chỉ cập nhật điểm khi người dùng thao tác. */}
               <div className="space-y-1 pt-1">
                 <input
                   type="range"
                   min={0}
                   max={10}
                   step={0.1}
-                  value={val}
+                  value={val ?? 0}
                   onChange={(e) =>
-                    onChange(subj.name, clampGrade(Number(e.target.value)))
+                    onChange(subj.name, Number(e.target.value))
                   }
                   aria-label={`Thanh trượt điểm môn ${subj.name}`}
                   style={{
-                    background: `linear-gradient(to right, #0284c7 0%, #06b6d4 ${fillPct}%, #e0f2fe ${fillPct}%, #e0f2fe 100%)`,
+                    background: `linear-gradient(to right, #0284c7 0%, #0284c7 ${fillPct}%, #e0f2fe ${fillPct}%, #e0f2fe 100%)`,
                   }}
                   className="h-2.5 w-full cursor-pointer appearance-none rounded-lg accent-sky-600 focus:outline-none"
                 />
@@ -146,26 +130,22 @@ export function AcademicInputForm({
       </div>
 
       {/* Sticky Bottom Summary & Z-Score Bar */}
-      <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-300/60 bg-gradient-to-r from-sky-500 to-cyan-500 px-5 py-3.5 text-white shadow-[0_12px_28px_rgba(14,165,233,0.26)] backdrop-blur-xl">
+      <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-5 py-3.5 text-sky-900">
         <div className="flex items-center gap-3">
           <span className="grid size-11 place-items-center rounded-xl bg-white/20 backdrop-blur-md">
             <Calculator className="size-5" />
           </span>
           <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-sky-100">
-              Z-Score Học lực ({HIGH_SCHOOL_SUBJECTS.length} môn THPT)
+            <p className="text-xs font-semibold text-sky-800">
+              Điểm học bạ tự khai ({values.length}/{HIGH_SCHOOL_SUBJECTS.length} môn)
             </p>
             <p className="font-mono text-2xl font-black leading-tight tabular-nums sm:text-3xl">
-              {Number.isFinite(zScore)
-                ? zScore >= 0
-                  ? `+${zScore.toFixed(2)}`
-                  : zScore.toFixed(2)
-                : "0.00"}
+              {values.length ? average.toFixed(2) : "Chưa nhập"}
             </p>
           </div>
         </div>
-        <span className="rounded-xl border border-white/25 bg-white/20 px-4 py-2 font-mono text-sm font-black tabular-nums text-white backdrop-blur-md sm:text-base">
-          Điểm trung bình: {average.toFixed(2)} / 10
+        <span className="rounded-xl border border-sky-200 bg-white px-4 py-2 text-sm font-semibold tabular-nums text-sky-900 sm:text-base">
+          Chưa quy đổi sang điểm thi hoặc Z-Score
         </span>
       </div>
     </div>

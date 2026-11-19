@@ -1,4 +1,5 @@
 import json
+import re
 import logging
 import uuid
 from pathlib import Path
@@ -114,115 +115,48 @@ def _attach_seed_trend_info(
     return enriched
 
 
-async def list_majors(
-    db: AsyncSession,
-    search: Optional[str] = None,
-    category: Optional[str] = None,
-    limit: int = 1000,
-    offset: int = 0
-) -> List[Dict[str, Any]]:
-    """
-    Retrieves MOET Level-IV majors catalog from PostgreSQL.
-    Automatically self-heals and seeds the 108 majors from seed JSON if table is empty
-    or if database is unreachable.
-    """
+async def list_majors(db: AsyncSession, search: Optional[str] = None,
+                      category: Optional[str] = None, limit: int = 1000,
+                      offset: int = 0) -> List[Dict[str, Any]]:
+    """Chỉ đọc danh mục hoạt động trong DB; GET không nạp lại dữ liệu đã xóa."""
+    from fastapi import HTTPException
     try:
-        query = (
-            select(Major)
-            .where(Major.is_active == True)
-            .options(
-                selectinload(Major.careers),
-                selectinload(Major.subject_blocks).selectinload(MajorSubjectBlock.subject_block),
-            )
+        query = select(Major).where(Major.is_active.is_(True)).options(
+            selectinload(Major.careers),
+            selectinload(Major.subject_blocks).selectinload(MajorSubjectBlock.subject_block),
         )
         if search:
             query = query.where(Major.name.ilike(f"%{search}%") | Major.major_code.ilike(f"%{search}%"))
         if category and category.upper() != "ALL":
             query = query.where(Major.category == category)
-
-        query = query.order_by(Major.major_code.asc()).limit(limit).offset(offset)
-        result = await db.execute(query)
-        majors = list(result.scalars().all())
-
-        # Auto-seed if database table is completely empty
-        if len(majors) == 0 and not search and not category:
-            seed_data = load_seed_majors()
-            if seed_data:
-                logger.info("Majors table empty. Auto-seeding 435 MOET Level-IV majors into PostgreSQL...")
-                await bulk_sync_majors(db, seed_data)
-                result = await db.execute(query)
-                majors = list(result.scalars().all())
-
-        from app.services.taxonomy.trend_agent import load_trending_registry_map
-        trend_map = load_trending_registry_map()
-
-        if majors:
-            return [format_major_dict(m, trend_map=trend_map) for m in majors]
+        result = await db.execute(query.order_by(Major.major_code).limit(limit).offset(offset))
+        return [format_major_dict(major, trend_map={}) for major in result.scalars().all()]
     except Exception as exc:
-        logger.warning("Database unavailable in list_majors (%s), falling back to seed JSON", exc)
-
-    # Safe fallback to seed JSON (435 majors)
-    from app.services.taxonomy.trend_agent import load_trending_registry_map
-    trend_map = load_trending_registry_map()
-    seed_data = load_seed_majors()
-    if search:
-        s_lower = search.lower()
-        seed_data = [
-            m for m in seed_data
-            if s_lower in m.get("name", "").lower() or s_lower in m.get("major_code", "").lower()
-        ]
-    if category and category.upper() != "ALL":
-        seed_data = [m for m in seed_data if m.get("category") == category]
-
-    return [_attach_seed_trend_info(m, trend_map) for m in seed_data[offset : offset + limit]]
+        raise HTTPException(503, "Danh mục tạm thời không truy cập được.") from exc
 
 
 async def get_major_by_code(db: AsyncSession, major_code: str) -> Optional[Dict[str, Any]]:
-    from app.services.taxonomy.trend_agent import load_trending_registry_map
-    trend_map = load_trending_registry_map()
+    """Ngành đã vô hiệu hóa hoặc xóa không được phục hồi từ seed."""
+    from fastapi import HTTPException
     try:
-        query = (
-            select(Major)
-            .where(Major.major_code == major_code)
-            .options(
-                selectinload(Major.careers),
-                selectinload(Major.subject_blocks).selectinload(MajorSubjectBlock.subject_block),
-                selectinload(Major.major_skills).selectinload(MajorSkill.skill),
-            )
-        )
-        result = await db.execute(query)
+        result = await db.execute(select(Major).where(
+            Major.major_code == major_code, Major.is_active.is_(True),
+        ).options(selectinload(Major.careers),
+                  selectinload(Major.subject_blocks).selectinload(MajorSubjectBlock.subject_block),
+                  selectinload(Major.major_skills).selectinload(MajorSkill.skill)))
         major = result.scalar_one_or_none()
-        if major:
-            return format_major_dict(major, trend_map=trend_map)
+        return format_major_dict(major, trend_map={}) if major else None
     except Exception as exc:
-        logger.warning("Database unavailable in get_major_by_code (%s), falling back to seed JSON", exc)
-
-    seed_data = load_seed_majors()
-    for m in seed_data:
-        if m.get("major_code") == major_code:
-            return _attach_seed_trend_info(m, trend_map)
-    return None
+        raise HTTPException(503, "Danh mục tạm thời không truy cập được.") from exc
 
 
 async def list_subject_blocks(db: AsyncSession) -> List[Any]:
+    from fastapi import HTTPException
     try:
-        query = select(SubjectBlock).order_by(SubjectBlock.block_code.asc())
-        result = await db.execute(query)
-        blocks = list(result.scalars().all())
-        if blocks:
-            return blocks
+        result = await db.execute(select(SubjectBlock).order_by(SubjectBlock.block_code))
+        return list(result.scalars().all())
     except Exception as exc:
-        logger.warning("Database unavailable in list_subject_blocks (%s), falling back to static blocks", exc)
-
-    return [
-        {"block_code": "A00", "name": "Toán, Vật lí, Hóa học", "subjects": ["Toán", "Vật lí", "Hóa học"], "national_mean": 20.85, "national_std": 3.25},
-        {"block_code": "A01", "name": "Toán, Vật lí, Tiếng Anh", "subjects": ["Toán", "Vật lí", "Tiếng Anh"], "national_mean": 20.15, "national_std": 3.10},
-        {"block_code": "B00", "name": "Toán, Hóa học, Sinh học", "subjects": ["Toán", "Hóa học", "Sinh học"], "national_mean": 19.80, "national_std": 3.40},
-        {"block_code": "C00", "name": "Ngữ văn, Lịch sử, Địa lí", "subjects": ["Ngữ văn", "Lịch sử", "Địa lí"], "national_mean": 21.50, "national_std": 3.35},
-        {"block_code": "D01", "name": "Toán, Ngữ văn, Tiếng Anh", "subjects": ["Toán", "Ngữ văn", "Tiếng Anh"], "national_mean": 19.20, "national_std": 3.15},
-        {"block_code": "D07", "name": "Toán, Hóa học, Tiếng Anh", "subjects": ["Toán", "Hóa học", "Tiếng Anh"], "national_mean": 20.40, "national_std": 3.20},
-        {"block_code": "D08", "name": "Toán, Sinh học, Tiếng Anh", "subjects": ["Toán", "Sinh học", "Tiếng Anh"], "national_mean": 19.90, "national_std": 3.30},
-    ]
+        raise HTTPException(503, "Tổ hợp môn tạm thời không truy cập được.") from exc
 
 
 async def list_careers_by_major(db: AsyncSession, major_id: uuid.UUID) -> List[Career]:
@@ -280,6 +214,22 @@ async def purge_old_major_catalog_data(db: AsyncSession) -> int:
     return deleted_majors_count
 
 
+def validate_catalog_records(items: List[dict], *, allow_six_digit: bool = False) -> None:
+    """Chặn dữ liệu thiếu trước mọi purge/ghi; không sửa mã lỗi thành mã ngành giả."""
+    if not isinstance(items, list) or not 1 <= len(items) <= 2000:
+        raise ValueError("Danh mục phải có từ 1 đến 2000 ngành.")
+    pattern = r"(?:[789][0-9]{6}|[0-9]{6})" if allow_six_digit else r"[789][0-9]{6}"
+    for item in items:
+        if not isinstance(item, dict):
+            raise ValueError("Ngành phải là một object.")
+        code = str(item.get("major_code") or item.get("ma_nganh") or item.get("raw_code") or "").strip()
+        name = item.get("name") or item.get("major_name") or item.get("ten_nganh")
+        if not re.fullmatch(pattern, code) or not isinstance(name, str) or not 2 <= len(name.strip()) <= 255:
+            raise ValueError("Thiếu mã hoặc tên ngành có thể xác minh.")
+        if "is_active" in item and not isinstance(item["is_active"], bool):
+            raise ValueError("Trạng thái hoạt động phải là boolean.")
+
+
 async def bulk_sync_majors(
     db: AsyncSession,
     majors_data: List[dict],
@@ -292,8 +242,7 @@ async def bulk_sync_majors(
     When `deactivate_missing=True`, marks legacy majors absent from `majors_data` as `is_active=False`
     so the active DB count matches the uploaded circular catalog exactly without breaking FKs.
     """
-    if not majors_data:
-        return {"status": "success", "inserted": 0, "updated": 0, "deactivated": 0, "total": 0}
+    validate_catalog_records(majors_data)
 
     inserted_count = 0
     updated_count = 0

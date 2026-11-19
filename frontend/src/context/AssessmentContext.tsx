@@ -1,19 +1,39 @@
+import { summarizeAssessmentAttempt } from "../utils/assessmentEvidence"
 import {
   createContext,
   useCallback,
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react"
+import { requestJSON } from "../services/api"
 import { readStorage, writeStorage } from "../services/storage"
 import type {
   AcademicScore,
   AssessmentHistoryItem,
   AssessmentState,
+  CareerAspirationInput,
 } from "../types/assessment"
 import { useAuth } from "./AuthContext"
+
+interface ServerAssessmentProfile {
+  assessment_id?: string | null
+  has_assessment?: boolean
+  riasec_answers?: Record<string, unknown>
+  cognitive_answers?: Record<string, unknown>
+  raw_grades?: Record<string, unknown>
+  aspiration?: {
+    dream_job?: string
+    desired_field?: string
+    work_values?: string[]
+    preferred_environment?: string
+    score_strategy?: string
+  } | null
+  last_updated?: string
+}
 
 const initial: AssessmentState = {
   step: 1,
@@ -23,142 +43,11 @@ const initial: AssessmentState = {
   completed: false,
 }
 
-const ARCHETYPES: Record<string, string> = {
-  I: "Nhà nghiên cứu xã hội & Khoa học",
-  R: "Kỹ sư Thực hành & Công nghệ",
-  A: "Nhà sáng tạo Nghệ thuật & Nội dung",
-  S: "Chuyên gia Kết nối & Phát triển Con người",
-  E: "Nhà lãnh đạo & Chiến lược Kinh doanh",
-  C: "Chuyên gia Hệ thống & Quản trị Dữ liệu",
-}
-
-const FIELD_PROFILES: Array<{
-  primaryKey: string
-  secondaryKey: string
-  field: string
-  majorName: string
-  majorCode: string
-}> = [
-  {
-    primaryKey: "I",
-    secondaryKey: "R",
-    field: "Máy tính & Công nghệ thông tin",
-    majorName: "Khoa học máy tính",
-    majorCode: "7480101",
-  },
-  {
-    primaryKey: "R",
-    secondaryKey: "I",
-    field: "Công nghệ kỹ thuật",
-    majorName: "Công nghệ kỹ thuật điều khiển & Tự động hóa",
-    majorCode: "7510301",
-  },
-  {
-    primaryKey: "A",
-    secondaryKey: "E",
-    field: "Nghệ thuật & Truyền thông số",
-    majorName: "Thiết kế đồ họa & Đa phương tiện",
-    majorCode: "7210403",
-  },
-  {
-    primaryKey: "S",
-    secondaryKey: "A",
-    field: "Khoa học Giáo dục & Xã hội",
-    majorName: "Tâm lý học giáo dục & Tham vấn",
-    majorCode: "7310401",
-  },
-  {
-    primaryKey: "E",
-    secondaryKey: "C",
-    field: "Kinh doanh & Quản lý",
-    majorName: "Marketing số",
-    majorCode: "7340115",
-  },
-  {
-    primaryKey: "C",
-    secondaryKey: "E",
-    field: "Tài chính - Kế toán & Quản trị",
-    majorName: "Thương mại điện tử",
-    majorCode: "7340122",
-  },
-]
-
-export function summarizeAssessmentAttempt(
-  answers: Record<string, number>,
-  cognitive: Record<string, string | number>,
-  scores: AcademicScore[],
-): Omit<AssessmentHistoryItem, "id" | "createdAt"> {
-  const keys = ["R", "I", "A", "S", "E", "C"]
-  const dimScores = keys.map((key) => {
-    const vals: number[] = []
-    for (let i = 1; i <= 5; i++) {
-      const v = answers[`${key}${i}`]
-      if (typeof v === "number" && v > 0) vals.push(v)
-    }
-    const pct =
-      vals.length > 0
-        ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length / 5) * 100)
-        : 60
-    return { key, pct }
-  })
-
-  const sorted = [...dimScores].sort((a, b) => b.pct - a.pct)
-  const top3 = sorted.slice(0, 3)
-  const hollandCode = top3.map((d) => d.key).join(" · ")
-  const topKey = top3[0]?.key || "I"
-  const archetype = ARCHETYPES[topKey] || "Nhà nghiên cứu xã hội & Khoa học"
-
-  const sm = Object.fromEntries((scores || []).map((s) => [s.subject, s.score]))
-  const g = (subj: string) => (typeof sm[subj] === "number" ? sm[subj] : 0)
-  const blocks = [
-    { name: "Khối A00", sum: g("Toán") + g("Vật lý") + g("Hóa học") },
-    { name: "Khối A01", sum: g("Toán") + g("Vật lý") + g("Tiếng Anh") },
-    { name: "Khối B00", sum: g("Toán") + g("Hóa học") + g("Sinh học") },
-    { name: "Khối C00", sum: g("Ngữ văn") + g("Lịch sử") + g("Địa lý") },
-    { name: "Khối D01", sum: g("Toán") + g("Ngữ văn") + g("Tiếng Anh") },
-    { name: "Khối D07", sum: g("Toán") + g("Hóa học") + g("Tiếng Anh") },
-    { name: "Khối D14", sum: g("Ngữ văn") + g("Lịch sử") + g("Tiếng Anh") },
-    { name: "Khối D15", sum: g("Ngữ văn") + g("Địa lý") + g("Tiếng Anh") },
-  ].sort((a, b) => b.sum - a.sum)
-
-  const bestBlock = blocks[0]?.name || "Khối A00"
-  const avgAcademicPct = Math.min(
-    98,
-    Math.max(55, Math.round(((blocks[0]?.sum || 22.5) / 30) * 100)),
-  )
-  const cogCount = Object.keys(cognitive || {}).length
-  const cogPct = Math.min(96, 80 + Math.min(16, cogCount * 2))
-
-  const matchedProfile =
-    FIELD_PROFILES.find((p) => p.primaryKey === topKey) || FIELD_PROFILES[0]
-  const topMatchScore = Math.min(
-    98,
-    Math.max(
-      72,
-      Math.round(
-        0.45 * (top3[0]?.pct || 85) + 0.35 * avgAcademicPct + 0.2 * cogPct,
-      ),
-    ),
-  )
-
-  return {
-    hollandCode,
-    archetype,
-    topField: matchedProfile.field,
-    topMajorName: matchedProfile.majorName,
-    topMajorCode: matchedProfile.majorCode,
-    topMatchScore,
-    bestBlock,
-    answers: { ...answers },
-    cognitive: { ...cognitive },
-    scores: [...(scores || [])],
-  }
-}
-
 interface AssessmentContextValue {
   assessment: AssessmentState
   history: AssessmentHistoryItem[]
   activeHistoryId: string | null
+  hydrating: boolean
   update: (changes: Partial<AssessmentState>) => void
   reset: () => void
   recordCompletedAttempt: (state: AssessmentState) => AssessmentHistoryItem
@@ -170,6 +59,11 @@ const AssessmentContext = createContext<AssessmentContextValue | null>(null)
 
 export function AssessmentProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
+  return <ScopedAssessmentProvider key={user?.id || "guest"}>{children}</ScopedAssessmentProvider>
+}
+
+function ScopedAssessmentProvider({ children }: { children: ReactNode }) {
+  const { user, token } = useAuth()
   const userKey = useMemo(
     () => (user?.email || user?.id || "guest").toLowerCase().trim(),
     [user?.email, user?.id],
@@ -182,58 +76,180 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
     readStorage<AssessmentHistoryItem[]>(historyStorageKey, []),
   )
   const [assessment, setAssessment] = useState<AssessmentState>(() => {
-    const stored = readStorage<AssessmentState>(assessmentStorageKey, initial)
-    const storedHistory = readStorage<AssessmentHistoryItem[]>(historyStorageKey, [])
-    if (
-      (!stored || Object.keys(stored.answers || {}).length === 0) &&
-      storedHistory.length > 0
-    ) {
-      const latest = storedHistory[0]
-      return {
-        step: 4,
-        answers: { ...latest.answers },
-        cognitive: { ...latest.cognitive },
-        scores: [...latest.scores],
-        aspiration: latest.aspiration ? { ...latest.aspiration } : undefined,
-        completed: true,
-        completedAt: latest.createdAt,
-      }
-    }
-    return stored
+    const stored = readStorage<AssessmentState | null>(assessmentStorageKey, null)
+    return stored ?? initial
   })
   const [activeHistoryId, setActiveHistoryId] = useState<string | null>(null)
+  const [hydrating, setHydrating] = useState(false)
+  const hydratedRef = useRef(false)
 
-  // Reload user-scoped assessment & history when logged-in user changes
   useEffect(() => {
-    const loadedAssessment = readStorage<AssessmentState>(
-      assessmentStorageKey,
-      initial,
-    )
-    const loadedHistory = readStorage<AssessmentHistoryItem[]>(
-      historyStorageKey,
-      [],
-    )
-    let effective = loadedAssessment
-    if (
-      (!loadedAssessment || Object.keys(loadedAssessment.answers || {}).length === 0) &&
-      loadedHistory.length > 0
-    ) {
-      const latest = loadedHistory[0]
-      effective = {
-        step: 4,
-        answers: { ...latest.answers },
-        cognitive: { ...latest.cognitive },
-        scores: [...latest.scores],
-        aspiration: latest.aspiration ? { ...latest.aspiration } : undefined,
-        completed: true,
-        completedAt: latest.createdAt,
-      }
-      writeStorage(assessmentStorageKey, effective)
+    if (hydratedRef.current || !user || !token || user.role?.toLowerCase() === "admin") {
+      return
     }
-    setAssessment(effective)
-    setHistory(loadedHistory)
-    setActiveHistoryId(loadedHistory[0]?.id || null)
-  }, [assessmentStorageKey, historyStorageKey])
+    const stored = readStorage<AssessmentState | null>(assessmentStorageKey, null)
+    const hasCompletedLocal = Boolean(
+      stored?.completed &&
+        (Object.keys(stored.answers || {}).length >= 3 ||
+          (stored.scores || []).length >= 2),
+    )
+    if (hasCompletedLocal) {
+      hydratedRef.current = true
+      return
+    }
+
+    let active = true
+    const controller = new AbortController()
+    setHydrating(true)
+
+    requestJSON<ServerAssessmentProfile>("/assessment/profile", {
+      signal: controller.signal,
+    })
+      .then((profile) => {
+        if (!active || controller.signal.aborted) return
+        hydratedRef.current = true
+        if (!profile?.has_assessment) return
+
+        const answerCount = Object.keys(profile.riasec_answers || {}).length
+        const gradeCount = Object.keys(profile.raw_grades || {}).length
+        if (answerCount < 3 && gradeCount < 2) return
+
+        const answers: Record<string, number> = {}
+        Object.entries(profile.riasec_answers || {}).forEach(([k, v]) => {
+          const num = Number(v)
+          if (Number.isInteger(num) && num >= 1 && num <= 5) {
+            answers[k] = num
+          }
+        })
+
+        const cognitive: Record<string, string> = {}
+        Object.entries(profile.cognitive_answers || {}).forEach(([k, v]) => {
+          if (typeof v === "string" && v.trim()) {
+            cognitive[k] = v.trim()
+          }
+        })
+
+        const scores: AcademicScore[] = Object.entries(profile.raw_grades || {})
+          .map(([subject, score]) => ({
+            subject,
+            score: Number(score),
+            zScore: null,
+          }))
+          .filter(
+            (s) =>
+              s.subject &&
+              Number.isFinite(s.score) &&
+              s.score >= 0 &&
+              s.score <= 10,
+          )
+
+        const asp = profile.aspiration
+        const hasAsp = Boolean(
+          asp &&
+            (asp.dream_job ||
+              asp.desired_field ||
+              (Array.isArray(asp.work_values) && asp.work_values.length > 0) ||
+              asp.preferred_environment),
+        )
+        const aspiration: CareerAspirationInput | undefined =
+          hasAsp && asp
+            ? {
+                dreamJob: asp.dream_job || "",
+                desiredField: asp.desired_field || "",
+                workValues: Array.isArray(asp.work_values) ? asp.work_values : [],
+                preferredEnvironment: asp.preferred_environment || "",
+                scoreStrategy:
+                  asp.score_strategy === "REALISTIC_SAFE" ||
+                  asp.score_strategy === "CHALLENGE_TOP" ||
+                  asp.score_strategy === "FLEXIBLE_PATHWAY"
+                    ? asp.score_strategy
+                    : "FLEXIBLE_PATHWAY",
+              }
+            : undefined
+
+        const completedAt = profile.last_updated || new Date().toISOString()
+        const hydratedState: AssessmentState = {
+          step: 4,
+          answers,
+          cognitive,
+          scores,
+          aspiration,
+          completed: true,
+          completedAt,
+          syncStatus: "SYNCED",
+          submissionId: profile.assessment_id || undefined,
+        }
+
+        const existingHistory = readStorage<AssessmentHistoryItem[]>(
+          historyStorageKey,
+          [],
+        )
+        const dbHistoryId = `db-${profile.assessment_id || "latest"}`
+        const seededHistory =
+          existingHistory.length === 0 &&
+          !existingHistory.some((h) => h.id === dbHistoryId)
+        if (seededHistory) {
+          const summary = summarizeAssessmentAttempt(answers, cognitive, scores)
+          const historyItem: AssessmentHistoryItem = {
+            id: dbHistoryId,
+            createdAt: completedAt,
+            ...summary,
+            aspiration,
+          }
+          setHistory([historyItem])
+          writeStorage(historyStorageKey, [historyItem])
+        }
+
+        const hasInProgressDraft = Boolean(
+          stored &&
+            !stored.completed &&
+            (Object.keys(stored.answers || {}).length > 0 ||
+              (stored.scores || []).length > 0),
+        )
+        if (!hasInProgressDraft) {
+          setAssessment(hydratedState)
+          writeStorage(assessmentStorageKey, hydratedState)
+          if (seededHistory) {
+            setActiveHistoryId(dbHistoryId)
+          }
+        }
+      })
+      .catch(() => {
+        if (active && !controller.signal.aborted) {
+          hydratedRef.current = true
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setHydrating(false)
+        }
+      })
+
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [user?.id, user?.role, token, assessmentStorageKey, historyStorageKey])
+
+  useEffect(() => {
+    const sync = (event: StorageEvent) => {
+      if (event.key === assessmentStorageKey) { setAssessment(readStorage<AssessmentState>(assessmentStorageKey, initial)); setActiveHistoryId(null) }
+      if (event.key === historyStorageKey) setHistory(readStorage<AssessmentHistoryItem[]>(historyStorageKey, []))
+    }
+    const handleLogout = () => {
+      if (userKey === "guest") {
+        setAssessment(initial)
+        setHistory([])
+        setActiveHistoryId(null)
+      }
+    }
+    window.addEventListener("storage", sync)
+    window.addEventListener("career-guide:logout", handleLogout)
+    return () => {
+      window.removeEventListener("storage", sync)
+      window.removeEventListener("career-guide:logout", handleLogout)
+    }
+  }, [assessmentStorageKey, historyStorageKey, userKey])
 
   const update = useCallback(
     (changes: Partial<AssessmentState>) => {
@@ -248,6 +264,7 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
 
   const reset = useCallback(() => {
     setAssessment(initial)
+    setActiveHistoryId(null)
     writeStorage(assessmentStorageKey, initial)
   }, [assessmentStorageKey])
 
@@ -318,21 +335,9 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
           writeStorage(assessmentStorageKey, initial)
           setActiveHistoryId(null)
         } else if (activeHistoryId === id) {
-          const fallbackAttempt = nextHistory[0]
-          const restored: AssessmentState = {
-            step: 4,
-            answers: { ...fallbackAttempt.answers },
-            cognitive: { ...fallbackAttempt.cognitive },
-            scores: [...fallbackAttempt.scores],
-            aspiration: fallbackAttempt.aspiration
-              ? { ...fallbackAttempt.aspiration }
-              : undefined,
-            completed: true,
-            completedAt: fallbackAttempt.createdAt,
-          }
-          setAssessment(restored)
-          writeStorage(assessmentStorageKey, restored)
-          setActiveHistoryId(fallbackAttempt.id)
+          setAssessment(initial)
+          writeStorage(assessmentStorageKey, initial)
+          setActiveHistoryId(null)
         }
         return nextHistory
       })
@@ -345,6 +350,7 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
       assessment,
       history,
       activeHistoryId,
+      hydrating,
       update,
       reset,
       recordCompletedAttempt,
@@ -355,6 +361,7 @@ export function AssessmentProvider({ children }: { children: ReactNode }) {
       assessment,
       history,
       activeHistoryId,
+      hydrating,
       update,
       reset,
       recordCompletedAttempt,

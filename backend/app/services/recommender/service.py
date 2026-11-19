@@ -1,4 +1,5 @@
 import logging
+import math
 import time
 import uuid
 
@@ -39,12 +40,205 @@ from app.services.recommender.engine import (
     evaluate_admission_feasibility,
     are_majors_related_pathway,
     compute_block_zscores_from_grades,
+    calculate_z_score_and_cdf,
     normalize_grades_dict,
     normalize_student_cognitive_traits,
     build_radar_and_block_summary,
+    format_block_with_subjects,
     calculate_market_trend_compatibility,
     CROSS_FIELD_SUBSTITUTION_MAP,
 )
+
+from app.services.recommender.readiness import (
+    build_interest_evidence,
+    evaluate_current_readiness,
+    validate_readiness_grades,
+)
+
+
+async def resolve_assessment_evidence(
+    db: Optional[AsyncSession],
+    user_id: uuid.UUID,
+    inline_profile: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    """Resolve once; an explicitly empty field must never revive older DB data."""
+    inline = dict(inline_profile or {})
+    snapshot_id = inline.get("assessment_id")
+    assessment = None
+    grade = None
+    needs_assessment = (
+        not any(key in inline for key in ("riasec_answers", "riasec_scores"))
+        or not any(key in inline for key in ("cognitive_answers", "cognitive_preferences"))
+        or "aspiration" not in inline
+        or "grades_by_subject" not in inline
+    )
+    if db is not None and user_id is not None:
+        if snapshot_id or needs_assessment:
+            query = select(StudentAssessment).where(StudentAssessment.user_id == user_id)
+            if snapshot_id:
+                query = query.where(StudentAssessment.id == snapshot_id)
+            else:
+                query = query.order_by(StudentAssessment.assessed_at.desc(), StudentAssessment.id.desc()).limit(1)
+            result = await db.execute(query)
+            assessment = result.scalars().first()
+            if snapshot_id and assessment is None:
+                raise HTTPException(status_code=404, detail="Không tìm thấy bản đánh giá đã chọn.")
+        snapshot_raw = assessment.raw_responses if assessment and isinstance(assessment.raw_responses, dict) else {}
+        if "grades_by_subject" not in inline and not snapshot_id and "grades_by_subject" not in snapshot_raw:
+            result = await db.execute(
+                select(StudentGrade).where(StudentGrade.user_id == user_id)
+                .order_by(StudentGrade.created_at.desc())
+            )
+            grade = result.scalars().first()
+
+    raw = assessment.raw_responses if assessment and isinstance(assessment.raw_responses, dict) else {}
+    stored_answers = raw.get("riasec", raw.get("riasec_answers", raw))
+    # Explicit answers, even {}, take precedence over a stored vector.
+    answers = inline["riasec_answers"] if "riasec_answers" in inline else (
+        {} if "riasec_scores" in inline else stored_answers
+    )
+    vector = inline.get("riasec_scores") if "riasec_scores" in inline else (
+        None if "riasec_answers" in inline else getattr(assessment, "riasec_scores", None)
+    )
+    if "cognitive_answers" in inline:
+        cognitive = inline["cognitive_answers"] or {}
+    elif "cognitive_preferences" in inline:
+        cognitive = inline["cognitive_preferences"] or {}
+    else:
+        # Raw answers are authoritative even when explicitly empty; legacy derived
+        # preferences may have been filled with defaults during submission.
+        cognitive = (raw["cognitive"] or {}) if "cognitive" in raw else (getattr(assessment, "cognitive_preferences", None) or {})
+    if "grades_by_subject" in inline:
+        grades = inline["grades_by_subject"] or {}
+    elif snapshot_id or "grades_by_subject" in raw:
+        grades = raw.get("grades_by_subject") or {}
+    else:
+        grades = getattr(grade, "grades_by_subject", None) or {}
+    # Score context must describe the same source as the selected grades.
+    if "score_context" in inline:
+        score_context = inline["score_context"] if isinstance(inline["score_context"], dict) else {}
+    elif "grades_by_subject" not in inline and (snapshot_id or "grades_by_subject" in raw):
+        score_context = raw.get("score_context", {"kind": "TRANSCRIPT", "scale": 10})
+        if not isinstance(score_context, dict):
+            score_context = {}
+    else:
+        score_context = {"kind": "TRANSCRIPT", "scale": 10}
+    aspiration = inline["aspiration"] if "aspiration" in inline else raw.get("aspiration", {})
+    return {
+        **inline,
+        "riasec_answers": answers or {},
+        "riasec_scores": vector or {},
+        "cognitive_preferences": cognitive,
+        "grades_by_subject": grades,
+        "aspiration": aspiration or {},
+        "score_context": score_context,
+        "evidence_source": "SELECTED_ASSESSMENT" if snapshot_id else ("INLINE" if inline_profile is not None else "CURRENT_PROFILE"),
+        "assessment_id": str(snapshot_id or getattr(assessment, "id", "")) or None,
+    }
+
+
+def _exact_block_results(validated_scores: Dict[str, Any]) -> Dict[str, Any]:
+    """Keep validated decimal totals authoritative; round only chart display."""
+    blocks = compute_block_zscores_from_grades({key: float(value) for key, value in validated_scores.items()})
+    for block in blocks.values():
+        subjects = block["subjects_used"]
+        block["subject_scores"] = {subject: float(validated_scores[subject]) for subject in subjects}
+        block["raw_sum"] = float(sum(validated_scores[subject] for subject in subjects))
+        zscore, cdf = calculate_z_score_and_cdf(block["raw_sum"], block["national_mean"], block["national_std"])
+        block.update(z_score=zscore, score_academic=cdf)
+    return blocks
+
+
+def _publish_readiness(item: MajorRecommendationItem, *, preserve_complete_feasibility: bool = False) -> None:
+    """Heuristic rank is not an admission decision; publish only checked evidence."""
+    evidence = item.readiness
+    has_explicit_ref = evidence.get("reason") != "REFERENCE_BASIS_MISSING"
+    available = item.score_breakdown.get("pillar_availability", {})
+    item.fit = {
+        "interest": round(item.score_riasec * 100) if available.get("w_riasec") else None,
+        "academic": round(item.score_academic * 100) if available.get("w_academic") else None,
+        "cognitive": round(item.score_preference * 100) if available.get("w_preference") else None,
+    }
+    interest_known = item.score_breakdown.get("interest_evidence_status") == "COMPLETE"
+    item.match = round(item.overall_score * 100) if interest_known and any(available.values()) else None
+    item.score_breakdown["suitability_status"] = "OBSERVED_INTEREST_FIT" if interest_known else "UNDETERMINED"
+    if not interest_known:
+        item.score_breakdown["score_meaning"] = "PARTIAL_EVIDENCE_RANK_ONLY"
+    item.gaps = item.competency_gaps[:3]
+
+    if preserve_complete_feasibility and interest_known and not has_explicit_ref:
+        item.feasibility = item.feasibility_tier
+        item.university = (
+            format_block_with_subjects(item.best_matching_block)
+            if item.best_matching_block
+            else "Cần đối chiếu trường và phương thức tuyển sinh"
+        )
+        if item.best_block_score is not None and item.feasibility_tier in ("TARGET", "SAFETY", "SAFE"):
+            evidence.update({
+                "status": "READY_REFERENCE",
+                "reason": "REFERENCE_MET",
+                "block": item.best_matching_block,
+                "block_score": item.best_block_score,
+                "benchmark_cutoff": item.benchmark_cutoff,
+                "min_recommended": item.min_recommended,
+                "violations": list(item.constraint_violations or []),
+                "message": item.admission_advice or "Đạt mốc điểm chuẩn tham chiếu của ngành.",
+            })
+        elif item.feasibility_tier == "REACH":
+            evidence.update({
+                "status": "NEEDS_IMPROVEMENT",
+                "reason": "BELOW_REFERENCE_OR_CONSTRAINT",
+                "block": item.best_matching_block,
+                "block_score": item.best_block_score,
+                "benchmark_cutoff": item.benchmark_cutoff,
+                "min_recommended": item.min_recommended,
+                "violations": list(item.constraint_violations or []),
+                "message": item.admission_advice or "Cần cải thiện thêm điểm số hoặc điều kiện môn tiên quyết.",
+            })
+        item.score_breakdown["feasibility"] = evidence
+        item.academic_tier = item.feasibility_tier
+        item.academic_tier_label = item.feasibility_label
+        if not item.advisory_note:
+            item.advisory_note = item.admission_advice
+        return
+
+    from decimal import Decimal, InvalidOperation
+    try:
+        thresholds = [Decimal(str(evidence[k])) for k in ("benchmark_cutoff", "min_recommended") if evidence.get(k) is not None]
+        margin = Decimal(str(evidence["block_score"])) - max(thresholds) if thresholds else None
+        margin = float(margin) if margin is not None and margin.is_finite() else None
+    except (KeyError, TypeError, ValueError, InvalidOperation):
+        margin = None
+    ready = evidence.get("status") == "READY_REFERENCE" and not evidence.get("violations") and margin is not None and margin >= 0
+    known_gap = evidence.get("status") in {"READY_REFERENCE", "NEEDS_IMPROVEMENT"} and not ready
+    if known_gap and evidence.get("status") == "READY_REFERENCE":
+        evidence["status"] = "NEEDS_IMPROVEMENT"
+    item.feasibility_tier = "TARGET" if ready else "REACH" if known_gap else "UNKNOWN"
+    item.feasibility = item.feasibility_tier
+    item.feasibility_label = "Đạt mốc tham chiếu" if ready else "Cần cải thiện" if known_gap else "Chưa đủ cơ sở đối chiếu"
+    item.constraint_passed = ready
+    item.constraint_violations = list(evidence.get("violations", []))
+    item.admission_advice = evidence.get("message") or "Chưa đủ bằng chứng để đối chiếu."
+    item.best_matching_block = evidence.get("block")
+    item.best_block_score = evidence.get("block_score")
+    item.benchmark_cutoff = evidence.get("benchmark_cutoff")
+    item.min_recommended = evidence.get("min_recommended")
+    item.score_gap = margin
+    item.university = format_block_with_subjects(item.best_matching_block) if item.best_matching_block else "Cần đối chiếu trường và phương thức tuyển sinh"
+    item.admission_tactic = "Đối chiếu phương thức tuyển sinh" if not ready else "Lựa chọn đạt mốc tham chiếu"
+    item.advisory_note = item.admission_advice
+    item.nudge_badge = None
+    interest_note = (f"Mức tương đồng sở thích: {item.fit['interest']}%. " if available.get("w_riasec")
+                     else "Sở thích chưa phân hóa hoặc chưa đủ câu trả lời để kết luận mức phù hợp. ")
+    cognitive_note = (f"Tương đồng thiên hướng tự khai: {item.fit['cognitive']}%; không phải đo năng lực. "
+                      if available.get("w_preference") else "Chưa đủ dữ liệu thiên hướng tự khai. ")
+    item.explanation = interest_note + cognitive_note + item.admission_advice
+    item.top_supporting_factors = [item.admission_advice, "Điểm phù hợp là chỉ số heuristic, không phải xác suất trúng tuyển."]
+    item.score_breakdown["feasibility"] = evidence
+    item.academic_tier = evidence.get("status", "UNKNOWN")
+    item.academic_tier_label = item.feasibility_label
+
+
 
 # Backwards compatibility aliases
 compute_cosine_similarity = calculate_riasec_cosine_similarity
@@ -58,31 +252,15 @@ from app.services.gap_roadmap_engine.gap_engine import (
 
 def _riasec_vector_from_answers(raw_answers: Optional[Dict[str, Any]]) -> Optional[Dict[str, float]]:
     """Tính vector 6 chiều RIASEC từ đáp án câu hỏi R1..C5 (thang Likert 1..5 -> [0.0, 1.0])."""
-    if not raw_answers:
+    evidence = build_interest_evidence(raw_answers or {})
+    if evidence["status"] == "MISSING":
         return None
-    sums = {dim: 0.0 for dim in RIASEC_DIMENSIONS}
-    counts = {dim: 0 for dim in RIASEC_DIMENSIONS}
-    for q_key, val in raw_answers.items():
-        prefix = str(q_key).strip()[:1].upper()
-        if prefix in sums:
-            try:
-                num = max(1.0, min(5.0, float(val)))
-                sums[prefix] += num
-                counts[prefix] += 1
-            except (TypeError, ValueError):
-                continue
-    if sum(counts.values()) == 0:
-        return None
-    vec: Dict[str, float] = {}
-    for dim in RIASEC_DIMENSIONS:
-        if counts[dim] > 0:
-            norm_v = (sums[dim] / counts[dim] - 1.0) / 4.0
-            vec[dim] = round(max(0.0, min(1.0, norm_v)), 4)
-        else:
-            vec[dim] = 0.5
-    if all(v <= 0.0 for v in vec.values()):
-        return {dim: 0.2 for dim in RIASEC_DIMENSIONS}
-    return vec
+    vector = {}
+    for group in evidence["groups"]:
+        if group["answered"]:
+            # Preserve the existing Likert normalization for ranking; never fill missing groups.
+            vector[group["code"]] = round(group["percent"] / 100.0, 4)
+    return vector
 
 
 class _MajorSeedAdapter:
@@ -264,6 +442,9 @@ async def calculate_3pillar_recommendations(
     inline_profile: Optional[Dict[str, Any]] = None,
     raise_if_unassessed: bool = False,
     persist_history: bool = True,
+    *,
+    resolved_profile: Optional[Dict[str, Any]] = None,
+    include_all_candidates: bool = False,
 ) -> RecommendationResponse:
     """
     Động cơ Khuyến nghị Tất định 3 Trụ cột (FR04, NFR04) kết hợp Ràng buộc Điểm đa tầng:
@@ -273,97 +454,43 @@ async def calculate_3pillar_recommendations(
     """
     start_time = time.perf_counter()
 
-    # 1. Nạp hồ sơ từ DB (nếu có user trong DB) và ghép với inline_profile (nếu FE gửi trực tiếp)
-    assessment = None
-    grade = None
+    inline = resolved_profile if resolved_profile is not None else await resolve_assessment_evidence(db, user_id, inline_profile)
     diagnostic_tests: List[Any] = []
     user_row = None
-    if db is not None:
+    if db is not None and user_id is not None:
         try:
-            if user_id:
-                u_res = await db.execute(select(User).where(User.id == user_id))
-                user_row = u_res.scalars().first()
-
-            assess_res = await db.execute(
-                select(StudentAssessment)
-                .where(StudentAssessment.user_id == user_id)
-                .order_by(StudentAssessment.assessed_at.desc())
-            )
-            assessment = assess_res.scalars().first()
-
-            grade_res = await db.execute(
-                select(StudentGrade)
-                .where(StudentGrade.user_id == user_id)
-                .order_by(StudentGrade.created_at.desc())
-            )
-            grade = grade_res.scalars().first()
-
-            diag_res = await db.execute(
-                select(StudentDiagnosticTest).where(StudentDiagnosticTest.user_id == user_id)
-            )
-            diagnostic_tests = list(diag_res.scalars().all())
+            result = await db.execute(select(User).where(User.id == user_id))
+            user_row = result.scalars().first()
+            result = await db.execute(select(StudentDiagnosticTest).where(StudentDiagnosticTest.user_id == user_id))
+            diagnostic_tests = list(result.scalars().all())
         except Exception:
-            assessment = None
-            grade = None
             diagnostic_tests = []
-            user_row = None
 
-    inline = inline_profile or {}
-    inline_riasec = inline.get("riasec_scores") or _riasec_vector_from_answers(inline.get("riasec_answers"))
-    inline_pref = inline.get("cognitive_preferences") or inline.get("cognitive_answers")
-    inline_grades = normalize_grades_dict(inline.get("grades_by_subject"))
+    interest_evidence = build_interest_evidence(inline.get("riasec_answers"), inline.get("riasec_scores"))
+    student_riasec = _riasec_vector_from_answers(inline.get("riasec_answers")) or {
+        key: float(value) for key, value in (inline.get("riasec_scores") or {}).items()
+        if key in RIASEC_DIMENSIONS and isinstance(value, (int, float)) and not isinstance(value, bool)
+        and math.isfinite(value) and 0 <= value <= 1
+    }
+    from .evidence import cognitive_evidence, score_observed_pillars, aspiration_preference_evidence, STRATEGIES, COGNITIVE_DIMENSIONS
+    cognitive = cognitive_evidence(inline.get("cognitive_preferences"))
+    student_pref = cognitive["traits"]
+    aspiration = inline.get("aspiration") or {}
+    strategy = aspiration.get("score_strategy", aspiration.get("scoreStrategy", "FLEXIBLE_PATHWAY"))
+    strategy = strategy if strategy in STRATEGIES else "FLEXIBLE_PATHWAY"
+    grade_validation = validate_readiness_grades(inline.get("grades_by_subject") or {})
+    norm_raw_grades = {key: float(value) for key, value in grade_validation["scores"].items()}
+    student_zscores = _exact_block_results(grade_validation["scores"])
+    student_gender = payload.gender or inline.get("gender") or getattr(user_row, "gender", None)
+    student_grade_level = payload.grade_level or inline.get("grade_level") or getattr(user_row, "grade_level", None)
+    if raise_if_unassessed and not (student_riasec or norm_raw_grades or inline.get("cognitive_preferences")):
+        raise HTTPException(status_code=422, detail={
+            "code": "CHUA_HOAN_THANH_BAI_TEST",
+            "message": "Vui lòng hoàn thành bài đánh giá sở thích và điểm học lực trước khi nhận đề xuất ngành.",
+        })
 
-    # Nhận diện Giới tính và Khối lớp cho động cơ HA-GAE v3.1
-    student_gender = (
-        payload.gender
-        or inline.get("gender")
-        or (user_row.gender if user_row else None)
-    )
-    student_grade_level = (
-        payload.grade_level
-        or inline.get("grade_level")
-        or (user_row.grade_level if user_row else None)
-    )
-
-    has_db_assess = bool(assessment and (assessment.riasec_scores or assessment.cognitive_preferences))
-    has_db_grades = bool(grade and (grade.grades_by_subject or grade.computed_block_zscores))
-    has_inline = bool(inline_riasec or inline_pref or inline_grades)
-
-    if raise_if_unassessed and not (has_db_assess or has_db_grades or has_inline):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail={
-                "code": "CHUA_HOAN_THANH_BAI_TEST",
-                "message": "Vui lòng hoàn thành bài đánh giá sở thích và điểm học lực trước khi nhận đề xuất ngành.",
-            },
-        )
-
-    student_riasec = (
-        inline_riasec
-        or (assessment.riasec_scores if assessment and assessment.riasec_scores else None)
-        or {"R": 0.5, "I": 0.5, "A": 0.5, "S": 0.5, "E": 0.5, "C": 0.5}
-    )
-    student_pref = normalize_student_cognitive_traits(
-        inline_pref
-        or (assessment.cognitive_preferences if assessment and assessment.cognitive_preferences else {})
-    )
-
-    if inline_grades:
-        norm_raw_grades = inline_grades
-        student_zscores = compute_block_zscores_from_grades(norm_raw_grades)
-    else:
-        norm_raw_grades = normalize_grades_dict(
-            grade.grades_by_subject if grade and grade.grades_by_subject else {}
-        )
-        if norm_raw_grades:
-            student_zscores = compute_block_zscores_from_grades(norm_raw_grades)
-        elif grade and grade.computed_block_zscores:
-            student_zscores = dict(grade.computed_block_zscores)
-        else:
-            student_zscores = {}
-
-    # Suy luận kỹ năng đã đạt từ điểm học lực (đã chuẩn hóa tên môn) và bài test chẩn đoán
-    mastered_skills = infer_mastered_skills_from_grades(norm_raw_grades)
+    # Chỉ bài chẩn đoán xác nhận kỹ năng; điểm học bạ là bằng chứng nền tảng.
+    mastered_skills = set()  # Transcript grades are foundations, not confirmed mastery.
     diag_mastered = infer_mastered_skills_from_diagnostic_tests([
         {"skill_code": d.skill_code, "score": d.score, "is_passed": d.is_passed}
         for d in diagnostic_tests
@@ -398,35 +525,25 @@ async def calculate_3pillar_recommendations(
         except Exception:
             pass
 
-    # 4. Nạp danh mục ngành chuẩn TT74/2026 (đảm bảo đủ 435 ngành kể cả khi DB mới chỉ có 108 ngành TT09 cũ)
+    # 4. Danh mục đang hoạt động là nguồn có thẩm quyền; seed chỉ dùng khi DB trống.
     from app.services.taxonomy.service import load_seed_majors
     seed_data = load_seed_majors()
     seed_by_code = {str(m.get("major_code", "")): m for m in seed_data if m.get("major_code")}
 
-    majors: List[Any] = []
-    if db is not None:
-        try:
-            majors_query = select(Major).where(Major.is_active == True).options(
-                selectinload(Major.subject_blocks).selectinload(MajorSubjectBlock.subject_block),
-                selectinload(Major.major_skills).selectinload(MajorSkill.skill)
-            )
-            majors_res = await db.execute(majors_query)
-            majors = list(majors_res.scalars().all())
-        except Exception as db_err:
-            logger.warning("Truy vấn DB thất bại trong recommender, chuyển sang seed TT74: %s", db_err)
-            majors = []
-
-    if not majors:
-        majors = [_MajorSeedAdapter(m, idx) for idx, m in enumerate(seed_data, start=1)]
+    from .catalog import load_active_catalog
+    catalog = await load_active_catalog(db)
+    majors = [_MajorSeedAdapter(entry, idx) if isinstance(entry, dict) else entry
+              for idx, entry in enumerate(catalog, start=1)]
 
     from app.services.taxonomy.trend_agent import (
         load_trending_registry_map,
         get_major_trend_info,
         get_trend_rank_boost,
     )
-    trend_map = load_trending_registry_map()
+    trend_map = {} if db is not None else load_trending_registry_map()
 
     scored_items: List[MajorRecommendationItem] = []
+    weights_dict = {"w_riasec": w_riasec, "w_academic": w_academic, "w_preference": w_pref}
     has_any_grades = bool(norm_raw_grades or student_zscores)
 
     for major in majors:
@@ -457,18 +574,28 @@ async def calculate_3pillar_recommendations(
             for msb in (getattr(major, "subject_blocks", None) or [])
             if getattr(msb, "subject_block", None) and msb.subject_block.block_code
         ]
+        block_source = "SEED_DECLARED" if isinstance(major, _MajorSeedAdapter) else "DATABASE"
         if not admitted_codes:
-            admitted_codes = [
-                str(b).strip().upper()
-                for b in (seed_fallback.get("blocks") or ["A00", "A01", "D01"])
-                if str(b).strip()
-            ]
-
+            declared_blocks = seed_fallback.get("blocks") or []
+            block_source = "SEED_DECLARED" if declared_blocks else "ASSUMED"
+            admitted_codes = [str(b).strip().upper() for b in (declared_blocks or ["A00", "A01", "D01"]) if str(b).strip()]
+        readiness = evaluate_current_readiness(
+            raw_grades=inline.get("grades_by_subject") or {},
+            admitted_blocks=admitted_codes,
+            block_source=block_source,
+            major_code=major.major_code,
+            major_name=major.name,
+            category=getattr(major, "category", "") or "",
+            score_context=inline.get("score_context"),
+            reference=seed_fallback.get("readiness_reference"),
+        )
+        selected_block = readiness.get("block")
+        fit_blocks = [selected_block] if selected_block else admitted_codes
         score_academic, best_block, block_breakdown = evaluate_target_anchored_academic_fit(
-            admitted_codes,
+            fit_blocks,
             student_zscores,
-            benchmark_cutoff=bm_info["benchmark_cutoff"],
-            min_recommended=bm_info["min_recommended"],
+            benchmark_cutoff=readiness.get("benchmark_cutoff") or bm_info["benchmark_cutoff"],
+            min_recommended=readiness.get("min_recommended") or bm_info["min_recommended"],
             raw_grades=norm_raw_grades,
             major_code=major.major_code,
             major_name=major.name,
@@ -479,17 +606,25 @@ async def calculate_3pillar_recommendations(
         score_pref = calculate_asymmetric_cognitive_fit(student_pref, major.cognitive_attributes)
 
         # --- ĐIỂM TỔNG HỢP 3 TRỤ CỘT (THÍCH ỨNG ĐỘNG) ---
-        overall_score, weights_dict = calculate_3pillar_hybrid_score(
-            score_riasec=score_riasec,
-            score_academic=score_academic,
-            score_preference=score_pref,
-            w_riasec=w_riasec,
-            w_academic=w_academic,
-            w_preference=w_pref,
-            has_academic_scores=has_any_grades,
-            strategy=getattr(payload, "aspiration_direction", "balanced") or "balanced",
-            category=getattr(major, "category", "") or "",
-        )
+        availability = {
+            "w_riasec": interest_evidence["status"] == "COMPLETE" and bool(major.riasec_vector),
+            "w_academic": bool(best_block and best_block in student_zscores),
+            "w_preference": cognitive["status"] == "COMPLETE" and any(
+                (major.cognitive_attributes or {}).get(key) in values for key, values in COGNITIVE_DIMENSIONS.items()),
+        }
+        scores = {"w_riasec": score_riasec, "w_academic": score_academic, "w_preference": score_pref}
+        overall_score, weights_dict = score_observed_pillars(
+            scores, availability, {"w_riasec": w_riasec, "w_academic": w_academic, "w_preference": w_pref}, strategy)
+        preferences = aspiration_preference_evidence(aspiration, major.cognitive_attributes or {})
+        # A bounded preference contribution can refine fit, never academic eligibility.
+        if preferences["score"] is not None and any(availability.values()):
+            overall_score = round(0.9 * overall_score + 0.1 * preferences["score"], 4)
+        if not availability["w_riasec"]:
+            score_riasec = 0.0
+        if not availability["w_academic"]:
+            score_academic = 0.0
+        if not availability["w_preference"]:
+            score_pref = 0.0
 
         # --- PHÂN TÍCH LỖ HỔNG KỸ NĂNG ---
         major_skills_list = [
@@ -541,6 +676,22 @@ async def calculate_3pillar_recommendations(
             min_recommended_override=min_override,
             has_academic_data=has_any_grades,
         )
+
+        if readiness.get("block"):
+            best_block = readiness["block"]
+            readiness_tier = {"READY_REFERENCE": "TARGET", "NEEDS_IMPROVEMENT": "REACH", "UNKNOWN": "UNKNOWN"}[readiness["status"]]
+            feasibility.update({
+                "feasibility_tier": readiness_tier,
+                "feasibility_label": {"TARGET": "Đạt mốc tham chiếu", "REACH": "Cần cải thiện", "UNKNOWN": "Chưa đủ bằng chứng"}[readiness_tier],
+                "constraint_passed": readiness["status"] == "READY_REFERENCE",
+                "constraint_violations": readiness.get("violations", []),
+                "admission_advice": readiness.get("message"),
+                "best_block_score": readiness.get("block_score"),
+                "benchmark_cutoff": readiness.get("benchmark_cutoff"),
+                "min_recommended": readiness.get("min_recommended"),
+                "score_gap": (readiness["block_score"] - readiness["benchmark_cutoff"])
+                    if readiness.get("block_score") is not None and readiness.get("benchmark_cutoff") is not None else None,
+            })
 
         # --- GIẢI THÍCH XAI TẤT ĐỊNH & TINH GỌN ---
         top_factors, summary_expl = generate_xai_top_supporting_factors(
@@ -615,8 +766,17 @@ async def calculate_3pillar_recommendations(
             score_academic=score_academic,
             score_preference=score_pref,
             best_matching_block=best_block,
+            readiness=readiness,
             score_breakdown={
                 "weights": weights_dict,
+                "readiness": readiness,
+                "interest_evidence_status": interest_evidence["status"],
+                "cognitive_evidence": cognitive,
+                "pillar_availability": availability,
+                "aspiration_preferences": preferences,
+                "score_strategy": strategy,
+                "score_meaning": "HEURISTIC_FIT_NOT_ADMISSION_PROBABILITY",
+                "skill_evidence_basis": "DIAGNOSTICS_ONLY",
                 "score_riasec": score_riasec,
                 "score_academic": score_academic,
                 "score_preference": score_pref,
@@ -653,66 +813,138 @@ async def calculate_3pillar_recommendations(
             admission_tactic=init_tactic,
         ))
 
-    # =========================================================================
-    # HARD ACADEMIC GATEKEEPER & SMART SIBLING / PATHWAY SUBSTITUTION
-    # =========================================================================
-    eligible_targets = [it for it in scored_items if it.feasibility_tier == "TARGET"]
-    blocked_reaches = [it for it in scored_items if it.feasibility_tier == "REACH"]
+    from .aspiration_agent import _resolve_intent
+    interest_complete = interest_evidence["status"] == "COMPLETE"
+    has_explicit_refs = any(m.readiness.get("reason") != "REFERENCE_BASIS_MISSING" for m in scored_items)
 
-    # Sort blocked high-cutoff majors by pure interest + cognitive passion
-    blocked_reaches.sort(
-        key=lambda it: (0.70 * it.score_riasec + 0.30 * it.score_preference),
-        reverse=True
-    )
-
-    substituted_codes = set()
-    for blocked in blocked_reaches[:6]:
-        if blocked.score_riasec < 0.65:
-            continue
-        # Find the closest eligible TARGET sibling major (same 4-digit group -> same 2-digit field -> 52->51 pathway)
-        best_sub: Optional[MajorRecommendationItem] = None
-        best_sub_metric = -1.0
-        best_rel_tier = 0
-
-        for cand in eligible_targets:
-            if cand.major_code in substituted_codes:
+    if interest_complete and not has_explicit_refs:
+        # 1. Smart Sibling / Pathway Substitution for blocked high-cutoff majors
+        eligible_targets = [it for it in scored_items if it.feasibility_tier == "TARGET"]
+        blocked_reaches = [it for it in scored_items if it.feasibility_tier == "REACH"]
+        blocked_reaches.sort(
+            key=lambda it: (0.70 * it.score_riasec + 0.30 * it.score_preference),
+            reverse=True,
+        )
+        substituted_codes = set()
+        for blocked in blocked_reaches[:6]:
+            if blocked.score_riasec < 0.65:
                 continue
-            rel_tier = are_majors_related_pathway(blocked.major_code, cand.major_code)
-            if rel_tier > 0 and cand.score_riasec >= 0.60:
-                metric = (rel_tier * 0.25) + (cand.score_riasec * 0.50) + (cand.overall_score * 0.25)
-                if metric > best_sub_metric:
-                    best_sub_metric = metric
-                    best_sub = cand
-                    best_rel_tier = rel_tier
-
-        if best_sub is not None:
-            substituted_codes.add(best_sub.major_code)
-            pathway_desc = (
-                "cùng nhóm ngành" if best_rel_tier == 3 else (
-                    "cùng lĩnh vực / nhánh Công nghệ Kỹ thuật ứng dụng" if best_rel_tier == 2 else "nhóm ngành liên thông gần gũi"
+            best_sub: Optional[MajorRecommendationItem] = None
+            best_sub_metric = -1.0
+            best_rel_tier = 0
+            for cand in eligible_targets:
+                if cand.major_code in substituted_codes:
+                    continue
+                rel_tier = are_majors_related_pathway(blocked.major_code, cand.major_code)
+                if rel_tier > 0 and cand.score_riasec >= 0.60:
+                    metric = (rel_tier * 0.25) + (cand.score_riasec * 0.50) + (cand.overall_score * 0.25)
+                    if metric > best_sub_metric:
+                        best_sub_metric = metric
+                        best_sub = cand
+                        best_rel_tier = rel_tier
+            if best_sub is not None:
+                substituted_codes.add(best_sub.major_code)
+                pathway_desc = (
+                    "cùng nhóm ngành"
+                    if best_rel_tier == 3
+                    else (
+                        "cùng lĩnh vực / nhánh Công nghệ Kỹ thuật ứng dụng"
+                        if best_rel_tier == 2
+                        else "nhóm ngành liên thông gần gũi"
+                    )
                 )
-            )
-            sub_msg = (
-                f"Đề xuất thay thế vừa sức cho ngành {blocked.major_name} (điểm chuẩn ~{blocked.benchmark_cutoff}đ): "
-                f"Giữ trọn định hướng sở thích ({round(best_sub.score_riasec * 100, 1)}%) thuộc {pathway_desc} "
-                f"nhưng có ngưỡng điểm an toàn (~{best_sub.benchmark_cutoff}đ)."
-            )
-            best_sub.feasibility_label = f"Thay thế vừa sức cho {blocked.major_name}"
-            best_sub.admission_advice = sub_msg
-            best_sub.top_supporting_factors.insert(0, sub_msg)
+                sub_msg = (
+                    f"Đề xuất thay thế vừa sức cho ngành {blocked.major_name} (điểm chuẩn ~{blocked.benchmark_cutoff}đ): "
+                    f"Giữ trọn định hướng sở thích ({round(best_sub.score_riasec * 100, 1)}%) thuộc {pathway_desc} "
+                    f"nhưng có ngưỡng điểm an toàn (~{best_sub.benchmark_cutoff}đ)."
+                )
+                best_sub.admission_advice = sub_msg
+                best_sub.top_supporting_factors.insert(0, sub_msg)
 
-    # HA-GAE v3.1 Tái xếp hạng thích ứng khối lớp, giới tính và bảo toàn trần 40%
-    has_academic = has_any_grades and any(v is not None and v > 0 for v in norm_raw_grades.values())
-    top_results = apply_horizon_gender_reranking(
-        scored_items=scored_items,
-        grade_level=student_grade_level,
-        gender=student_gender,
-        top_k=payload.top_k,
-        has_academic_scores=has_academic,
-        target_trending_top5=1,
-        target_trending_top10=2,
-        student_riasec_dict=student_riasec,
-    )
+        # 2. HA-GAE v3.1 Tái xếp hạng thích ứng Khối lớp (Lớp 10/11/12/Tốt nghiệp) & Giới tính
+        has_academic = has_any_grades and any(v is not None and v > 0 for v in norm_raw_grades.values())
+        effective_top_k = len(scored_items) if include_all_candidates else payload.top_k
+        top_results = apply_horizon_gender_reranking(
+            scored_items=scored_items,
+            grade_level=student_grade_level,
+            gender=student_gender,
+            top_k=effective_top_k,
+            has_academic_scores=has_academic,
+            target_trending_top5=1,
+            target_trending_top10=2,
+            student_riasec_dict=student_riasec,
+        )
+        if include_all_candidates and len(top_results) < len(scored_items):
+            included_codes = {it.major_code for it in top_results}
+            for extra in scored_items:
+                if extra.major_code not in included_codes:
+                    top_results.append(extra)
+                    included_codes.add(extra.major_code)
+
+        for item in scored_items:
+            item.explanation = build_horizon_gender_xai_explanation(
+                major_name=item.major_name,
+                major_code=item.major_code,
+                category=item.category or "",
+                score_riasec=item.score_riasec,
+                score_academic=item.score_academic,
+                score_pref=item.score_preference,
+                feasibility_tier=item.feasibility_tier,
+                grade_level=student_grade_level,
+                gender=student_gender,
+                best_matching_block=item.best_matching_block,
+                score_gap=item.score_gap,
+            )
+            _publish_readiness(item, preserve_complete_feasibility=True)
+
+        match_status, _, goals = _resolve_intent(
+            aspiration.get("dream_job", aspiration.get("dreamJob", "")),
+            aspiration.get("desired_field", aspiration.get("desiredField", "")),
+            scored_items,
+            seed_by_code,
+        )
+        goal_codes = {item.major_code for item in goals} if match_status == "MATCHED" else set()
+        for item in scored_items:
+            item.score_breakdown["aspiration_relation"] = "DIRECT_GOAL" if item.major_code in goal_codes else "OTHER"
+        for rank, item in enumerate(top_results, 1):
+            item.rank = rank
+    else:
+        # All candidates receive authoritative readiness BEFORE any top-k selection.
+        for item in scored_items:
+            _publish_readiness(item, preserve_complete_feasibility=False)
+        match_status, _, goals = _resolve_intent(
+            aspiration.get("dream_job", aspiration.get("dreamJob", "")),
+            aspiration.get("desired_field", aspiration.get("desiredField", "")),
+            scored_items,
+            seed_by_code,
+        )
+        goal_codes = {item.major_code for item in goals} if match_status == "MATCHED" else set()
+        for item in scored_items:
+            item.score_breakdown["aspiration_relation"] = "DIRECT_GOAL" if item.major_code in goal_codes else "OTHER"
+
+        def order(item):
+            tier = {"TARGET": 0, "UNKNOWN": 1, "REACH": 2}[item.feasibility_tier]
+            margin = item.score_gap if item.score_gap is not None else float("-inf")
+            return (
+                tier,
+                0 if item.major_code in goal_codes else 1,
+                -margin if strategy == "REALISTIC_SAFE" and tier == 0 else 0,
+                -item.overall_score,
+                item.major_code,
+            )
+
+        top_results = sorted(scored_items, key=order)
+        if not include_all_candidates:
+            top_results = [item for item in top_results if item.feasibility_tier != "REACH"][:payload.top_k]
+        for rank, item in enumerate(top_results, 1):
+            item.rank = rank
+
+    # Summary weights describe observed profile evidence; each item's weights are authoritative.
+    _, summary_weights = score_observed_pillars(
+        {"w_riasec": 0, "w_academic": 0, "w_preference": 0},
+        {"w_riasec": interest_evidence["status"] == "COMPLETE",
+         "w_academic": bool(student_zscores), "w_preference": cognitive["status"] == "COMPLETE"},
+        {"w_riasec": w_riasec, "w_academic": w_academic, "w_preference": w_pref}, strategy)
 
     # Lưu lịch sử đề xuất cho người dùng đã đăng nhập
     generated_now = datetime.now(timezone.utc)
@@ -720,14 +952,15 @@ async def calculate_3pillar_recommendations(
         try:
             history = RecommendationHistory(
                 user_id=user_id,
-                weights_applied=weights_dict,
-                ranked_results=[it.model_dump() for it in top_results[:15]],
+                weights_applied=summary_weights,
+                ranked_results=[it.model_dump(mode="json") for it in top_results[:15]],
                 generated_at=generated_now
             )
             db.add(history)
             await db.commit()
-        except Exception:
-            pass
+        except Exception as exc:
+            await db.rollback()
+            raise HTTPException(503,"Không lưu được lịch sử đề xuất; hãy thử lại.") from exc
 
     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
     print(f"3-Pillar Recommendation Engine evaluated {len(majors)} majors in {elapsed_ms:.2f}ms.")
@@ -735,7 +968,7 @@ async def calculate_3pillar_recommendations(
     return RecommendationResponse(
         user_id=user_id,
         generated_at=generated_now,
-        weights_applied=weights_dict,
+        weights_applied=summary_weights,
         total_majors_evaluated=len(majors),
         recommendations=top_results
     )
@@ -842,34 +1075,43 @@ def build_two_tier_funnel_payload(
     from app.services.taxonomy.trend_agent import get_trend_rank_boost
 
     horizon_cfg = get_grade_horizon_config(grade_level)
+    tau = float(horizon_cfg.get("tau", 0.25))
 
     groups: Dict[str, List[MajorRecommendationItem]] = defaultdict(list)
     raw_cat_by_key: Dict[str, str] = {}
     for item in recommendations:
+        if item.feasibility_tier == "REACH":
+            if tau < 0.65 or item.admission_tactic == "Nguy cơ cao":
+                continue
         cat = item.category or "Khác"
         key = _canonical_field_key(cat)
         if key not in raw_cat_by_key:
             raw_cat_by_key[key] = cat
         groups[key].append(item)
 
+    if not groups and recommendations:
+        for item in recommendations:
+            if item.admission_tactic == "Nguy cơ cao":
+                continue
+            cat = item.category or "Khác"
+            key = _canonical_field_key(cat)
+            if key not in raw_cat_by_key:
+                raw_cat_by_key[key] = cat
+            groups[key].append(item)
+
     tier1_fields: List[Dict[str, Any]] = []
     for key, items in groups.items():
         cat_name = raw_cat_by_key[key]
         display_name = _format_vietnamese_field_name(cat_name)
-        sorted_items = sorted(
-            items,
-            key=lambda m: (
-                1 if m.feasibility_tier == "TARGET" else 0,
-                1 if m.is_trending else 0,
-                m.trend_priority,
-                round(m.overall_score + get_trend_rank_boost(m.trend_tier, m.overall_score), 6),
-                m.overall_score,
-                m.score_riasec,
-            ),
-            reverse=True,
-        )
+        if tau >= 0.65:
+            sorted_items = sorted(items, key=lambda m: (m.admission_tactic == "Nguy cơ cao", m.rank))
+        else:
+            sorted_items = sorted(items, key=lambda m: (m.feasibility_tier != "TARGET", m.rank))
         sample_top = sorted_items[:majors_per_field]
-        target_cnt = sum(1 for m in items if m.feasibility_tier == "TARGET")
+        target_cnt = sum(
+            1 for m in items
+            if m.readiness.get("status") == "READY_REFERENCE" or m.feasibility_tier == "TARGET"
+        )
         avg_score = sum(m.overall_score for m in sample_top) / len(sample_top)
         max_trend_boost = max(
             (get_trend_rank_boost(m.trend_tier, m.overall_score) for m in sample_top),
@@ -884,8 +1126,8 @@ def build_two_tier_funnel_payload(
             "field_name": display_name,
             "raw_category": cat_name,
             "icon": _resolve_field_icon(display_name),
-            "match": int(round(avg_score * 100)),
-            "rank_score": avg_score + (max_trend_boost * 1.2) + trend_field_bonus,
+            "match": int(round(avg_score * 100)) if any(m.match is not None for m in sample_top) else None,
+            "rank_score": avg_score,
             "max_trend_priority": max_trend_pri,
             "majors_count": len(items),
             "eligible_count": target_cnt,
@@ -898,10 +1140,8 @@ def build_two_tier_funnel_payload(
         key=lambda f: (
             0 if _canonical_field_key(f["field_name"]) == "khác" else 1,
             1 if f["has_eligible"] else 0,
-            f["max_trend_priority"] >= 2,
             round(f["rank_score"], 4),
-            f["max_trend_priority"],
-            f["match"]
+            f["match"] if f["match"] is not None else -1
         ),
         reverse=True,
     )
@@ -911,9 +1151,9 @@ def build_two_tier_funnel_payload(
         "horizon_label": horizon_cfg.get("label"),
         "horizon_tau": horizon_cfg.get("tau"),
         "tier1_fields": selected_tier1,
-        "all_majors": recommendations[:30],
+        "all_majors": [m for m in recommendations if m.feasibility_tier != "REACH"][:30],
         "total_evaluated": len(recommendations),
-        "total_eligible": sum(1 for m in recommendations if m.feasibility_tier == "TARGET"),
+        "total_eligible": sum(1 for m in recommendations if m.readiness.get("status") == "READY_REFERENCE"),
         "total_blocked": sum(1 for m in recommendations if m.feasibility_tier == "REACH"),
     }
 
@@ -935,7 +1175,7 @@ async def evaluate_dashboard_profile_bundle(
     - Trả về 2-Tier Funnel, danh sách ngành kèm trạng thái TARGET/REACH/SAFETY, biểu đồ Radar và Khối mạnh nhất.
     - Tự động thích ứng theo chân trời thời gian khối lớp và công thái học giới tính (HA-GAE v3.1).
     """
-    inline = inline_profile or {}
+    inline = await resolve_assessment_evidence(db, user_id, inline_profile)
     effective_gender = gender or inline.get("gender")
     effective_grade_level = grade_level or inline.get("grade_level")
 
@@ -950,7 +1190,7 @@ async def evaluate_dashboard_profile_bundle(
             pass
 
     req = RecommendationRequest(
-        top_k=max(top_k, 435),
+        top_k=top_k,
         custom_weights=custom_weights,
         gender=effective_gender,
         grade_level=effective_grade_level,
@@ -959,53 +1199,31 @@ async def evaluate_dashboard_profile_bundle(
         db=db,
         user_id=user_id,
         payload=req,
-        inline_profile=inline_profile,
+        inline_profile=inline,
         raise_if_unassessed=raise_if_unassessed,
         persist_history=persist_history,
+        resolved_profile=inline,
+        include_all_candidates=True,
     )
-
-    # Tái sử dụng đúng vector đã chuẩn hóa để xuất Radar & Best Block Summary đồng nhất 100%
-    student_riasec = inline.get("riasec_scores") or _riasec_vector_from_answers(inline.get("riasec_answers"))
-    norm_raw_grades = normalize_grades_dict(inline.get("grades_by_subject"))
-    aspiration_data = inline.get("aspiration")
-
-    if db is not None and (not student_riasec or not norm_raw_grades or not aspiration_data):
-        try:
-            if not student_riasec or not aspiration_data:
-                a_res = await db.execute(
-                    select(StudentAssessment)
-                    .where(StudentAssessment.user_id == user_id)
-                    .order_by(StudentAssessment.assessed_at.desc())
-                )
-                assess_row = a_res.scalars().first()
-                if assess_row:
-                    if not student_riasec and assess_row.riasec_scores:
-                        student_riasec = assess_row.riasec_scores
-                    if not aspiration_data and isinstance(assess_row.raw_responses, dict):
-                        aspiration_data = assess_row.raw_responses.get("aspiration")
-            if not norm_raw_grades:
-                g_res = await db.execute(
-                    select(StudentGrade)
-                    .where(StudentGrade.user_id == user_id)
-                    .order_by(StudentGrade.created_at.desc())
-                )
-                grade_row = g_res.scalars().first()
-                if grade_row and grade_row.grades_by_subject:
-                    norm_raw_grades = normalize_grades_dict(grade_row.grades_by_subject)
-        except Exception:
-            pass
-
-    effective_riasec = student_riasec or {"R": 0.5, "I": 0.5, "A": 0.5, "S": 0.5, "E": 0.5, "C": 0.5}
-    student_zscores = compute_block_zscores_from_grades(norm_raw_grades) if norm_raw_grades else {}
-    has_academic_data = bool(norm_raw_grades) or any(
-        m.feasibility_tier in ("TARGET", "REACH", "SAFETY") for m in rec_resp.recommendations
-    )
-    riasec_data, best_block_stats = build_radar_and_block_summary(
-        effective_riasec,
-        student_zscores,
-        norm_raw_grades,
-    )
+    interest_evidence = build_interest_evidence(inline.get("riasec_answers"), inline.get("riasec_scores"))
+    student_riasec = _riasec_vector_from_answers(inline.get("riasec_answers")) or inline.get("riasec_scores") or {}
+    grade_validation = validate_readiness_grades(inline.get("grades_by_subject") or {})
+    norm_raw_grades = {key: float(value) for key, value in grade_validation["scores"].items()}
+    student_zscores = _exact_block_results(grade_validation["scores"])
+    has_academic_data = bool(norm_raw_grades)
+    riasec_data, best_block_stats = build_radar_and_block_summary(student_riasec, student_zscores, norm_raw_grades)
+    # The chart displays observed evidence, never the scorer's neutral defaults.
+    interest_by_code = {group["code"]: group for group in interest_evidence["groups"]}
+    subject_pairs = {"R": ("Vật lý", "Toán"), "I": ("Toán", "Hóa học"), "A": ("Ngữ văn", "Tiếng Anh"),
+                     "S": ("Ngữ văn", "Lịch sử"), "E": ("Tiếng Anh", "Toán"), "C": ("Toán", "Tin học / Công nghệ")}
+    for point in riasec_data:
+        group = interest_by_code[point["key"]]
+        point["value"] = group["percent"] if group.get("answered") else None
+        point["answered"] = group.get("answered")
+        observed = [norm_raw_grades[subj] for subj in subject_pairs[point["key"]] if subj in norm_raw_grades]
+        point["academicValue"] = round(sum(observed) / len(observed) * 10) if observed else None
     best_block_stats["has_academic_data"] = has_academic_data
+    best_block_stats["grade_errors"] = grade_validation["errors"]
 
     funnel_payload = build_two_tier_funnel_payload(
         rec_resp.recommendations,
@@ -1015,13 +1233,15 @@ async def evaluate_dashboard_profile_bundle(
     # Thực thi AI Agent Phân tích Nguyện vọng & Đối chiếu Trắc nghiệm 3 Trụ cột
     from app.services.recommender.aspiration_agent import analyze_career_aspiration
     aspiration_analysis = await analyze_career_aspiration(
-        aspiration_data=aspiration_data,
-        student_riasec=effective_riasec,
+        aspiration_data=inline.get("aspiration"),
+        student_riasec=student_riasec,
         best_block_stats=best_block_stats,
         all_ranked_majors=rec_resp.recommendations,
-        enable_llm=True,
+        enable_llm=False,
+        interest_evidence=interest_evidence,
     )
 
+    visible_majors = [item for item in rec_resp.recommendations if item.feasibility_tier != "REACH"]
     return {
         "has_assessment": True,
         "has_academic_data": has_academic_data,
@@ -1034,7 +1254,11 @@ async def evaluate_dashboard_profile_bundle(
         "weights_applied": rec_resp.weights_applied,
         "riasecData": riasec_data,
         "bestBlockStats": best_block_stats,
-        "majors": rec_resp.recommendations[:top_k],
+        "majors": visible_majors[:top_k],
+        "blocked_goals": [item for item in rec_resp.recommendations if item.feasibility_tier == "REACH"],
         "funnel": funnel_payload,
         "aspirationAnalysis": aspiration_analysis,
+        "interest_evidence": interest_evidence,
+        "evidence_source": inline.get("evidence_source"),
+        "assessment_id": inline.get("assessment_id"),
     }

@@ -32,7 +32,7 @@ def infer_mastered_skills_from_grades(
     grades_by_subject: Dict[str, float]
 ) -> Set[str]:
     """
-    Infers mastered prerequisite competencies from student high school academic grades.
+    Suggests foundation topics from grades; this compatibility helper does not verify mastery.
     Grade scale: 0.0 to 10.0.
     """
     mastered: Set[str] = set()
@@ -52,24 +52,25 @@ def infer_mastered_skills_from_grades(
 def infer_mastered_skills_from_diagnostic_tests(
     diagnostic_tests: List[Dict[str, Any]]
 ) -> Set[str]:
-    """
-    Extracts mastered skills from optional diagnostic skill checks.
-    Pass condition: test score >= 7.0 (on 10-point scale) or >= 0.70 (on 1-point scale) or is_passed == True.
-    """
+    """Use an explicit boolean verdict, otherwise require a declared score scale."""
+    import math
     mastered: Set[str] = set()
-    if not diagnostic_tests:
-        return mastered
-
-    for test in diagnostic_tests:
-        skill_code = str(test.get("skill_code", "")).strip()
-        score = float(test.get("score", 0.0))
-        is_passed = bool(test.get("is_passed", False))
-
-        # Accept if score >= 7.0 (10-scale) or >= 0.70 (1-scale) or explicitly passed
-        if is_passed or score >= 7.0 or (0.70 <= score <= 1.0):
-            if skill_code:
+    for test in diagnostic_tests or []:
+        skill_code = str(test.get("skill_code") or "").strip()
+        if not skill_code:
+            continue
+        verdict = test.get("is_passed")
+        if isinstance(verdict, bool):
+            if verdict:
                 mastered.add(skill_code)
-
+            continue
+        score, scale = test.get("score"), test.get("score_scale")
+        if (isinstance(score, bool) or not isinstance(score, (int, float))
+                or not math.isfinite(score) or isinstance(scale, bool)
+                or not isinstance(scale, (int, float)) or scale not in (1, 10, 100)):
+            continue
+        if 0 <= score <= scale and score / scale >= 0.7:
+            mastered.add(skill_code)
     return mastered
 
 

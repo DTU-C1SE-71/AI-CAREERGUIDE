@@ -78,7 +78,7 @@ class AssessmentQuestionSetResponse(BaseModel):
 class AssessmentSubmissionRequest(BaseModel):
     set_id: Optional[uuid.UUID] = None
     # Map of question codes (e.g. 'R1', 'I2'...) to Likert score (1 to 5)
-    riasec_answers: Dict[str, int] = Field(
+    riasec_answers: Dict[str, Any] = Field(
         ...,
         description="Dictionary mapping question code (e.g. 'R1') to Likert scale value (1 to 5)"
     )
@@ -91,6 +91,8 @@ class AssessmentSubmissionRequest(BaseModel):
         default=None,
         description="Optional career aspiration & work values submitted at the end of the assessment"
     )
+    grades_by_subject: Dict[str, Any] = Field(default_factory=dict)
+    score_context: Dict[str, Any] = Field(default_factory=lambda: {"kind": "TRANSCRIPT", "scale": 10})
     completion_time_seconds: Optional[int] = Field(default=360, ge=10)
 
 
@@ -108,6 +110,8 @@ class AssessmentSubmissionResponse(BaseModel):
     dominant_traits: List[str] = Field(
         description="Top 2-3 dominant vocational interest traits"
     )
+    interest_evidence: Dict[str, Any] = Field(default_factory=dict)
+    cognitive_evidence: Dict[str, Any] = Field(default_factory=dict)
     xp_earned: int = Field(default=1150)
     summary: str
     completed_at: datetime

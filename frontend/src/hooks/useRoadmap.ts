@@ -1,35 +1,22 @@
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { readStorage, writeStorage } from "../services/storage"
+import { useAuth } from "../context/AuthContext"
 
-export function useRoadmap(majorCode = "7480101", totalTasksCount = 12) {
-  const storageKey =
-    majorCode === "7480101"
-      ? "career-guide:roadmap"
-      : `career-guide:roadmap:${majorCode}`
-
-  const [completed, setCompleted] = useState<string[]>(() =>
-    readStorage(storageKey, []),
-  )
-
-  useEffect(() => {
-    setCompleted(readStorage(storageKey, []))
+export function useRoadmap(majorCode: string, totalTasksCount: number) {
+  const { user } = useAuth()
+  const storageKey = `career-guide:roadmap:${user?.id || "guest"}:${majorCode}`
+  const [state, setState] = useState(() => ({ key: storageKey, completed: readStorage<string[]>(storageKey, []) }))
+  const completed = state.key === storageKey ? state.completed : readStorage<string[]>(storageKey, [])
+  const toggle = (id: string) => setState(current => {
+    const active = current.key === storageKey ? current.completed : readStorage<string[]>(storageKey, [])
+    const next = active.includes(id) ? active.filter(item => item !== id) : [...active, id]
+    writeStorage(storageKey, next)
+    return { key: storageKey, completed: next }
+  })
+  const restoreCompleted = useCallback((items: string[]) => {
+    const next = [...new Set(items)]
+    writeStorage(storageKey, next)
+    setState({ key: storageKey, completed: next })
   }, [storageKey])
-
-  const toggle = (id: string) =>
-    setCompleted((current) => {
-      const next = current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id]
-      writeStorage(storageKey, next)
-      return next
-    })
-
-  return {
-    completed,
-    toggle,
-    progress: useMemo(() => {
-      const denom = Math.max(1, totalTasksCount)
-      return Math.min(100, Math.round((completed.length / denom) * 100))
-    }, [completed, totalTasksCount]),
-  }
+  return { completed, toggle, restoreCompleted, progress: useMemo(() => totalTasksCount > 0 ? Math.min(100, Math.round(completed.length / totalTasksCount * 100)) : 0, [completed, totalTasksCount]) }
 }

@@ -93,23 +93,10 @@ def generate_static_fallback_roadmap(major_code: str, major_name: str) -> Dict[s
             "Kỹ năng ứng dụng công nghệ và công cụ ngành",
             "Kỹ năng giao tiếp và làm việc nhóm hiệu quả"
         ],
-        "reference_materials": [
-            {
-                "title": f"Chương trình khung đào tạo ngành {major_name}",
-                "author_or_institution": "Bộ Giáo dục và Đào tạo / Các trường Đại học trọng điểm",
-                "url": "https://moet.gov.vn",
-                "material_type": "curriculum"
-            },
-            {
-                "title": "Khóa học mở nhập môn chuyên ngành",
-                "author_or_institution": "Nền tảng Học trực tuyến Mở Quốc gia & Quốc tế",
-                "url": "https://coursera.org",
-                "material_type": "online_course"
-            }
-        ],
-        "source_title": "Bộ chuẩn chương trình đào tạo đại học Việt Nam (Thông tư 09/2022/TT-BGDĐT)",
-        "source_url": "https://moet.gov.vn",
-        "source_page": "Khung chuẩn"
+        "reference_materials": [],
+        "source_title": "Mẫu gợi ý của hệ thống, chưa phải chương trình đã xác minh của trường",
+        "source_url": "",
+        "source_page": None
     }
 
 
@@ -117,88 +104,23 @@ async def get_cached_major_roadmap(db: AsyncSession, major_code: str) -> MajorRo
     """
     Direct indexed cache lookup (<= 1s response latency).
     If verified roadmap is cached in major_roadmaps, serves it immediately.
-    If absent or DB connection fails, generates and returns a verified static fallback roadmap.
+    If absent, returns an explicitly unverified exploration template. Database errors propagate.
     """
-    roadmap = None
-    major_name = None
-
-    try:
-        query = select(MajorRoadmap).where(MajorRoadmap.major_code == major_code)
-        result = await db.execute(query)
+    from app.services.recommender.catalog import get_active_major_context
+    ctx = await get_active_major_context(db, major_code)
+    now = datetime.now(timezone.utc)
+    if db is not None:
+        result = await db.execute(select(MajorRoadmap).where(MajorRoadmap.major_code == major_code))
         roadmap = result.scalar_one_or_none()
-
-        if roadmap:
-            return MajorRoadmapResponse(
-                id=roadmap.id,
-                major_code=roadmap.major_code,
-                title=roadmap.title,
-                version=roadmap.version,
-                roadmap_data=RoadmapDataSchema(**roadmap.roadmap_data),
-                is_fallback=roadmap.is_fallback,
-                created_at=roadmap.created_at,
-                updated_at=roadmap.updated_at
-            )
-
-        # If not in cache, find major name to create static fallback
-        major_res = await db.execute(select(Major).where(Major.major_code == major_code))
-        major = major_res.scalar_one_or_none()
-        major_name = major.name if major else None
-    except Exception as db_err:
-        logger.warning(f"[RoadmapService] Database query bypassed/unavailable for {major_code}: {db_err}")
-
-    # Fallback to catalog seed data for exact major name
-    if not major_name:
-        try:
-            from scripts.seed_tt09 import MAJORS_DATA
-            for m in MAJORS_DATA:
-                if m["major_code"] == major_code:
-                    major_name = m["name"]
-                    break
-        except Exception:
-            pass
-
-    if not major_name:
-        major_name = f"Ngành đào tạo (Mã {major_code})"
-
-    fallback_data = generate_static_fallback_roadmap(major_code, major_name)
-
-    try:
-        fallback_entry = MajorRoadmap(
-            major_code=major_code,
-            title=f"Lộ trình học tập chuẩn hóa: {major_name}",
-            version="1.0-fallback",
-            roadmap_data=fallback_data,
-            is_fallback=True,
-            fallback_template=fallback_data,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc)
-        )
-        db.add(fallback_entry)
-        await db.commit()
-        await db.refresh(fallback_entry)
-
-        return MajorRoadmapResponse(
-            id=fallback_entry.id,
-            major_code=fallback_entry.major_code,
-            title=fallback_entry.title,
-            version=fallback_entry.version,
-            roadmap_data=RoadmapDataSchema(**fallback_entry.roadmap_data),
-            is_fallback=True,
-            created_at=fallback_entry.created_at,
-            updated_at=fallback_entry.updated_at
-        )
-    except Exception:
-        # If DB write fails, return in-memory static verified roadmap immediately
-        return MajorRoadmapResponse(
-            id=str(uuid.uuid4()),
-            major_code=major_code,
-            title=f"Lộ trình học tập chuẩn hóa: {major_name}",
-            version="1.0-fallback",
-            roadmap_data=RoadmapDataSchema(**fallback_data),
-            is_fallback=True,
-            created_at=datetime.now(timezone.utc),
-            updated_at=datetime.now(timezone.utc)
-        )
+        # Old fallback caches contain fabricated provenance; always render a fresh labelled template.
+        if roadmap and not roadmap.is_fallback:
+            return MajorRoadmapResponse(id=roadmap.id, major_code=major_code, title=roadmap.title,
+                version=roadmap.version, roadmap_data=RoadmapDataSchema(**roadmap.roadmap_data),
+                is_fallback=False, created_at=roadmap.created_at, updated_at=roadmap.updated_at)
+    return MajorRoadmapResponse(id=uuid.uuid5(uuid.NAMESPACE_URL, "roadmap-template-v2:"+major_code),
+        major_code=major_code, title=f"Gợi ý khám phá ngành {ctx['name']}", version="template-v2",
+        roadmap_data=RoadmapDataSchema(**generate_static_fallback_roadmap(major_code, ctx["name"])),
+        is_fallback=True, created_at=now, updated_at=now)
 
 
 async def get_student_major_skill_gaps(
@@ -210,7 +132,7 @@ async def get_student_major_skill_gaps(
     Performs deterministic Competency Gap Analysis for a student targeting a specific major_code (FR04, FR06).
     """
     # 1. Fetch Major and its required skills
-    major_query = select(Major).where(Major.major_code == major_code).options(
+    major_query = select(Major).where(Major.major_code == major_code, Major.is_active == True).options(
         selectinload(Major.major_skills).selectinload(MajorSkill.skill)
     )
     major_res = await db.execute(major_query)
@@ -221,19 +143,20 @@ async def get_student_major_skill_gaps(
             detail=f"Major with code {major_code} not found."
         )
 
-    # 2. Fetch Student Grades & Diagnostic Tests
-    grade_res = await db.execute(
-        select(StudentGrade).where(StudentGrade.user_id == user_id).order_by(StudentGrade.created_at.desc())
-    )
-    grade = grade_res.scalar_one_or_none()
-    raw_grades = grade.grades_by_subject if grade else {}
+    # 2. Dùng cùng snapshot với recommender; điểm đã xóa không quay lại từ bảng cũ.
+    from app.services.recommender.service import resolve_assessment_evidence
+    profile = await resolve_assessment_evidence(db, user_id)
+    raw_grades = profile["grades_by_subject"]
 
     diag_res = await db.execute(
         select(StudentDiagnosticTest).where(StudentDiagnosticTest.user_id == user_id)
     )
     diag_tests = list(diag_res.scalars().all())
 
-    mastered = infer_mastered_skills_from_grades(raw_grades)
+    from app.services.recommender.readiness import validate_readiness_grades
+    valid_grades = validate_readiness_grades(raw_grades)["scores"]
+    suggested_foundation = infer_mastered_skills_from_grades(valid_grades)
+    mastered = set()
     diag_mastered = infer_mastered_skills_from_diagnostic_tests([
         {"skill_code": d.skill_code, "score": d.score, "is_passed": d.is_passed}
         for d in diag_tests
@@ -277,14 +200,17 @@ async def get_student_major_skill_gaps(
         "major_code": major_code,
         "major_name": major.name,
         "mastered_skills": sorted(list(mastered)),
+        "suggested_foundation": sorted(suggested_foundation),
+        "skill_evidence_status": "ASSESSED" if any(isinstance(d.is_passed, bool) for d in diag_tests) else "UNASSESSED",
+        "requirements_status": "DECLARED" if major_skills_list else "UNKNOWN",
         "competency_gaps": overall_gaps,
         "missing_prerequisites": missing_pre,
         "missing_target_skills": missing_tar,
         "has_gap": len(overall_gaps) > 0,
         "readiness_summary": (
-            f"Bạn đã thành thạo {len(mastered)} kỹ năng nền tảng. "
-            f"Cần chuẩn bị bổ sung {len(missing_pre)} kiến thức tiên quyết và {len(missing_tar)} kỹ năng chuyên ngành."
-            if overall_gaps else "Bạn đã đáp ứng trọn vẹn toàn bộ các kỹ năng tiên quyết yêu cầu của ngành này!"
+            f"Có {len(mastered)} kỹ năng đạt theo bài chẩn đoán. "
+            f"Còn {len(missing_pre)} mục tiên quyết và {len(missing_tar)} kỹ năng mục tiêu cần kiểm tra hoặc học thêm."
+            if major_skills_list else "Danh mục chưa khai báo kỹ năng yêu cầu; chưa thể kết luận sẵn sàng."
         )
     }
 
@@ -294,6 +220,13 @@ async def update_student_roadmap_progress(
     user_id: uuid.UUID,
     payload: StudentRoadmapProgressUpdate
 ) -> StudentRoadmapProgress:
+    from app.services.recommender.catalog import get_active_major_context
+    from app.models.identity import User
+    await get_active_major_context(db,payload.major_code)
+    # Khóa cùng user để hai request tạo tiến độ lần đầu không tạo hai bản ghi.
+    actor=(await db.execute(select(User).where(User.id==user_id).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+    if actor is None or not actor.is_active:
+        raise HTTPException(403,"Tài khoản không còn hiệu lực.")
     query = select(StudentRoadmapProgress).where(
         StudentRoadmapProgress.user_id == user_id,
         StudentRoadmapProgress.major_code == payload.major_code
@@ -304,7 +237,7 @@ async def update_student_roadmap_progress(
     if progress:
         progress.current_step = payload.current_step
         progress.completed_milestones = payload.completed_milestones
-        if payload.personalized_schedule:
+        if "personalized_schedule" in payload.model_fields_set:
             progress.personalized_schedule = payload.personalized_schedule
         progress.last_activity_at = datetime.now(timezone.utc)
     else:

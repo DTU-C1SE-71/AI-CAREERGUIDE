@@ -1,5 +1,9 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from sqlalchemy.exc import SQLAlchemyError
+import logging
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
@@ -11,29 +15,16 @@ from app.services.taxonomy import router as taxonomy_router
 from app.services.gap_roadmap_engine import router as roadmap_router
 from app.services.llamaindex_rag_orchestrator import router as rag_governance_router
 from app.services.major_insight import router as major_insight_router
+from app.services.ai_config.router import router as ai_config_router
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup tasks
-    print("Starting AI CareerGuide Backend Core...")
-    try:
-        from sqlalchemy import text
-        from app.core.database import engine, Base
-        import app.models  # load models
-        async with engine.begin() as conn:
-            if settings.DATABASE_URL.startswith("postgresql"):
-                try:
-                    await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector;"))
-                except Exception as ext_err:
-                    print(f"pgvector extension check: {ext_err}")
-            await conn.run_sync(Base.metadata.create_all)
-        print("Database schema tables verified successfully.")
-    except Exception as db_err:
-        print(f"Database startup check notice (offline or uninitialized): {db_err}")
+    # Migration chỉ chạy qua CLI có phiên bản; khởi động không âm thầm sửa DB.
     yield
-    # Shutdown tasks
-    print("Shutting down AI CareerGuide Backend Core...")
+    from app.core.database import engine
+    await engine.dispose()
+
 
 
 app = FastAPI(
@@ -56,11 +47,26 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
+@app.exception_handler(RequestValidationError)
+async def safe_validation_error(request: Request, exc: RequestValidationError):
+    # Không trả errors[].input/ctx: body có thể chứa khóa API hoặc mật khẩu.
+    return JSONResponse(status_code=422, content={"detail": {
+        "code": "DU_LIEU_KHONG_HOP_LE", "message": "Dữ liệu không hợp lệ. Kiểm tra các trường và gửi lại."
+    }}, headers={"Cache-Control": "no-store"})
+
+
+@app.exception_handler(SQLAlchemyError)
+async def safe_database_error(request: Request, exc: SQLAlchemyError):
+    logging.getLogger("careerguide.database").warning("Database request failed (%s)", type(exc).__name__)
+    return JSONResponse(status_code=503, content={"detail": {
+        "code": "DATABASE_UNAVAILABLE", "message": "Dữ liệu tạm thời không truy cập được. Vui lòng thử lại."
+    }}, headers={"Cache-Control": "no-store"})
+
+
 # CORS Middleware
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.CORS_ORIGINS,
-    allow_origin_regex=r"https://.*\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -75,6 +81,7 @@ app.include_router(taxonomy_router, prefix=settings.API_V1_STR)
 app.include_router(roadmap_router, prefix=settings.API_V1_STR)
 app.include_router(rag_governance_router, prefix=settings.API_V1_STR)
 app.include_router(major_insight_router, prefix=settings.API_V1_STR)
+app.include_router(ai_config_router, prefix=settings.API_V1_STR)
 
 # Direct /api prefix aliases for frontend apiRequest routes
 if settings.API_V1_STR != "/api":
@@ -86,6 +93,7 @@ if settings.API_V1_STR != "/api":
     app.include_router(roadmap_router, prefix="/api")
     app.include_router(rag_governance_router, prefix="/api")
     app.include_router(major_insight_router, prefix="/api")
+    app.include_router(ai_config_router, prefix="/api")
 
 
 @app.get("/health", tags=["Health & Status"])
@@ -101,28 +109,15 @@ async def health_check():
 @app.get("/health/db", tags=["Health & Status"])
 @app.get("/api/health/db", tags=["Health & Status"])
 async def db_health_check():
-    from app.core.database import get_db, engine
+    from app.core.database import engine
     from sqlalchemy import text
     try:
-        async for db in get_db():
-            if not db:
-                return {"status": "offline", "message": "Database session unavailable"}
-            majors_count = (await db.execute(text("SELECT COUNT(*) FROM majors WHERE is_active = true;"))).scalar()
-            questions_count = (await db.execute(text("SELECT COUNT(*) FROM assessment_questions;"))).scalar()
-            users_count = (await db.execute(text("SELECT COUNT(*) FROM users;"))).scalar()
-            return {
-                "status": "connected",
-                "database_engine": engine.name,
-                "majors_count": majors_count,
-                "questions_count": questions_count,
-                "users_count": users_count,
-                "message": "Cơ sở dữ liệu đã kết nối thành công và đầy đủ dữ liệu hoạt động!"
-            }
-    except Exception as e:
-        return {
-            "status": "error",
-            "detail": str(e)
-        }
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {"status": "connected", "database_engine": engine.name}
+    except Exception:
+        return JSONResponse(status_code=503, content={"status": "unavailable"})
+
 
 
 @app.get("/", tags=["Root"])

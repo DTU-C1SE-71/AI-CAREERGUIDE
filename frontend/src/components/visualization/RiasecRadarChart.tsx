@@ -17,7 +17,7 @@ export function RiasecRadarChart({
   data = riasecData,
 }: RiasecRadarChartProps) {
   return (
-    <div className="h-80 sm:h-88 xl:h-96 w-full pt-2">
+    <div className="h-64 sm:h-76 xl:h-88 w-full min-w-0 pt-2">
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart data={data} outerRadius="72%">
           <PolarGrid stroke="rgba(148, 163, 184, 0.28)" strokeDasharray="3 3" />
@@ -37,12 +37,12 @@ export function RiasecRadarChart({
                     <div className="space-y-1.5">
                       <div className="flex items-center justify-between gap-5 text-sky-700">
                         <span className="font-medium">Sở thích:</span>
-                        <span className="font-bold tabular-nums text-sm">{item.value}%</span>
+                        <span className="font-bold tabular-nums text-sm">{item.value === null ? "Chưa có dữ liệu" : `${item.value}%`}</span>
                       </div>
                       <div className="flex items-center justify-between gap-5 text-cyan-700">
                         <span className="font-medium">Học lực:</span>
                         <span className="font-bold tabular-nums text-sm">
-                          {item.academicValue ?? item.value}%
+                          {item.academicValue == null ? "Chưa có dữ liệu" : `${item.academicValue}%`}
                         </span>
                       </div>
                     </div>

@@ -1,10 +1,25 @@
 import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_validator, field_validator
+import math
 
 
-class RecommendationRequest(BaseModel):
+class ValidatedWeightsRequest(BaseModel):
+    @field_validator("custom_weights", mode="before", check_fields=False)
+    @classmethod
+    def validate_weights(cls, value):
+        if value is None:
+            return value
+        allowed = {"w_riasec", "w_academic", "w_preference"}
+        if not isinstance(value, dict) or not value or set(value) - allowed:
+            raise ValueError("Trọng số chỉ được gồm ba trụ cột được hỗ trợ.")
+        if any(isinstance(v, bool) or not isinstance(v, (int, float)) or not math.isfinite(v) or v < 0 for v in value.values()) or sum(value.values()) <= 0:
+            raise ValueError("Trọng số phải hữu hạn, không âm và có tổng dương.")
+        return value
+
+
+class RecommendationRequest(ValidatedWeightsRequest):
     user_id: Optional[uuid.UUID] = None
     custom_weights: Optional[Dict[str, float]] = Field(
         default=None,
@@ -46,17 +61,26 @@ class MajorRecommendationItem(BaseModel):
     explanation: str = Field(
         description="Transparent, deterministic XAI breakdown of why this major was recommended"
     )
+    readiness: Dict[str, Any] = Field(default_factory=lambda: {
+        "status": "UNKNOWN", "reason": "EVIDENCE_MISSING",
+        "message": "Chưa đủ bằng chứng để đối chiếu học lực hiện tại.",
+        "block": None, "block_score": None, "benchmark_cutoff": None,
+        "min_recommended": None, "missing_subjects": [], "violations": [], "gaps": [],
+        "reference_kind": None, "reference_id": None, "reference_method": None,
+        "score_kind": None, "block_source": "MISSING", "policy_version": "aspiration-v1",
+    })
+
     # Phân tầng khả thi & Ràng buộc điểm (Solution B + Multi-Layer Gatekeeper)
     feasibility_tier: Optional[str] = Field(
-        default="TARGET",
+        default="UNKNOWN",
         description="TARGET (Vừa sức/An toàn) hoặc REACH (Thử thách/Chưa đạt ngưỡng)"
     )
-    feasibility_label: Optional[str] = Field(default="Vừa sức / Khả thi cao")
+    feasibility_label: Optional[str] = Field(default="Chưa đủ bằng chứng")
     benchmark_cutoff: Optional[float] = Field(default=None)
     min_recommended: Optional[float] = Field(default=None)
     best_block_score: Optional[float] = Field(default=None)
     score_gap: Optional[float] = Field(default=None)
-    constraint_passed: bool = Field(default=True)
+    constraint_passed: bool = Field(default=False)
     constraint_violations: List[str] = Field(default_factory=list)
     admission_advice: Optional[str] = Field(default=None)
     academic_tier: Optional[str] = Field(default="STANDARD_COMPETITION")
@@ -82,7 +106,7 @@ class MajorRecommendationItem(BaseModel):
     university: Optional[str] = None
     match: Optional[int] = None
     feasibility: Optional[str] = None
-    fit: Optional[Dict[str, int]] = None
+    fit: Optional[Dict[str, Optional[int]]] = None
     gaps: Optional[List[str]] = None
 
     @model_validator(mode="after")
@@ -93,10 +117,12 @@ class MajorRecommendationItem(BaseModel):
             self.code = self.major_code
         if not self.name:
             self.name = self.major_name
-        if self.match is None:
+        availability = self.score_breakdown.get("pillar_availability")
+        interest_known = self.score_breakdown.get("interest_evidence_status", "UNKNOWN") == "COMPLETE"
+        if self.match is None and interest_known and (availability is None or any(availability.values())):
             self.match = int(round(self.overall_score * 100))
         if not self.feasibility:
-            self.feasibility = self.feasibility_tier or "TARGET"
+            self.feasibility = self.feasibility_tier or "UNKNOWN"
         if not self.fit:
             self.fit = {
                 "interest": int(round(self.score_riasec * 100)),
@@ -104,26 +130,26 @@ class MajorRecommendationItem(BaseModel):
                 "cognitive": int(round(self.score_preference * 100))
             }
         if not self.gaps:
-            self.gaps = self.competency_gaps[:3] if self.competency_gaps else [
-                "Tư duy thuật toán", "Tiếng Anh chuyên ngành", "Kỹ năng làm dự án"
-            ]
+            self.gaps = self.competency_gaps[:3]
         if not self.university:
             if self.best_matching_block and self.benchmark_cutoff:
                 self.university = f"Khối {self.best_matching_block} · Chuẩn ~{self.benchmark_cutoff}đ"
             elif self.best_matching_block:
                 self.university = f"Khối {self.best_matching_block}"
             else:
-                self.university = "Chuẩn Bộ GD&ĐT"
+                self.university = "Cần đối chiếu trường và phương thức tuyển sinh"
         return self
 
 
-class EvaluateProfileRequest(BaseModel):
+class EvaluateProfileRequest(ValidatedWeightsRequest):
     """Yêu cầu đánh giá trực tiếp 435 ngành từ hồ sơ bài test (hoặc tự nạp từ CSDL của user)."""
     riasec_scores: Optional[Dict[str, float]] = None
-    riasec_answers: Optional[Dict[str, int]] = None
+    riasec_answers: Optional[Dict[str, Any]] = None
     cognitive_preferences: Optional[Dict[str, Any]] = None
     cognitive_answers: Optional[Dict[str, Any]] = None
-    grades_by_subject: Optional[Dict[str, float]] = None
+    grades_by_subject: Optional[Dict[str, Any]] = None
+    score_context: Optional[Dict[str, Any]] = None
+    assessment_id: Optional[uuid.UUID] = None
     aspiration: Optional[Dict[str, Any]] = Field(
         default=None,
         description="Nguyện vọng nghề nghiệp tương lai của học sinh (dream_job, desired_field, work_values, preferred_environment, score_strategy)"
@@ -135,7 +161,7 @@ class EvaluateProfileRequest(BaseModel):
 
 
 class RecommendationResponse(BaseModel):
-    user_id: uuid.UUID
+    user_id: Optional[uuid.UUID]
     generated_at: datetime
     weights_applied: Dict[str, float]
     total_majors_evaluated: int

@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -24,10 +24,7 @@ from app.schemas.rag import (
     AIExplanationResponse,
     AIChatRequest,
     AIChatResponse,
-    LLMConnectionTestRequest,
-    LLMConnectionTestResponse,
-    LLMStatusResponse,
-    LLMConfigUpdateRequest,
+    AIChatConnectionResponse,
 )
 from app.services.llamaindex_rag_orchestrator import service
 
@@ -121,7 +118,9 @@ async def upload_moet_circular_document(
     and stages into staging_records (status = PENDING).
     GUARDRAIL: Admin role only.
     """
-    content = await file.read()
+    content = await file.read(10 * 1024 * 1024 + 1)
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(413, "Tệp vượt quá giới hạn 10 MB.")
     return await service.ingest_moet_circular(
         db=db,
         file_bytes=content,
@@ -171,12 +170,9 @@ async def personalize_study_guidance(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Guidance RAG endpoint for students (FR06, DF06):
-    Retrieves verified cached roadmap context from PostgreSQL (status = APPROVED, <= 1s)
-    and tailors weekly study milestones according to identified skill gaps using gpt-4o-mini.
-    Includes strict 8s timeout with automatic graceful Static Fallback Template.
-    """
+    """Build an owned, deterministic study plan with explicit source provenance."""
+    if payload.user_id != current_user.id:
+        raise HTTPException(403, "Chỉ được lập kế hoạch cho tài khoản đang đăng nhập.")
     return await service.personalize_guidance(db, payload)
 
 @router.post("/explain-recommendation", response_model=AIExplanationResponse)
@@ -185,13 +181,21 @@ async def explain_major_recommendation(
     current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Explains in-depth why a specific major was recommended using AI (FR06).
-    PII SANITIZATION: Strictly uses anonymized student test metrics (RIASEC, grades, diagnostic skills).
-    Excludes all student personal information (name, address, school, phone, email) to comply with Law 91/2025/QH15.
-    """
-    user_id = current_user.id if current_user else payload.user_id
+    """Explain catalog and scorer facts from the authorized assessment snapshot."""
+    user_id = current_user.id if current_user else None
     return await service.explain_recommendation_with_ai(db, payload, user_id)
+
+
+@router.post("/chat/connection", response_model=AIChatConnectionResponse)
+async def check_counselor_connection(
+    response: Response,
+    current_user: Optional[User] = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """One fixed provider probe when the chat opens; never send student data."""
+    from app.services.llamaindex_rag_orchestrator.counselor_connection import check_connection
+    response.headers["Cache-Control"] = "no-store"
+    return await check_connection(db)
 
 
 @router.post("/chat", response_model=AIChatResponse)
@@ -200,46 +204,27 @@ async def chat_with_counselor(
     current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    AI Career Guidance Counselor chat endpoint.
-    Answers student questions on majors, academic preparation, diagnostic checks, and roadmaps.
-    PII SANITIZATION: All messages pass through sanitize_pii before LLM invocation.
-    Guarantees pure guidance scope: no tuition or geographic bias.
-    """
-    user_id = current_user.id if current_user else payload.user_id
+    """Locally gate scope before any conversational provider generation."""
+    user_id = current_user.id if current_user else None
     return await service.chat_with_career_counselor(db, payload, user_id)
 
 
-@router.get("/llm-status", response_model=LLMStatusResponse)
-async def get_system_llm_status():
-    """Returns the current LLM model, base URL, and masked API key status."""
-    return service.get_llm_status()
+# Alias quản trị dùng cùng DB profile/service với /admin/ai-config.
+from app.schemas.ai_config import AIConfigDraft, AIConfigProbe, AIConfigStatus, AIProbeResult
+from app.services.ai_config import service as config_service
+from app.services.ai_config.router import no_store
 
+@router.get("/llm-status", response_model=AIConfigStatus)
+async def get_system_llm_status(response: Response, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    no_store(response)
+    return await config_service.get_status(db)
 
-@router.post("/test-llm-connection", response_model=LLMConnectionTestResponse)
-async def test_llm_api_connection(
-    payload: Optional[LLMConnectionTestRequest] = None,
-):
-    """
-    Tests live connection to the configured LLM API (DeepSeek / OpenAI).
-    Returns success status, round-trip latency (ms), HTTP code, and Vietnamese diagnostic messages.
-    """
-    request_data = payload or LLMConnectionTestRequest()
-    return await service.test_llm_connection(request_data)
+@router.post("/test-llm-connection", response_model=AIProbeResult)
+async def test_llm_api_connection(payload: AIConfigProbe, response: Response, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    no_store(response)
+    return await config_service.probe_draft(db,payload,current_user.id)
 
-@router.post("/update-llm-config", response_model=LLMStatusResponse)
-async def update_system_llm_config(
-    payload: LLMConfigUpdateRequest,
-    current_user: User = Depends(get_current_user),
-):
-    """Allows Admin to dynamically update the active LLM Model, Base URL, and API Key."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Chỉ Quản trị viên (ADMIN) mới có quyền cập nhật cấu hình mô hình AI.",
-        )
-    return service.update_llm_config(
-        model=payload.model,
-        base_url=payload.base_url,
-        api_key=payload.api_key,
-    )
+@router.post("/update-llm-config", response_model=AIConfigStatus)
+async def update_system_llm_config(payload: AIConfigDraft, response: Response, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
+    no_store(response)
+    return await config_service.apply_config(db,payload,current_user.id)

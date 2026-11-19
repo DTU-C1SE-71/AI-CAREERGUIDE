@@ -56,8 +56,40 @@ async def seed_assessment_questions(session: AsyncSession) -> AssessmentQuestion
     existing_set = result.scalar_one_or_none()
 
     if existing_set:
-        logger.info(f"Questionnaire set '{set_code}' already exists (ID: {existing_set.id}). Ensuring is_active=True.")
+        logger.info(f"Questionnaire set '{set_code}' already exists (ID: {existing_set.id}). Synchronizing latest question texts...")
         existing_set.is_active = True
+        existing_set.updated_at = datetime.now(timezone.utc)
+
+        # Load existing questions for this set
+        q_res = await session.execute(
+            select(AssessmentQuestion).where(AssessmentQuestion.set_id == existing_set.id)
+        )
+        existing_q_map = {q.code: q for q in q_res.scalars().all()}
+
+        # Sync 30 RIASEC questions in-place
+        for item in raw_data.get("riasec_questions", []):
+            q_obj = existing_q_map.get(item["code"])
+            if q_obj:
+                q_obj.question_text = item["question_text"]
+                q_obj.dimension_badge = item.get("dimension_badge", q_obj.dimension_badge)
+                q_obj.domain_tag = item.get("domain_tag", q_obj.domain_tag)
+
+        # Sync 8 Cognitive questions & 32 options in-place
+        for cog_item in raw_data.get("cognitive_questions", []):
+            q_obj = existing_q_map.get(cog_item["code"])
+            if q_obj:
+                q_obj.dimension_badge = cog_item.get("title", q_obj.dimension_badge)
+                q_obj.question_text = f"{cog_item['title']}: {cog_item.get('subtitle', '')}"
+                opt_res = await session.execute(
+                    select(CognitiveQuestionOption).where(CognitiveQuestionOption.question_id == q_obj.id)
+                )
+                existing_opt_map = {o.option_key: o for o in opt_res.scalars().all()}
+                for opt in cog_item.get("options", []):
+                    opt_obj = existing_opt_map.get(opt["option_key"])
+                    if opt_obj:
+                        opt_obj.title = opt["title"]
+                        opt_obj.description = opt["description"]
+
         await session.commit()
         return existing_set
 

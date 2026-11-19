@@ -1,236 +1,160 @@
+"""Các alias đánh giá cũ cùng dùng snapshot và bằng chứng với luồng modular."""
 import uuid
-from typing import Dict, Any, List, Optional
+from copy import deepcopy
 from datetime import datetime, timezone
-from sqlalchemy.ext.asyncio import AsyncSession
+from decimal import Decimal
+from typing import Any
+from fastapi import HTTPException
 from sqlalchemy import select
-
+from sqlalchemy.ext.asyncio import AsyncSession
 from app.models.assessment import StudentAssessment, StudentGrade, StudentDiagnosticTest
-from app.models.taxonomy import SubjectBlock
-from app.schemas.assessment import (
-    RIASECAssessmentSubmit,
-    CognitivePreferenceSubmit,
-    GradeEntrySubmit,
-    DiagnosticCheckInput,
-    DiagnosticCheckBatchSubmit,
-)
-from app.services.recommender.engine import (
-    normal_cdf,
-    calculate_z_score_and_cdf,
-    compute_block_zscores_from_grades,
-    normalize_grades_dict,
-)
-from app.services.gap_roadmap_engine.gap_engine import (
-    infer_mastered_skills_from_grades,
-    infer_mastered_skills_from_diagnostic_tests,
-)
+from app.models.identity import User
+from app.models.taxonomy import SubjectBlock, Skill
+from app.schemas.assessment import RIASECAssessmentSubmit, CognitivePreferenceSubmit, GradeEntrySubmit, DiagnosticCheckBatchSubmit
+from app.services.recommender.engine import compute_block_zscores_from_grades, calculate_z_score_and_cdf
+from app.services.recommender.readiness import build_interest_evidence, validate_readiness_grades
+from app.services.recommender.service import resolve_assessment_evidence
+from app.services.gap_roadmap_engine.gap_engine import infer_mastered_skills_from_diagnostic_tests
 
 
-async def save_riasec_assessment(
-    db: AsyncSession,
-    user_id: uuid.UUID,
-    payload: RIASECAssessmentSubmit
-) -> StudentAssessment:
-    """
-    Saves student responses to Holland RIASEC questionnaire and computes normalized vector.
-    """
-    dimensions = ["R", "I", "A", "S", "E", "C"]
-
-    if payload.riasec_scores:
-        riasec_dict = payload.riasec_scores.model_dump()
-    else:
-        # Calculate from Likert responses (1 to 5)
-        sums = {dim: 0.0 for dim in dimensions}
-        counts = {dim: 0 for dim in dimensions}
-        for q_id, val in payload.raw_responses.items():
-            for dim in dimensions:
-                if q_id.upper().startswith(dim):
-                    sums[dim] += float(val)
-                    counts[dim] += 1
-
-        riasec_dict = {}
-        for dim in dimensions:
-            if counts[dim] > 0:
-                # Map 1-5 scale to [0.0, 1.0]
-                normalized_val = (sums[dim] / counts[dim] - 1.0) / 4.0
-                riasec_dict[dim] = round(max(0.0, min(1.0, normalized_val)), 4)
-            else:
-                riasec_dict[dim] = 0.5
-
-    # Check existing or create new
-    query = select(StudentAssessment).where(StudentAssessment.user_id == user_id)
-    result = await db.execute(query)
-    assessment = result.scalar_one_or_none()
-
-    if assessment:
-        assessment.riasec_scores = riasec_dict
-        assessment.raw_responses = payload.raw_responses
-        assessment.assessed_at = datetime.now(timezone.utc)
-    else:
-        assessment = StudentAssessment(
-            user_id=user_id,
-            riasec_scores=riasec_dict,
-            cognitive_preferences={},
-            raw_responses=payload.raw_responses,
-            assessed_at=datetime.now(timezone.utc)
-        )
-        db.add(assessment)
-
-    await db.commit()
-    await db.refresh(assessment)
-    return assessment
+async def _lock_owner(db, user_id):
+    owner = (await db.execute(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+    if owner is None or not owner.is_active:
+        raise HTTPException(401, "Tài khoản không còn hoạt động.")
 
 
-async def save_cognitive_preferences(
-    db: AsyncSession,
-    user_id: uuid.UUID,
-    payload: CognitivePreferenceSubmit
-) -> StudentAssessment:
-    """
-    Saves cognitive learning preferences and environment traits.
-    """
-    query = select(StudentAssessment).where(StudentAssessment.user_id == user_id)
-    result = await db.execute(query)
-    assessment = result.scalar_one_or_none()
-
-    pref_dict = payload.model_dump()
-
-    if assessment:
-        assessment.cognitive_preferences = pref_dict
-        assessment.assessed_at = datetime.now(timezone.utc)
-    else:
-        assessment = StudentAssessment(
-            user_id=user_id,
-            riasec_scores={"R": 0.5, "I": 0.5, "A": 0.5, "S": 0.5, "E": 0.5, "C": 0.5},
-            cognitive_preferences=pref_dict,
-            raw_responses={},
-            assessed_at=datetime.now(timezone.utc)
-        )
-        db.add(assessment)
-
-    await db.commit()
-    await db.refresh(assessment)
-    return assessment
+async def _new_snapshot(db, user_id):
+    await _lock_owner(db, user_id)
+    evidence = await resolve_assessment_evidence(db, user_id)
+    snapshot = StudentAssessment(id=uuid.uuid4(), user_id=user_id,
+        riasec_scores=deepcopy(evidence["riasec_scores"] or {}),
+        cognitive_preferences=deepcopy(evidence["cognitive_preferences"] or {}),
+        raw_responses={"riasec": deepcopy(evidence["riasec_answers"] or {}),
+                       "cognitive": deepcopy(evidence["cognitive_preferences"] or {}),
+                       "aspiration": deepcopy(evidence["aspiration"] or {}),
+                       "grades_by_subject": deepcopy(evidence["grades_by_subject"] or {}),
+                       "score_context": deepcopy(evidence["score_context"] or {})},
+        assessed_at=datetime.now(timezone.utc))
+    return snapshot
 
 
-async def process_and_save_grades(
-    db: AsyncSession,
-    user_id: uuid.UUID,
-    payload: GradeEntrySubmit
-) -> StudentGrade:
-    """
-    Chuẩn hóa điểm các môn THPT (khớp cả 'Vật lý'/'Vật lí', 'Địa lý'/'Địa lí'),
-    tính Z-Score và phân vị CDF(Z) cho toàn bộ các khối xét tuyển quốc gia.
-    """
-    blocks_res = await db.execute(select(SubjectBlock))
-    subject_blocks: List[SubjectBlock] = list(blocks_res.scalars().all())
+async def save_riasec_assessment(db: AsyncSession, user_id: uuid.UUID, payload: RIASECAssessmentSubmit) -> StudentAssessment:
+    try:
+        snapshot = await _new_snapshot(db, user_id)
+        answers = dict(payload.raw_responses)
+        if payload.riasec_scores is not None:
+            scores = payload.riasec_scores.model_dump()
+        else:
+            interest = build_interest_evidence(answers)
+            scores = {group["code"]: group["percent"] / 100 for group in interest["groups"] if group["percent"] is not None}
+        snapshot.riasec_scores = scores
+        snapshot.raw_responses = {**snapshot.raw_responses, "riasec": answers}
+        db.add(snapshot)
+        await db.commit()
+        return snapshot
+    except Exception:
+        await db.rollback()
+        raise
 
-    normalized_grades = normalize_grades_dict(payload.grades)
-    computed_blocks = compute_block_zscores_from_grades(
-        normalized_grades, db_blocks=subject_blocks
+
+async def save_cognitive_preferences(db: AsyncSession, user_id: uuid.UUID, payload: CognitivePreferenceSubmit) -> StudentAssessment:
+    try:
+        snapshot = await _new_snapshot(db, user_id)
+        preferences = payload.model_dump(exclude_none=True)
+        snapshot.cognitive_preferences = preferences
+        snapshot.raw_responses = {**snapshot.raw_responses, "cognitive": preferences}
+        db.add(snapshot)
+        await db.commit()
+        return snapshot
+    except Exception:
+        await db.rollback()
+        raise
+
+
+def _computed_blocks(grades, subject_blocks):
+    validated = validate_readiness_grades(grades)["scores"]
+    blocks = compute_block_zscores_from_grades({subject: float(score) for subject, score in validated.items()}, db_blocks=subject_blocks)
+    for block in blocks.values():
+        block["subject_scores"] = {subject: float(validated[subject]) for subject in block["subjects_used"]}
+        total = sum((validated[subject] for subject in block["subjects_used"]), Decimal(0))
+        z, score = calculate_z_score_and_cdf(float(total), block["national_mean"], block["national_std"])
+        block.update(raw_sum=float(total), z_score=z, score_academic=score, score_kind="TRANSCRIPT")
+    return blocks
+
+
+async def _diagnostics(db, user_id, checks):
+    if not checks:
+        return []
+    codes = {check.skill_code for check in checks}
+    existing = set((await db.execute(select(Skill.skill_code).where(Skill.skill_code.in_(codes)))).scalars())
+    if codes != existing:
+        raise HTTPException(422, "Bài chẩn đoán tham chiếu kỹ năng chưa có trong danh mục.")
+    saved = []
+    for check in checks:
+        normalized = check.score / check.score_scale
+        item = StudentDiagnosticTest(id=uuid.uuid4(), user_id=user_id, skill_code=check.skill_code,
+            score=normalized, is_passed=normalized >= 0.7,
+            details={**(check.details or {}), "score_scale": check.score_scale, "raw_score": check.score},
+            tested_at=datetime.now(timezone.utc))
+        db.add(item)
+        saved.append(item)
+    return saved
+
+
+async def process_and_save_grades(db: AsyncSession, user_id: uuid.UUID, payload: GradeEntrySubmit) -> StudentGrade:
+    try:
+        snapshot = await _new_snapshot(db, user_id)
+        grades = dict(payload.grades)
+        blocks = list((await db.execute(select(SubjectBlock))).scalars().all())
+        computed = _computed_blocks(grades, blocks)
+        grade = StudentGrade(id=uuid.uuid4(), user_id=user_id, grades_by_subject=grades,
+            multi_semester_data=payload.multi_semester or {}, computed_block_zscores=computed,
+            academic_year=payload.academic_year, created_at=datetime.now(timezone.utc))
+        snapshot.raw_responses = {**snapshot.raw_responses, "grades_by_subject": grades,
+            "score_context": {"kind": "TRANSCRIPT", "scale": 10, "academic_year": payload.academic_year}}
+        await _diagnostics(db, user_id, payload.diagnostic_checks)
+        db.add_all([grade, snapshot])
+        await db.commit()
+        # ID snapshot vừa tạo chỉ dùng cho phản hồi của thao tác này.
+        grade.assessment_id = snapshot.id
+        return grade
+    except Exception:
+        await db.rollback()
+        raise
+
+
+async def save_diagnostic_skill_checks(db: AsyncSession, user_id: uuid.UUID, payload: DiagnosticCheckBatchSubmit) -> list[StudentDiagnosticTest]:
+    try:
+        await _lock_owner(db, user_id)
+        saved = await _diagnostics(db, user_id, payload.checks)
+        await db.commit()
+        return saved
+    except Exception:
+        await db.rollback()
+        raise
+
+
+async def get_student_profile(db: AsyncSession, user_id: uuid.UUID) -> dict[str, Any]:
+    evidence = await resolve_assessment_evidence(db, user_id)
+    blocks = list((await db.execute(select(SubjectBlock))).scalars().all())
+    diagnostic_tests = list((await db.execute(select(StudentDiagnosticTest).where(StudentDiagnosticTest.user_id == user_id))).scalars().all())
+    mastered = infer_mastered_skills_from_diagnostic_tests([
+        {"skill_code": item.skill_code, "score": item.score, "is_passed": item.is_passed} for item in diagnostic_tests])
+    snapshot = None
+    if evidence["assessment_id"]:
+        snapshot = await db.get(StudentAssessment, uuid.UUID(evidence["assessment_id"]))
+    raw_responses = snapshot.raw_responses if snapshot and isinstance(snapshot.raw_responses, dict) else {}
+    cognitive_answers = raw_responses.get("cognitive") if isinstance(raw_responses.get("cognitive"), dict) else {}
+    has_assessment = bool(
+        evidence["assessment_id"]
+        and (evidence["riasec_answers"] or evidence["riasec_scores"] or evidence["grades_by_subject"])
     )
-
-    # Save diagnostic checks if submitted concurrently
-    if payload.diagnostic_checks:
-        for dc in payload.diagnostic_checks:
-            norm_score = dc.score / 10.0 if dc.score > 1.0 else dc.score
-            is_pass = norm_score >= 0.70
-            diag_test = StudentDiagnosticTest(
-                user_id=user_id,
-                skill_code=dc.skill_code,
-                score=round(norm_score, 4),
-                is_passed=is_pass,
-                details=dc.details or {},
-                tested_at=datetime.now(timezone.utc)
-            )
-            db.add(diag_test)
-
-    # Fetch existing grade record or create new
-    grade_query = select(StudentGrade).where(
-        StudentGrade.user_id == user_id,
-        StudentGrade.academic_year == payload.academic_year
-    )
-    res = await db.execute(grade_query)
-    student_grade = res.scalar_one_or_none()
-
-    multi_sem = payload.multi_semester or {}
-
-    if student_grade:
-        student_grade.grades_by_subject = normalized_grades
-        student_grade.multi_semester_data = multi_sem
-        student_grade.computed_block_zscores = computed_blocks
-    else:
-        student_grade = StudentGrade(
-            user_id=user_id,
-            grades_by_subject=normalized_grades,
-            multi_semester_data=multi_sem,
-            computed_block_zscores=computed_blocks,
-            academic_year=payload.academic_year,
-            created_at=datetime.now(timezone.utc)
-        )
-        db.add(student_grade)
-
-    await db.commit()
-    await db.refresh(student_grade)
-    return student_grade
-
-
-async def save_diagnostic_skill_checks(
-    db: AsyncSession,
-    user_id: uuid.UUID,
-    payload: DiagnosticCheckBatchSubmit
-) -> List[StudentDiagnosticTest]:
-    saved_tests: List[StudentDiagnosticTest] = []
-    for check in payload.checks:
-        norm_score = check.score / 10.0 if check.score > 1.0 else check.score
-        is_pass = norm_score >= 0.70
-        test_entry = StudentDiagnosticTest(
-            user_id=user_id,
-            skill_code=check.skill_code,
-            score=round(norm_score, 4),
-            is_passed=is_pass,
-            details=check.details or {},
-            tested_at=datetime.now(timezone.utc)
-        )
-        db.add(test_entry)
-        saved_tests.append(test_entry)
-
-    await db.commit()
-    return saved_tests
-
-
-async def get_student_profile(
-    db: AsyncSession,
-    user_id: uuid.UUID
-) -> Dict[str, Any]:
-    assess_res = await db.execute(
-        select(StudentAssessment).where(StudentAssessment.user_id == user_id)
-    )
-    assessment = assess_res.scalar_one_or_none()
-
-    grade_res = await db.execute(
-        select(StudentGrade).where(StudentGrade.user_id == user_id).order_by(StudentGrade.created_at.desc())
-    )
-    grade = grade_res.scalar_one_or_none()
-
-    diag_res = await db.execute(
-        select(StudentDiagnosticTest).where(StudentDiagnosticTest.user_id == user_id)
-    )
-    diagnostic_tests = list(diag_res.scalars().all())
-
-    raw_grades = grade.grades_by_subject if grade else {}
-    mastered = infer_mastered_skills_from_grades(raw_grades)
-    diag_mastered = infer_mastered_skills_from_diagnostic_tests([
-        {"skill_code": d.skill_code, "score": d.score, "is_passed": d.is_passed}
-        for d in diagnostic_tests
-    ])
-    mastered.update(diag_mastered)
-
-    return {
-        "user_id": user_id,
-        "riasec_vector": assessment.riasec_scores if assessment else None,
-        "cognitive_preferences": assessment.cognitive_preferences if assessment else None,
-        "computed_block_zscores": grade.computed_block_zscores if grade else None,
-        "raw_grades": raw_grades,
-        "diagnostic_skills_mastered": sorted(list(mastered)),
-        "last_updated": (assessment.assessed_at if assessment else datetime.now(timezone.utc)).isoformat()
-    }
+    return {"user_id": user_id, "assessment_id": evidence["assessment_id"],
+            "has_assessment": has_assessment,
+            "riasec_vector": evidence["riasec_scores"], "riasec_answers": evidence["riasec_answers"],
+            "cognitive_preferences": evidence["cognitive_preferences"], "cognitive_answers": cognitive_answers,
+            "aspiration": evidence["aspiration"],
+            "computed_block_zscores": _computed_blocks(evidence["grades_by_subject"], blocks),
+            "raw_grades": evidence["grades_by_subject"], "score_context": evidence["score_context"],
+            "diagnostic_skills_mastered": sorted(mastered),
+            "last_updated": (snapshot.assessed_at if snapshot else datetime.now(timezone.utc)).isoformat()}

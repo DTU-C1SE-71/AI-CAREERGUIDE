@@ -40,13 +40,18 @@ function redirectToGoogleOAuth() {
     import.meta.env.VITE_GOOGLE_CLIENT_ID || DEFAULT_GOOGLE_CLIENT_ID
   const redirectUri =
     import.meta.env.VITE_GOOGLE_REDIRECT_URI ||
-    "http://localhost:5173/login/callback"
+    `${window.location.origin}/login/callback`
 
   const oauthEndpoint = "https://accounts.google.com/o/oauth2/v2/auth"
+  const state = crypto.randomUUID()
+  const payload = JSON.stringify({ state, redirectUri, created: Date.now() })
+  sessionStorage.setItem("career-guide:oauth-state", payload)
+  localStorage.setItem("career-guide:oauth-state", payload)
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
-    response_type: "token",
+    response_type: "code",
+    state,
     scope: "openid email profile",
     prompt: "select_account",
   })
@@ -65,10 +70,11 @@ function GoogleSignInButton({
   const [googleBusy, setGoogleBusy] = useState(false)
 
   const googlePopupLogin = useGoogleLogin({
+    flow: "auth-code",
     onSuccess: async (tokenResponse) => {
       try {
         setGoogleBusy(true)
-        await onTokenSuccess(tokenResponse.access_token)
+        await onTokenSuccess(tokenResponse.code)
       } catch (err: unknown) {
         onError(
           err instanceof Error
@@ -80,16 +86,16 @@ function GoogleSignInButton({
       }
     },
     onError: () => {
-      // Fallback to standard OAuth 2.0 redirect flow if popup fails or origin is 127.0.0.1
+      // Fallback to standard OAuth 2.0 redirect flow if popup fails or is blocked
       redirectToGoogleOAuth()
     },
   })
 
   const handleClick = () => {
     // Google Cloud Console Web Client ID whitelists http://localhost:5173
-    // If accessed via 127.0.0.1, use the standard OAuth 2.0 redirect flow directly
+    // If accessed via 127.0.0.1, switch to localhost to unify origins and cookies
     if (window.location.hostname === "127.0.0.1") {
-      redirectToGoogleOAuth()
+      window.location.href = window.location.href.replace("127.0.0.1", "localhost")
       return
     }
     googlePopupLogin()
@@ -146,7 +152,7 @@ export function Login() {
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
-  const { login } = useAuth()
+  const { login, sessionError } = useAuth()
   const navigate = useNavigate()
 
   const applyLoginResponse = (data: LoginApiResponse) => {
@@ -244,26 +250,6 @@ export function Login() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : ""
-      if (
-        /HTTP (404|405|502|503|504)|Failed to fetch|NetworkError/i.test(msg)
-      ) {
-        const inferredRole =
-          trimmedEmail.toLowerCase() === "admin@careerguide.vn"
-            ? "ADMIN"
-            : "STUDENT"
-        applyLoginResponse({
-          access_token: `local-jwt-${Date.now()}`,
-          token_type: "bearer",
-          role: inferredRole,
-          user: {
-            id: `user-${Date.now()}`,
-            email: trimmedEmail,
-            full_name: fullName.trim() || trimmedEmail.split("@")[0],
-            role: inferredRole,
-          },
-        })
-        return
-      }
       setErrorMsg(
         msg || "Email hoặc mật khẩu không chính xác. Vui lòng kiểm tra lại.",
       )
@@ -272,34 +258,14 @@ export function Login() {
     }
   }
 
-  const handleGoogleAccessToken = async (googleAccessToken: string) => {
+  const handleGoogleAccessToken = async (authorizationCode: string) => {
     setErrorMsg(null)
     setSuccessMsg(null)
 
-    // Fetch user profile from Google UserInfo API
-    const profileResp = await fetch(
-      "https://www.googleapis.com/oauth2/v3/userinfo",
-      {
-        headers: { Authorization: `Bearer ${googleAccessToken}` },
-      },
-    )
-
-    let profileData: {
-      email?: string
-      name?: string
-      picture?: string
-      sub?: string
-    } = {}
-    if (profileResp.ok) {
-      profileData = await profileResp.json()
-    }
-
-    const data = await authPost<LoginApiResponse>("/identity/google-login", {
-      email: profileData.email,
-      full_name: profileData.name,
-      avatar_url: profileData.picture,
-      google_id: profileData.sub,
-      access_token: googleAccessToken,
+    // Backend xác minh token Google; không tin email do trình duyệt khai báo.
+    const data = await authPost<LoginApiResponse>("/identity/google/callback", {
+      code: authorizationCode,
+      redirect_uri: "postmessage",
     })
 
     if (data && data.access_token) {
@@ -426,7 +392,7 @@ export function Login() {
             </div>
 
             {/* Error Message */}
-            {errorMsg && (
+            {(errorMsg || sessionError) && (
               <div
                 role="alert"
                 className="mt-5 flex items-start gap-2.5 rounded-2xl border border-rose-200 bg-rose-50/90 p-3.5 text-xs sm:text-sm font-medium text-rose-700 backdrop-blur-sm"
@@ -435,7 +401,7 @@ export function Login() {
                   size={18}
                   className="mt-0.5 shrink-0 text-rose-600"
                 />
-                <span>{errorMsg}</span>
+                <span>{errorMsg || sessionError}</span>
               </div>
             )}
 

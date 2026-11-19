@@ -7,6 +7,9 @@ Optimized for:
 4. Full 108 MOET Level-IV Majors with Category & Phoenix Ho Career linkages.
 """
 
+import os
+if __name__ == "__main__" and (os.environ.get("ENVIRONMENT") != "test" or os.environ.get("ALLOW_SYNTHETIC_DEMO_SEED") != "1"):
+    raise RuntimeError("Demo seed bị tắt. Dùng seed_catalog.py và create_admin.py cho môi trường thật.")
 import asyncio
 import json
 import logging

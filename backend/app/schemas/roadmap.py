@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field, ConfigDict
+from pydantic import BaseModel, Field, ConfigDict, StrictInt, field_validator
 
 
 class RoadmapMilestoneSchema(BaseModel):
@@ -61,10 +61,25 @@ class MajorRoadmapResponse(BaseModel):
 
 
 class StudentRoadmapProgressUpdate(BaseModel):
-    major_code: str
-    current_step: int
-    completed_milestones: List[int]
+    major_code: str = Field(pattern=r"^[789][0-9]{6}$")
+    current_step: int = Field(strict=True, ge=1, le=4)
+    completed_milestones: List[StrictInt] = Field(max_length=4)
     personalized_schedule: Optional[Dict[str, Any]] = None
+
+    @field_validator("completed_milestones")
+    @classmethod
+    def valid_steps(cls, value):
+        if any(step < 1 or step > 4 for step in value) or len(set(value)) != len(value):
+            raise ValueError("Các mốc hoàn tất phải là số tuần 1–4 không trùng nhau.")
+        return value
+
+    @field_validator("personalized_schedule")
+    @classmethod
+    def bounded_schedule(cls, value):
+        import json
+        if value is not None and len(json.dumps(value,ensure_ascii=False))>32000:
+            raise ValueError("Tiến độ vượt giới hạn dữ liệu.")
+        return value
 
 
 class StudentRoadmapProgressResponse(BaseModel):

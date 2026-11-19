@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from fastapi import HTTPException
 from sqlalchemy.orm import selectinload
 
 from app.modules.assessment.models import (
@@ -109,23 +110,24 @@ def build_response_from_raw_json(raw_data: dict, set_id: Optional[uuid.UUID] = N
     )
 
 
+def _question_set_query(set_id=None):
+    """Select one questionnaire consistently for display and submission."""
+    query = select(AssessmentQuestionSet).options(
+        selectinload(AssessmentQuestionSet.questions).selectinload(AssessmentQuestion.cognitive_options))
+    query = query.where(AssessmentQuestionSet.id == set_id) if set_id else query.where(AssessmentQuestionSet.is_active.is_(True))
+    return query.order_by(AssessmentQuestionSet.created_at.desc(), AssessmentQuestionSet.id.asc()).limit(1)
+
+
 async def get_active_questionnaire_set(db: Optional[AsyncSession] = None) -> AssessmentQuestionSetResponse:
     """
     Retrieves the currently active questionnaire set with complete RIASEC items and Cognitive options.
-    Gracefully falls back to embedded Circular 74/2026 specification if DB is unreachable.
+    File spec chỉ dùng khi db=None; DB rỗng/lỗi được báo rõ, không phục hồi câu hỏi cũ.
     """
     raw_data = load_raw_seed_data()
 
     if db is not None:
         try:
-            stmt = (
-                select(AssessmentQuestionSet)
-                .where(AssessmentQuestionSet.is_active == True)
-                .options(
-                    selectinload(AssessmentQuestionSet.questions).selectinload(AssessmentQuestion.cognitive_options)
-                )
-                .order_by(AssessmentQuestionSet.created_at.desc())
-            )
+            stmt = _question_set_query()
             result = await db.execute(stmt)
             active_set = result.scalar_one_or_none()
 
@@ -192,8 +194,12 @@ async def get_active_questionnaire_set(db: Optional[AsyncSession] = None) -> Ass
                     cognitive_questions=cognitive_qs,
                     qa_persona_presets=raw_data.get("qa_persona_presets", [])
                 )
+            raise HTTPException(404, "Chưa có bộ câu hỏi đang hoạt động trong cơ sở dữ liệu.")
+        except HTTPException:
+            raise
         except Exception as exc:
-            logger.warning(f"Database query for active question set failed ({exc}), falling back to file spec.")
+            logger.warning("Database questionnaire query failed (%s)", type(exc).__name__)
+            raise HTTPException(503, "Chưa tải được bộ câu hỏi; vui lòng thử lại.") from None
 
     return build_response_from_raw_json(raw_data)
 
@@ -216,70 +222,34 @@ async def process_assessment_submission(
     riasec_answers = payload.riasec_answers
     cog_answers = payload.cognitive_answers
 
-    # Map question codes to dimensions
-    q_to_dim: Dict[str, str] = {}
-    for item in raw_data.get("riasec_questions", []):
-        q_to_dim[item["code"]] = item["dimension"]
-
-    # 1. Calculate raw and normalized RIASEC scores
-    raw_sums: Dict[str, int] = {"R": 0, "I": 0, "A": 0, "S": 0, "E": 0, "C": 0}
-    counts: Dict[str, int] = {"R": 0, "I": 0, "A": 0, "S": 0, "E": 0, "C": 0}
-
-    for q_code, val in riasec_answers.items():
-        dim = q_to_dim.get(q_code) or q_code[0].upper()
-        if dim in raw_sums:
-            clamped_val = max(1, min(5, int(val)))
-            raw_sums[dim] += clamped_val
-            counts[dim] += 1
-
-    # Standard formula: (raw_sum - 5) / 20 maps [5, 25] to [0.0, 1.0]
-    normalized_vector: Dict[str, float] = {}
-    for dim in ["R", "I", "A", "S", "E", "C"]:
-        cnt = counts[dim]
-        if cnt == 0:
-            normalized_vector[dim] = 0.50
-        else:
-            # If student answered fewer than 5 items, extrapolate to 5-item scale
-            scale_5_sum = (raw_sums[dim] / cnt) * 5.0
-            norm_val = (scale_5_sum - 5.0) / 20.0
-            normalized_vector[dim] = round(max(0.0, min(1.0, norm_val)), 2)
-
-    # 2. Map Cognitive Preference Answers
-    # Build lookup of option trait codes
-    cog_trait_lookup: Dict[str, Dict[str, str]] = {}
-    for cog in raw_data.get("cognitive_questions", []):
-        c_code = cog["code"]
-        dim_key = cog["dimension_key"]
-        opts_map = {opt["option_key"].upper(): opt["trait_code"] for opt in cog.get("options", [])}
-        cog_trait_lookup[c_code] = opts_map
-        cog_trait_lookup[dim_key] = opts_map
-
-    cognitive_traits: Dict[str, str] = {}
-    cognitive_answers_clean: Dict[str, str] = {}
-    
-    # 8 standard cognitive dimensions
-    standard_cog_dims = [
-        ("COG_1", "learning_style"),
-        ("COG_2", "work_environment"),
-        ("COG_3", "problem_solving"),
-        ("COG_4", "interaction_target"),
-        ("COG_5", "gardner_intelligence"),
-        ("COG_6", "pressure_tolerance"),
-        ("COG_7", "output_preference"),
-        ("COG_8", "team_role"),
-    ]
-
-    for c_code, dim_key in standard_cog_dims:
-        choice = cog_answers.get(c_code) or cog_answers.get(dim_key) or "A"
-        choice_clean = str(choice).strip().upper()
-        cognitive_answers_clean[dim_key] = choice_clean
-
-        traits_map = cog_trait_lookup.get(c_code, {})
-        trait_code = traits_map.get(choice_clean, f"TRAIT_{dim_key.upper()}_{choice_clean}")
-        cognitive_traits[dim_key] = trait_code
-
-    from app.services.recommender.engine import normalize_student_cognitive_traits
-    cognitive_traits = normalize_student_cognitive_traits(cognitive_traits)
+    from app.services.recommender.readiness import build_interest_evidence
+    from app.services.recommender.evidence import cognitive_evidence
+    interest = build_interest_evidence(riasec_answers)
+    # Preserve missingness, never extrapolate unobserved groups to a neutral score.
+    normalized_vector = {g["code"]: g["percent"] / 100 for g in interest["groups"] if g["answered"]}
+    raw_sums = {code: 0 for code in "RIASEC"}
+    valid_riasec = {}
+    for question in raw_data.get("riasec_questions", []):
+        code = question["code"]
+        value = riasec_answers.get(code)
+        if isinstance(value, (int, float)) and not isinstance(value, bool) and value in (1, 2, 3, 4, 5):
+            valid_riasec[code] = int(value)
+            raw_sums[question["dimension"]] += int(value)
+    cognitive = cognitive_evidence(cog_answers)
+    cognitive_traits = cognitive["traits"]
+    cognitive_answers_clean = {}
+    selected_traits = {}
+    standard_cog_dims = []
+    for question in raw_data.get("cognitive_questions", []):
+        code, dim = question["code"], question["dimension_key"]
+        standard_cog_dims.append((code, dim))
+        answer = cog_answers[code] if code in cog_answers else cog_answers.get(dim)
+        answer = answer.strip().upper() if isinstance(answer, str) else None
+        for option in question["options"]:
+            if answer in (option["option_key"], option["trait_code"]):
+                cognitive_answers_clean[dim] = option["option_key"]
+                selected_traits[dim] = option["trait_code"]
+                break
 
     # 3. Identify Top Dominant Traits
     dim_names: Dict[str, str] = {
@@ -291,20 +261,31 @@ async def process_assessment_submission(
         "C": "C - Nghiệp vụ (Conventional)",
     }
     sorted_dims = sorted(normalized_vector.items(), key=lambda kv: kv[1], reverse=True)
-    dominant_traits = [f"{dim_names.get(d, d)} ({(val * 100):.0f}%)" for d, val in sorted_dims[:3]]
+    dominant_traits = [f"{dim_names.get(d, d)} ({(val * 100):.0f}%)" for d, val in sorted_dims[:3]] if interest["status"] == "COMPLETE" else []
 
     # XP Calculation: 30*25 (750) + 8*25 (200) + 200 completion bonus = 1150 XP
-    xp_earned = 1150
+    xp_earned = (len(valid_riasec) + len(cognitive_answers_clean)) * 25 + (200 if len(valid_riasec) == 30 and len(cognitive_answers_clean) == 8 else 0)
     submission_id = uuid.uuid4()
     now = datetime.now(timezone.utc)
 
     # 4. Save to Database if DB Session is active and user exists
     if db is not None and persist_to_db:
         try:
+            from app.models.identity import User
+            owner = (await db.execute(select(User).where(User.id == user_id).with_for_update().execution_options(populate_existing=True))).scalar_one_or_none()
+            if owner is None or not owner.is_active:
+                raise HTTPException(401, "Tài khoản không còn hoạt động.")
+            # Granular answers must reference real persisted questions (seed IDs are UUID4).
+            selected_set = (await db.execute(_question_set_query(payload.set_id))).scalar_one_or_none()
+            if payload.set_id is not None and selected_set is None:
+                raise HTTPException(422, "Bộ câu hỏi đã chọn không tồn tại. Vui lòng tải lại bài đánh giá.")
+            question_rows = list(selected_set.questions) if selected_set else []
+            question_ids = {q.code: q.id for q in question_rows}
+            persisted_set_id = selected_set.id if selected_set else None
             submission = StudentAssessmentSubmission(
                 id=submission_id,
                 user_id=user_id,
-                set_id=payload.set_id,
+                set_id=persisted_set_id,
                 riasec_vector=normalized_vector,
                 riasec_raw_scores=raw_sums,
                 cognitive_traits=cognitive_traits,
@@ -313,6 +294,8 @@ async def process_assessment_submission(
                     "riasec_answers": riasec_answers,
                     "cognitive_answers": cog_answers,
                     "aspiration": payload.aspiration or {},
+                    "grades_by_subject": payload.grades_by_subject,
+                    "score_context": payload.score_context,
                 },
                 dominant_traits=dominant_traits,
                 xp_earned=xp_earned,
@@ -322,12 +305,14 @@ async def process_assessment_submission(
             db.add(submission)
 
             # Record individual granular responses
-            for q_code, val in riasec_answers.items():
+            for q_code, val in valid_riasec.items():
+                if q_code not in question_ids:
+                    continue
                 db.add(
                     StudentAssessmentResponse(
                         id=uuid.uuid4(),
                         submission_id=submission_id,
-                        question_id=uuid.uuid5(uuid.NAMESPACE_DNS, f"riasec_{q_code}"),
+                        question_id=question_ids[q_code],
                         question_code=q_code,
                         likert_value=int(val),
                         answered_at=now
@@ -335,13 +320,15 @@ async def process_assessment_submission(
                 )
 
             for c_code, dim_key in standard_cog_dims:
-                choice = cognitive_answers_clean.get(dim_key, "A")
-                trait = cognitive_traits.get(dim_key, "")
+                if dim_key not in cognitive_answers_clean or c_code not in question_ids:
+                    continue
+                choice = cognitive_answers_clean[dim_key]
+                trait = selected_traits[dim_key]
                 db.add(
                     StudentAssessmentResponse(
                         id=uuid.uuid4(),
                         submission_id=submission_id,
-                        question_id=uuid.uuid5(uuid.NAMESPACE_DNS, f"cog_{c_code}"),
+                        question_id=question_ids[c_code],
                         question_code=c_code,
                         option_key=choice,
                         selected_trait_code=trait,
@@ -351,7 +338,7 @@ async def process_assessment_submission(
 
             # Also sync to legacy student_assessments table for backward compatibility with recommender
             legacy_record = StudentAssessment(
-                id=uuid.uuid4(),
+                id=submission_id,
                 user_id=user_id,
                 riasec_scores=normalized_vector,
                 cognitive_preferences=cognitive_traits,
@@ -359,6 +346,8 @@ async def process_assessment_submission(
                     "riasec": riasec_answers,
                     "cognitive": cog_answers,
                     "aspiration": payload.aspiration or {},
+                    "grades_by_subject": payload.grades_by_subject,
+                    "score_context": payload.score_context,
                 },
                 assessed_at=now
             )
@@ -366,13 +355,16 @@ async def process_assessment_submission(
 
             await db.commit()
             logger.info(f"Student assessment submission {submission_id} saved successfully for user {user_id}")
+        except HTTPException:
+            await db.rollback()
+            raise
         except Exception as exc:
-            logger.warning(f"Database persist failed ({exc}); returning calculated results in client mode.")
+            await db.rollback()
+            logger.warning("Assessment persistence failed: %s", type(exc).__name__)
+            raise HTTPException(503, "Chưa lưu được bài đánh giá. Vui lòng thử lại.") from exc
 
-    summary_text = (
-        f"Hoàn thành xuất sắc bài đánh giá chuẩn v1.8! "
-        f"Hồ sơ sở thích nghề nghiệp nổi bật với 3 trụ cột: {', '.join(dominant_traits)}."
-    )
+    summary_text = (f"Nhóm sở thích nổi bật: {', '.join(dominant_traits)}." if dominant_traits else
+                    "Đã ghi nhận câu trả lời. Sở thích chưa phân hóa hoặc bài làm chưa đủ để kết luận nhóm nổi bật.")
 
     return AssessmentSubmissionResponse(
         submission_id=submission_id,
@@ -381,6 +373,8 @@ async def process_assessment_submission(
         cognitive_traits=cognitive_traits,
         dominant_traits=dominant_traits,
         xp_earned=xp_earned,
+        interest_evidence=interest,
+        cognitive_evidence=cognitive,
         summary=summary_text,
         completed_at=now
     )

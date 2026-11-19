@@ -1,6 +1,6 @@
 import uuid
-from typing import List, Optional, Dict, Any
-from pydantic import BaseModel, Field
+from typing import List, Optional, Dict, Any, Literal
+from pydantic import BaseModel, Field, model_validator
 from app.schemas.roadmap import RoadmapMilestoneSchema, ReferenceMaterialSchema
 
 
@@ -49,11 +49,12 @@ class ChunkSearchResult(BaseModel):
 
 
 class GuidancePersonalizationRequest(BaseModel):
-    major_code: str
+    major_code: str = Field(pattern=r"^[0-9]{7}$")
     user_id: uuid.UUID
     missing_skills: List[str] = Field(
         default_factory=list,
-        description="Identified competency gaps to focus on"
+        max_length=50,
+        description="Legacy hint; authoritative gaps are resolved on the server"
     )
     weekly_hours_available: int = Field(default=10, ge=2, le=40)
 
@@ -72,13 +73,46 @@ class GuidancePersonalizationResponse(BaseModel):
     schedule: List[PersonalizedScheduleTask]
     is_fallback: bool = False
 
-class AIExplanationRequest(BaseModel):
-    major_code: str
+class GuidanceEvidenceRequest(BaseModel):
+    """Raw evidence contract shared with evaluation; null/empty explicitly clears data."""
     user_id: Optional[uuid.UUID] = None
-    riasec_scores: Optional[Dict[str, float]] = None
-    grades_by_subject: Optional[Dict[str, float]] = None
-    diagnostic_skills_mastered: Optional[List[str]] = None
+    assessment_id: Optional[uuid.UUID] = None
+    riasec_answers: Optional[Dict[str, Any]] = None
+    cognitive_answers: Optional[Dict[str, Any]] = None
+    riasec_scores: Optional[Dict[str, Any]] = None
+    grades_by_subject: Optional[Dict[str, Any]] = None
+    diagnostic_skills_mastered: Optional[List[str]] = Field(default=None, max_length=50)
     cognitive_preferences: Optional[Dict[str, Any]] = None
+    aspiration: Optional[Dict[str, Any]] = None
+    score_context: Optional[Dict[str, Any]] = None
+    gender: Optional[str] = None
+    grade_level: Optional[str] = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def reject_coerced_numeric_evidence(cls, data):
+        import math
+        import json
+        if not isinstance(data, dict):
+            return data
+        if len(json.dumps(data, default=str, ensure_ascii=False).encode("utf-8")) > 24000:
+            raise ValueError("Hồ sơ quá lớn; giới hạn 24 KB cho yêu cầu tư vấn.")
+        for field, upper in (("grades_by_subject", 10), ("riasec_scores", 1), ("riasec_answers", 5)):
+            values = data.get(field)
+            if values is None:
+                continue
+            if not isinstance(values, dict) or len(values) > 60:
+                raise ValueError(f"{field}: dữ liệu phải là bảng điểm có giới hạn.")
+            for value in values.values():
+                if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+                    raise ValueError(f"{field}: chỉ chấp nhận số hữu hạn, không tự đổi chuỗi hoặc boolean thành điểm.")
+                if not 0 <= value <= upper or (field == "riasec_answers" and (value < 1 or int(value) != value)):
+                    raise ValueError(f"{field}: điểm ngoài thang đánh giá.")
+        return data
+
+
+class AIExplanationRequest(GuidanceEvidenceRequest):
+    major_code: str = Field(pattern=r"^[0-9]{7}$")
 
 
 class AIExplanationResponse(BaseModel):
@@ -94,19 +128,16 @@ class AIExplanationResponse(BaseModel):
 
 
 class AIChatMessage(BaseModel):
-    role: str = Field(description="'user' or 'assistant'")
-    content: str
+    role: Literal["user", "assistant"]
+    content: str = Field(max_length=4000)
 
 
-class AIChatRequest(BaseModel):
-    message: str
-    major_code: Optional[str] = None
-    user_id: Optional[uuid.UUID] = None
-    history: Optional[List[AIChatMessage]] = None
-    riasec_scores: Optional[Dict[str, float]] = None
-    grades_by_subject: Optional[Dict[str, float]] = None
-    diagnostic_skills_mastered: Optional[List[str]] = None
-    cognitive_preferences: Optional[Dict[str, Any]] = None
+class AIChatRequest(GuidanceEvidenceRequest):
+    message: str = Field(min_length=1, max_length=4000)
+    major_code: Optional[str] = Field(default=None, pattern=r"^[0-9]{7}$")
+    history: Optional[List[AIChatMessage]] = Field(default=None, max_length=12)
+    connection_revision: Optional[str] = Field(default=None, min_length=32, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
+    weekly_hours_available: int = Field(default=6, ge=2, le=40)
 
 
 class AIChatResponse(BaseModel):
@@ -114,36 +145,17 @@ class AIChatResponse(BaseModel):
     suggested_followups: List[str] = Field(default_factory=list)
     context_major_code: Optional[str] = None
     is_fallback: bool = False
+    is_ai_generated: bool = False
+    response_source: Literal["verified_guidance", "ai_advisor", "offline_guidance"] = "verified_guidance"
+    connection_available: bool = False
+    connection_revision: Optional[str] = None
 
 
-class LLMConnectionTestRequest(BaseModel):
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    model: Optional[str] = None
-
-
-class LLMConnectionTestResponse(BaseModel):
-    success: bool
-    status_code: int
-    latency_ms: float
-    model_used: str
-    base_url: str
-    is_configured: bool
+class AIChatConnectionResponse(BaseModel):
+    available: bool
+    code: str
     message: str
-    preview_reply: Optional[str] = None
-    tested_at: str
-
-
-class LLMStatusResponse(BaseModel):
-    model: str
-    base_url: Optional[str] = None
-    is_key_configured: bool
-    masked_key: Optional[str] = None
-    embedding_model: str
-    max_tokens: int = 128000
-    context_window: int = 272000
-
-class LLMConfigUpdateRequest(BaseModel):
-    api_key: Optional[str] = None
-    base_url: Optional[str] = None
-    model: Optional[str] = None
+    checked_at: str
+    latency_ms: float
+    # Opaque signed proof bound to the configuration; no timed chat expiry.
+    revision_token: str = ""

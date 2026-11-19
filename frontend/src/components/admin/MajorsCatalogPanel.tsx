@@ -15,8 +15,10 @@ import {
   TrendingUp,
   X,
 } from "lucide-react"
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react"
+import { Fragment, useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { readStorage } from "../../services/storage"
+import { apiFetch } from "../../services/api"
+import { loadCatalogPages } from "../../utils/loadCatalogPages"
 import { Badge } from "../common/Badge"
 import { Button } from "../common/Button"
 import { TrendBadge } from "../xai/TrendBadge"
@@ -82,6 +84,7 @@ export function MajorsCatalogPanel({
   const [majors, setMajors] = useState<CatalogMajor[]>([])
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [hasLoaded, setHasLoaded] = useState(false)
   const [expanded, setExpanded] = useState(true)
   const [search, setSearch] = useState("")
   const [category, setCategory] = useState("ALL")
@@ -90,30 +93,40 @@ export function MajorsCatalogPanel({
   const [expandedCode, setExpandedCode] = useState<string | null>(null)
   const [insightBusy, setInsightBusy] = useState<string | null>(null)
 
+  const pending = useRef<AbortController | null>(null)
+  const mounted = useRef(true)
   const loadCatalog = useCallback(async () => {
+    pending.current?.abort()
+    const controller = new AbortController(); pending.current = controller
     setLoading(true)
     setLoadError(null)
     try {
       const token = readStorage<string | null>("career-guide:token", null)
-      const res = await fetch("/api/v1/taxonomy/majors?limit=1000", {
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
-      })
-      if (!res.ok) throw new Error(`Không tải được danh mục (HTTP ${res.status}).`)
-      const data: unknown = await res.json()
-      if (!Array.isArray(data)) throw new Error("Phản hồi danh mục ngành không hợp lệ.")
-      setMajors(data as CatalogMajor[])
+      const data = await loadCatalogPages<CatalogMajor>(async (limit, offset) => {
+        const res = await apiFetch(`/api/v1/taxonomy/majors?limit=${limit}&offset=${offset}`, {
+          signal: controller.signal,
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        })
+        if (!res.ok) throw new Error(`Không tải được danh mục (HTTP ${res.status}). Kiểm tra kết nối rồi thử lại.`)
+        return res.json()
+      }, controller.signal)
+      if (!controller.signal.aborted) { setMajors(data); setHasLoaded(true) }
+
     } catch (err) {
+      if (controller.signal.aborted || !mounted.current) return
       const message =
         err instanceof Error ? err.message : "Không tải được danh mục ngành từ CSDL."
       setLoadError(message)
       onNotify?.(message, true)
     } finally {
-      setLoading(false)
+      if (!controller.signal.aborted && mounted.current) setLoading(false)
     }
   }, [onNotify])
 
   useEffect(() => {
+    mounted.current = true
     void loadCatalog()
+    return () => { mounted.current = false; pending.current?.abort() }
   }, [loadCatalog, refreshKey])
 
   const categories = useMemo(() => {
@@ -183,9 +196,10 @@ export function MajorsCatalogPanel({
       return
     }
 
+    if (insightBusy) return
     setInsightBusy(`${action}:${majorCode}`)
     try {
-      const res = await fetch(
+      const res = await apiFetch(
         `/api/v1/major-insights/${majorCode}${action === "regenerate" ? "/regenerate" : ""}`,
         {
           method: action === "regenerate" ? "POST" : "DELETE",
@@ -193,6 +207,7 @@ export function MajorsCatalogPanel({
         },
       )
       const body: unknown = await res.json().catch(() => null)
+      if (!mounted.current) return
       if (!res.ok) {
         const detail = (body as { detail?: string } | null)?.detail
         throw new Error(detail || `Thao tác thất bại (HTTP ${res.status}).`)
@@ -216,6 +231,7 @@ export function MajorsCatalogPanel({
     }
   }
 
+  const filtersDisabled = !hasLoaded || loading || Boolean(loadError)
   const hasActiveFilter =
     search.trim().length > 0 || category !== "ALL" || trendFilter !== "ALL"
 
@@ -242,18 +258,20 @@ export function MajorsCatalogPanel({
             </span>
             <span className="block truncate text-xs text-slate-500 tabular-nums">
               {loading
-                ? "Đang đồng bộ danh mục..."
-                : `${stats.total} ngành hoạt động · ${stats.groups} nhóm lĩnh vực · ${stats.trending} xu hướng`}
+                ? "Đang tải danh mục từ cơ sở dữ liệu…"
+                : loadError
+                  ? hasLoaded ? `Chưa cập nhật được. Lần tải thành công trước: ${stats.total} ngành.` : "Chưa xác minh được danh mục. Vui lòng thử lại."
+                  : `${stats.total} ngành hoạt động · ${stats.groups} nhóm lĩnh vực · ${stats.trending} xu hướng`}
             </span>
           </span>
         </button>
 
         <div className="flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-700 tabular-nums">
-            {stats.total} ngành
+            {loading ? "Đang tải" : loadError ? "Chưa xác minh" : `${stats.total} ngành`}
           </span>
-          <Badge tone="slate">{stats.groups} nhóm</Badge>
-          {stats.trending > 0 && (
+          {!loading && !loadError && <Badge tone="slate">{stats.groups} nhóm</Badge>}
+          {!loading && !loadError && stats.trending > 0 && (
             <Badge tone="emerald">{stats.trending} xu hướng</Badge>
           )}
           <Button
@@ -261,6 +279,7 @@ export function MajorsCatalogPanel({
             icon={RefreshCw}
             onClick={() => void loadCatalog()}
             loading={loading}
+            disabled={loading}
             className="!min-h-9 !px-3.5 !py-1.5 !text-sm"
           >
             Làm mới
@@ -291,6 +310,7 @@ export function MajorsCatalogPanel({
                   />
                   <input
                     id="catalog-search"
+                    disabled={filtersDisabled}
                     value={search}
                     onChange={(event) => {
                       setSearch(event.target.value)
@@ -306,6 +326,7 @@ export function MajorsCatalogPanel({
                 </label>
                 <select
                   id="catalog-category"
+                  disabled={filtersDisabled}
                   value={category}
                   onChange={(event) => {
                     setCategory(event.target.value)
@@ -313,7 +334,7 @@ export function MajorsCatalogPanel({
                   }}
                   className="h-9 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-500/20 sm:w-auto sm:max-w-[260px]"
                 >
-                  <option value="ALL">Tất cả nhóm lĩnh vực ({stats.groups})</option>
+                  <option value="ALL">Tất cả nhóm lĩnh vực{hasLoaded ? ` (${stats.groups})` : ""}</option>
                   {categories.map((item) => (
                     <option key={item} value={item}>
                       {item}
@@ -338,6 +359,7 @@ export function MajorsCatalogPanel({
                       <button
                         key={value}
                         type="button"
+                        disabled={filtersDisabled}
                         onClick={() => {
                           setTrendFilter(value)
                           resetPage()
@@ -363,13 +385,12 @@ export function MajorsCatalogPanel({
 
               <div className="flex items-center justify-between gap-2.5 text-xs text-slate-600 tabular-nums sm:text-sm lg:justify-end">
                 <span>
-                  <strong className="font-semibold text-slate-900">
-                    {filteredMajors.length}
-                  </strong>{" "}
-                  kết quả
-                  {hasActiveFilter ? ` / ${stats.total}` : ""}
+                  {loading ? "Đang tải dữ liệu…" : loadError ? "Chưa có kết quả đã xác minh" : <>
+                    <strong className="font-semibold text-slate-900">{filteredMajors.length}</strong>{" "}kết quả
+                    {hasActiveFilter ? ` / ${stats.total}` : ""}
+                  </>}
                 </span>
-                {hasActiveFilter && (
+                {hasActiveFilter && !filtersDisabled && (
                   <button
                     type="button"
                     onClick={() => {
@@ -396,7 +417,7 @@ export function MajorsCatalogPanel({
             ) : loadError ? (
               <div className="flex flex-col items-center justify-center gap-3 p-12 text-center">
                 <AlertCircle size={22} className="text-rose-500" />
-                <p className="text-sm font-semibold text-rose-700">{loadError}</p>
+                <p role="alert" className="text-sm font-semibold text-rose-700">{loadError}</p>
                 <Button
                   variant="secondary"
                   icon={RefreshCw}

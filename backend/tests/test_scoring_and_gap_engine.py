@@ -341,7 +341,7 @@ class TestCompetencyGapEngine:
         ]
         mastered = infer_mastered_skills_from_diagnostic_tests(diag_tests)
         assert "SKILL_TAR_PROG_PYTHON" in mastered
-        assert "SKILL_TAR_ALGORITHMS" in mastered
+        assert "SKILL_TAR_ALGORITHMS" not in mastered
         assert "SKILL_TAR_DATA_MODELING" not in mastered
         assert "" not in mastered
 
@@ -776,15 +776,17 @@ class TestScoreConstraintsAndNormalization:
             assert body["bestBlockStats"]["raw_sum"] == pytest.approx(19.0, abs=1e-2)
             assert len(body["funnel"]["tier1_fields"]) == 3
 
-            # Kiểm tra Khoa học máy tính (chuẩn ~25.5đ / min 23.5đ) bị chặn REACH với điểm ~19đ
+            # Generic catalog cutoffs lack comparable source metadata: cannot certify eligibility.
             cs_item = next(
                 (m for m in body["majors"] if m["major_code"] in ("7480101", "480101")),
                 None,
             )
             assert cs_item is not None
-            assert cs_item["feasibility_tier"] == "REACH"
+            assert cs_item["feasibility_tier"] == "UNKNOWN"
             assert cs_item["constraint_passed"] is False
-            assert len(cs_item["constraint_violations"]) >= 1
+            assert cs_item["readiness"]["reason"] == "REFERENCE_BASIS_MISSING"
+            assert cs_item["best_block_score"] is None
+            assert "Đạt ngưỡng tuyển sinh" not in " ".join(cs_item["top_supporting_factors"])
         finally:
             app.dependency_overrides.clear()
 
@@ -833,12 +835,14 @@ class TestCareerAspirationAgent:
             assert res.status_code == 200
             asp = res.json()["aspirationAnalysis"]
             assert asp["has_aspiration"] is True
-            assert asp["alignment_status"] == "ALIGNED_AND_ELIGIBLE"
-            assert asp["dream_majors"][0]["feasibility_tier"] == "TARGET"
-            assert any(
-                k in asp["dream_majors"][0]["major_name"].lower()
-                for k in ("trí tuệ", "phần mềm", "khoa học máy tính", "công nghệ thông tin")
-            )
+            assert asp["match_status"] == "AMBIGUOUS"
+            assert asp["alignment_status"] == "AMBIGUOUS_ASPIRATION"
+            assert len(asp["intent_candidates"]) >= 2
+            candidate_names = " ".join(candidate["canonicalDreamJob"].lower() for candidate in asp["intent_candidates"])
+            assert "trí tuệ" in candidate_names and "phần mềm" in candidate_names
+            assert asp["dream_majors"] == []
+            assert asp["current_options"] == []
+            assert asp["alignment_score"] is None
         finally:
             app.dependency_overrides.clear()
 
@@ -879,10 +883,14 @@ class TestCareerAspirationAgent:
             )
             assert res.status_code == 200
             asp = res.json()
-            assert asp["alignment_status"] == "PASSION_MATCH_SCORE_GAP"
-            assert asp["dream_majors"][0]["feasibility_tier"] == "REACH"
-            assert len(asp["recommended_substitutes"]) >= 1
-            assert asp["recommended_substitutes"][0]["feasibility_tier"] == "TARGET"
+            assert asp["match_status"] == "MATCHED"
+            assert asp["alignment_status"] == "NO_CURRENT_OPTIONS"
+            assert asp["dream_majors"]
+            assert all(major["readiness"]["status"] == "UNKNOWN" for major in asp["dream_majors"])
+            assert all(major["readiness"]["benchmark_cutoff"] is None for major in asp["dream_majors"])
+            assert asp["current_options"] == []
+            assert asp["recommended_substitutes"] == []
+            assert asp["bridge_majors"] == []
         finally:
             app.dependency_overrides.clear()
 
@@ -925,9 +933,14 @@ class TestCareerAspirationAgent:
             # Kiểm tra Zero-PII: tên và số điện thoại đã bị khử
             assert "0912345678" not in asp["dream_job"]
             assert "[REDACTED_PHONE]" in asp["dream_job"]
-            assert asp["alignment_status"] == "TRAIT_DIVERGENCE"
-            assert len(asp["bridge_majors"]) >= 1
-            assert asp["bridge_majors"][0]["feasibility_tier"] == "TARGET"
+            assert asp["alignment_status"] == "NO_CURRENT_OPTIONS"
+            assert asp["interest_evidence"]["status"] == "PARTIAL"
+            assert asp["alignment_score"] is None
+            assert asp["holland_code"] == ""
+            assert asp["dream_majors"]
+            assert all(major["riasec_fit"] is None for major in asp["dream_majors"])
+            assert asp["current_options"] == []
+            assert asp["bridge_majors"] == []
         finally:
             app.dependency_overrides.clear()
 
@@ -954,7 +967,11 @@ class TestCareerAspirationAgent:
             assert res.status_code == 200
             asp = res.json()
             assert asp["alignment_status"] == "EXPLORATORY_DISCOVERY"
-            assert len(asp["dream_majors"]) >= 1
+            assert asp["match_status"] == "EMPTY"
+            assert asp["dream_majors"] == []
+            assert asp["current_options"] == []
+            assert asp["exploration_options"]
+            assert all(major["readiness"]["status"] == "UNKNOWN" for major in asp["exploration_options"])
         finally:
             app.dependency_overrides.clear()
 
@@ -975,17 +992,22 @@ class TestCareerAspirationAgent:
                 json={
                     "riasec_answers": {"I1": 5, "I2": 5, "R1": 4, "R2": 4, "C1": 3},
                     "grades_by_subject": {},
-                    "aspiration": {"dream_job": "Kỹ sư Trí tuệ nhân tạo & Lập trình phần mềm"},
+                    "aspiration": {"dream_job": "Kỹ sư trí tuệ nhân tạo"},
                     "top_k": 435,
                 },
             )
             assert res.status_code == 200
             asp = res.json()
-            assert asp["alignment_status"] == "NEED_ACADEMIC_DATA"
-            assert asp["has_academic_data"] is False
-            assert asp["score_basis"] == "RIASEC_ONLY"
-            assert asp["dream_majors"][0]["feasibility_tier"] == "UNKNOWN"
-            assert "chưa nhập điểm học lực" in asp["agent_verdict"].lower()
+            assert asp["match_status"] == "MATCHED"
+            assert asp["alignment_status"] == "NO_CURRENT_OPTIONS"
+            assert asp["dream_majors"]
+            assert asp["current_options"] == []
+            for major in asp["dream_majors"]:
+                assert major["feasibility_tier"] == "UNKNOWN"
+                assert major["readiness"]["status"] == "UNKNOWN"
+                assert major["readiness"]["block_score"] is None
+                assert major["academic_fit"] is None
+            assert asp["alignment_score"] is None
         finally:
             app.dependency_overrides.clear()
 
@@ -1012,8 +1034,15 @@ class TestCareerAspirationAgent:
                 },
             )
             assert res1.status_code == 200
-            majors1 = [m["major_name"].lower() for m in res1.json()["dream_majors"]]
-            assert any(k in " ".join(majors1) for k in ("hàng không", "vận tải", "hoạt động bay"))
+            pilot = res1.json()
+            assert pilot["match_status"] == "MATCHED"
+            assert pilot["intent_candidates"][0]["id"] == "PILOT"
+            assert pilot["dream_majors"] == []  # Catalog has no direct pilot qualification.
+            assert pilot["current_options"] == []
+            aviation = pilot["exploration_options"]
+            assert {item["major_code"] for item in aviation} == {"7520120", "7840102"}
+            assert all(item["readiness"]["status"] == "UNKNOWN" for item in aviation)
+            assert all("không thay thế" in item["relation_reason"] for item in aviation)
 
             # Test ca sĩ thanh nhạc
             res2 = client.post(
@@ -1037,7 +1066,7 @@ class TestCareerAspirationAgent:
 # =========================================================================
 
 class TestTrendHunterAgent:
-    def test_trend_agent_manual_admin_guard_classification_and_recommender_boost(self, monkeypatch):
+    def test_trend_agent_manual_admin_guard_classification_and_recommender_boost(self, monkeypatch, real_catalog_api_db):
         from fastapi.testclient import TestClient
         from app.main import app
         from app.core.database import get_db
@@ -1076,7 +1105,7 @@ class TestTrendHunterAgent:
 
         monkeypatch.setattr(trend_agent, "search_trending_majors_online", _mock_online_search)
 
-        app.dependency_overrides[get_db] = _override_get_db_none
+        app.dependency_overrides[get_db] = real_catalog_api_db
         admin_token = create_access_token("00000000-0000-0000-0000-000000000099", role="ADMIN")
         student_token = create_access_token("00000000-0000-0000-0000-000000000002", role="STUDENT")
 
@@ -1229,9 +1258,12 @@ class TestTrendHunterAgent:
 
             # 5) Kiểm tra Recommender đọc từ CSDL, ưu tiên các ngành Xu hướng Bậc 1 mà vẫn giữ TARGET trước REACH
             rec_after = client.post("/api/v1/recommender/evaluate", json=eval_payload).json()["majors"]
-            assert any(m.get("is_trending") for m in rec_after[:5])
-            assert any(m.get("trend_tier") == "TIER_1" for m in rec_after[:5])
-            assert all(m["feasibility_tier"] == "TARGET" for m in rec_after[:5])
+            # Trend is descriptive metadata, never evidence of personal fit or readiness.
+            assert [m["major_code"] for m in rec_after] == [m["major_code"] for m in rec_before]
+            assert [m["overall_score"] for m in rec_after] == [m["overall_score"] for m in rec_before]
+            assert all(m["feasibility_tier"] == "UNKNOWN" for m in rec_after[:5])
+            assert all(m["readiness"]["reason"] == "REFERENCE_BASIS_MISSING" for m in rec_after[:5])
+            assert all(m["constraint_passed"] is False for m in rec_after[:5])
 
             # 6) Admin chỉnh bậc ưu tiên thủ công qua PATCH & dọn dẹp sạch test registry
             patch_res = client.patch(
@@ -1342,7 +1374,7 @@ class TestExcelBulkImportPersistence:
         db.flush.assert_awaited()
         db.commit.assert_awaited_once()
 
-    def test_import_excel_raises_500_instead_of_silently_faking_success_on_db_error(self, monkeypatch):
+    def test_import_excel_raises_500_instead_of_silently_faking_success_on_db_error(self, monkeypatch, real_catalog_api_db):
         from pathlib import Path
         from fastapi.testclient import TestClient
         from app.main import app
@@ -1357,7 +1389,7 @@ class TestExcelBulkImportPersistence:
             raise RuntimeError("Simulated PostgreSQL MissingGreenlet failure")
 
         monkeypatch.setattr(service, "bulk_sync_majors", _broken_bulk_sync)
-        app.dependency_overrides[get_db] = _fake_db
+        app.dependency_overrides[get_db] = real_catalog_api_db
 
         try:
             tpl_path = Path(__file__).resolve().parents[1] / "app" / "db" / "seeds" / "MOET_Major_Import_Template_Standard.xlsx"
@@ -1365,6 +1397,7 @@ class TestExcelBulkImportPersistence:
             with open(tpl_path, "rb") as f:
                 res = client.post(
                     "/api/v1/taxonomy/import-excel?preview_only=false",
+                    headers={"Authorization": "Bearer " + __import__("app.core.security",fromlist=["create_access_token"]).create_access_token("00000000-0000-0000-0000-000000000099",role="ADMIN")},
                     files={"file": ("MOET_Major_Import_Template_Standard.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
                 )
             assert res.status_code == 500
@@ -1436,6 +1469,11 @@ class TestExcelBulkImportPersistence:
 
         # Seed old stale TT09 majors first
         async with SessionLocal() as s:
+            from app.models.identity import User,UserRole
+            from app.core.security import get_password_hash
+            import uuid
+            s.add(User(id=uuid.UUID("00000000-0000-0000-0000-000000000099"),email="admin-purge@example.com",full_name="Admin",hashed_password=get_password_hash("synthetic-purge-only"),role=UserRole.ADMIN,is_active=True))
+            await s.commit()
             await tax_service.bulk_sync_majors(
                 s,
                 [
@@ -1465,6 +1503,7 @@ class TestExcelBulkImportPersistence:
             with open(tpl_path, "rb") as f:
                 imp_res = client.post(
                     "/api/v1/taxonomy/import-excel?preview_only=false",
+                    headers={"Authorization": "Bearer " + __import__("app.core.security",fromlist=["create_access_token"]).create_access_token("00000000-0000-0000-0000-000000000099",role="ADMIN")},
                     files={"file": ("MOET_Major_Import_Template_Standard.xlsx", f, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")},
                 )
             assert imp_res.status_code == 200
@@ -1671,25 +1710,15 @@ class TestAdaptiveWeightingAndCompactXAI:
             enable_llm=False,
         )
 
-        verdict = res["agent_verdict"]
-        takeaways = res["key_takeaways"]
-
-        # Phải giải thích rõ: Khối C00 là điểm cao nhất, nhưng ngành xét A00 và A00 vẫn vượt chuẩn tham chiếu
-        assert "C00" in verdict
-        assert "A00" in verdict
-        assert "Ngữ văn, Lịch sử, Địa lý" in verdict
-        assert "Toán, Vật lý, Hóa học" in verdict
-        assert "Kỹ thuật ô tô" in verdict
-
-        # Takeaways cũng phải nêu rõ đối chiếu tổ hợp xét tuyển kèm tên môn học
-        joined_takeaways = " ".join(takeaways)
-        assert "C00" in joined_takeaways
-        assert "A00" in joined_takeaways
-        assert "Ngữ văn, Lịch sử, Địa lý" in joined_takeaways
-        assert "Toán, Vật lý, Hóa học" in joined_takeaways
-
-
-
-
-
-
+        # Legacy TARGET and a higher unrelated C00 score cannot establish evidence.
+        assert res["current_options"] == []
+        assert res["recommended_substitutes"] == []
+        assert res["dream_majors"] == []
+        assert len(res["exploration_options"]) == 1
+        brief = res["exploration_options"][0]
+        assert brief["readiness"]["status"] == "UNKNOWN"
+        assert brief["best_block_score"] is None
+        assert brief["benchmark_cutoff"] is None
+        assert brief["academic_fit"] is None
+        assert "Đủ điểm an toàn" not in str(res)
+        assert "24.9" not in str(res)

@@ -1,6 +1,7 @@
 """Tests cho 2 agent: Phân tích ngành (cache-first AI) và Phân tích kỹ năng học sinh."""
 
 import uuid
+import asyncio
 from typing import Any, Dict
 
 import pytest
@@ -30,6 +31,18 @@ SAMPLE_SKILL_REQUEST = StudentSkillAnalysisRequest(
 )
 
 
+def _synthetic_catalog_major():
+    """Danh mục tối thiểu có dữ liệu thật trong DB, không fallback sang seed."""
+    from app.models.taxonomy import Major, SubjectBlock, MajorSubjectBlock, Career
+    return Major(
+        major_code="7480101", name="Khoa học máy tính", category="Máy tính & Công nghệ thông tin",
+        riasec_vector={code: 0.5 for code in "RIASEC"}, cognitive_attributes={},
+        industry_outlook="Dữ liệu tổng hợp kiểm thử", description="Danh mục tổng hợp kiểm thử",
+        subject_blocks=[MajorSubjectBlock(subject_block=SubjectBlock(block_code="A00", name="Toán, Vật lý, Hóa học", subjects=["Toán", "Vật lý", "Hóa học"]))],
+        careers=[Career(title="Kỹ sư phần mềm", description="Nghề trong danh mục tổng hợp")],
+    )
+
+
 @pytest.fixture()
 def offline_ai(monkeypatch):
     """Ép service đi nhánh dựng tất định, không gọi mạng."""
@@ -37,20 +50,51 @@ def offline_ai(monkeypatch):
 
 
 @pytest.fixture()
-def offline_client(offline_ai):
+def offline_client(offline_ai, tmp_path):
+    """Provider tắt, nhưng đăng nhập và quyền vẫn đi qua DB tổng hợp thật."""
     from fastapi.testclient import TestClient
-
+    from sqlalchemy import text
     from app.core.database import get_db
+    from app.core.security import get_password_hash
     from app.main import app
+    from app.models.identity import User, UserRole
 
-    async def _override_get_db_none():
-        yield None
-
-    app.dependency_overrides[get_db] = _override_get_db_none
+    db_path = tmp_path / "insight-auth.db"
+    engine = create_async_engine(f"sqlite+aiosqlite:///{db_path.as_posix()}")
+    sessions = async_sessionmaker(bind=engine, expire_on_commit=False)
+    password = "synthetic-insight-test-password"
+    async def prepare():
+        async with engine.begin() as conn:
+            rows = (await conn.execute(text("PRAGMA database_list"))).fetchall()
+            assert __import__("pathlib").Path(rows[0][2]).resolve() == db_path.resolve()
+            await conn.run_sync(Base.metadata.create_all)
+        async with sessions() as db:
+            hashed = get_password_hash(password)
+            db.add(_synthetic_catalog_major())
+            db.add_all([
+                User(email="admin@example.com", full_name="Quản trị kiểm thử", hashed_password=hashed, role=UserRole.ADMIN),
+                User(email="student@example.com", full_name="Học sinh kiểm thử", hashed_password=hashed, role=UserRole.STUDENT),
+            ])
+            await db.commit()
+    asyncio.run(prepare())
+    async def _override_get_db():
+        async with sessions() as db:
+            yield db
+    previous = dict(app.dependency_overrides)
+    app.dependency_overrides[get_db] = _override_get_db
     try:
-        yield TestClient(app)
+        client = TestClient(app)
+        client.auth_tokens = {}
+        for role in ("admin", "student"):
+            response = client.post("/api/v1/identity/login", json={"email": f"{role}@example.com", "password": password})
+            assert response.status_code == 200
+            client.auth_tokens[role] = response.json()["access_token"]
+        yield client
+        client.close()
     finally:
         app.dependency_overrides.clear()
+        app.dependency_overrides.update(previous)
+        asyncio.run(engine.dispose())
 
 
 async def _sqlite_session(tmp_path):
@@ -58,6 +102,9 @@ async def _sqlite_session(tmp_path):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     session_factory = async_sessionmaker(bind=engine, expire_on_commit=False)
+    async with session_factory() as db:
+        db.add(_synthetic_catalog_major())
+        await db.commit()
     return engine, session_factory
 
 
@@ -110,10 +157,7 @@ class TestMajorInsightAgent:
 
     def test_endpoint_unknown_major_does_not_crash(self, offline_client):
         res = offline_client.get("/api/v1/major-insights/9999999")
-        assert res.status_code == 200
-        body = res.json()
-        assert body["major_code"] == "9999999"
-        assert body["training_content"]["overview"]
+        assert res.status_code == 404
 
     @pytest.mark.anyio
     async def test_cache_written_once_and_read_many(self, tmp_path, offline_ai):
@@ -257,9 +301,7 @@ class TestMajorInsightAdminEndpoints:
         assert offline_client.delete("/api/v1/major-insights/7480101").status_code == 401
 
     def test_student_token_is_forbidden(self, offline_client):
-        from app.core.security import create_access_token
-
-        token = create_access_token(subject=str(uuid.uuid4()), role="STUDENT")
+        token = offline_client.auth_tokens["student"]
         res = offline_client.post(
             "/api/v1/major-insights/7480101/regenerate",
             headers={"Authorization": f"Bearer {token}"},
@@ -267,9 +309,7 @@ class TestMajorInsightAdminEndpoints:
         assert res.status_code == 403
 
     def test_admin_can_regenerate_and_delete_cache(self, offline_client):
-        from app.core.security import create_access_token
-
-        token = create_access_token(subject=str(uuid.uuid4()), role="ADMIN")
+        token = offline_client.auth_tokens["admin"]
         headers = {"Authorization": f"Bearer {token}"}
 
         regen = offline_client.post(
@@ -282,6 +322,6 @@ class TestMajorInsightAdminEndpoints:
             "/api/v1/major-insights/7480101", headers=headers
         )
         assert deleted.status_code == 200
-        # DB đã bị override thành None nên chưa có bản ghi nào để xoá
-        assert deleted.json()["deleted"] is False
+        # Regenerate đã lưu cache thật; DELETE phải xóa được bản ghi đó.
+        assert deleted.json()["deleted"] is True
         assert deleted.json()["major_code"] == "7480101"

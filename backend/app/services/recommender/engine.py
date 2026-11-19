@@ -94,6 +94,11 @@ def normalize_subject_name(name: str) -> str:
         return ""
     low = raw.lower()
     canonical_aliases = {
+        "math": "Toán", "mathematics": "Toán",
+        "physics": "Vật lý", "chemistry": "Hóa học", "biology": "Sinh học",
+        "literature": "Ngữ văn", "english": "Tiếng Anh", "history": "Lịch sử",
+        "geography": "Địa lý", "civics": "GDKT & Pháp luật",
+        "informatics": "Tin học / Công nghệ", "technology": "Tin học / Công nghệ",
         "toán": "Toán",
         "toán học": "Toán",
         "ngữ văn": "Ngữ văn",
@@ -1299,6 +1304,10 @@ def normalize_student_cognitive_traits(
     c7 = _pick("COG_7", "output_preference")
     c8 = _pick("COG_8", "team_role")
 
+    # A partial questionnaire cannot manufacture a complete preference profile.
+    if not all((c1, c2, c3, c4, c5, c6, c7, c8)):
+        return {key: value for key, value in raw_traits.items() if key in canonical_keys}
+
     # 1. Analytical Reasoning score
     analytical_pts = (
         (2 if c1 == "B" else 0)
@@ -1376,63 +1385,27 @@ def calculate_asymmetric_cognitive_fit(
     student_traits: Dict[str, Any],
     major_attributes: Dict[str, Any]
 ) -> float:
-    """
-    Optimized Pillar 3 (20%):
-    Asymmetric Competency Matrix for ability dimensions (student >= required -> 1.0)
-    combined with Symmetric Cultural Fit for learning environment & teamwork.
-    """
-    if not major_attributes:
-        return 0.5
+    """Heuristic preference match using observed pairs only, never a capability test."""
     student_traits = normalize_student_cognitive_traits(student_traits)
-
-    ordinal_traits = [
-        "abstract_thinking",
-        "analytical_reasoning",
-        "spatial_perception",
-        "linguistic_ability",
-    ]
-    level_scale = {"low": 1, "medium": 2, "high": 3}
-    match_scores: List[float] = []
-
-    for trait in ordinal_traits:
-        s_val = str(student_traits.get(trait, "medium")).lower().strip()
-        m_val = str(major_attributes.get(trait, "medium")).lower().strip()
-        s_num = level_scale.get(s_val, 2)
-        m_num = level_scale.get(m_val, 2)
-
-        if s_num >= m_num:
-            # Student meets or exceeds the cognitive requirement of the major -> full credit
-            match_scores.append(1.0)
-        elif m_num - s_num == 1:
-            match_scores.append(0.55)
-        else:
-            match_scores.append(0.10)
-
-    # Symmetric Learning Environment Match
-    s_env = str(student_traits.get("learning_environment", "structured")).lower().strip()
-    m_env = str(major_attributes.get("learning_environment", "structured")).lower().strip()
-    if s_env == m_env:
-        match_scores.append(1.0)
-    elif (s_env in ("structured", "exploratory") and m_env in ("structured", "exploratory")) or \
-         (s_env in ("collaborative", "exploratory") and m_env in ("collaborative", "exploratory")):
-        match_scores.append(0.6)
-    else:
-        match_scores.append(0.25)
-
-    # Symmetric Teamwork Intensity Match
-    s_team = str(student_traits.get("teamwork_intensity", "balanced")).lower().strip()
-    m_team = str(major_attributes.get("teamwork_intensity", "balanced")).lower().strip()
-    team_scale = {"independent": 1, "balanced": 2, "highly_collaborative": 3}
-    t_diff = abs(team_scale.get(s_team, 2) - team_scale.get(m_team, 2))
-    if t_diff == 0:
-        match_scores.append(1.0)
-    elif t_diff == 1:
-        match_scores.append(0.6)
-    else:
-        match_scores.append(0.2)
-
-    score = sum(match_scores) / len(match_scores) if match_scores else 0.5
-    return round(max(0.0, min(1.0, score)), 4)
+    if not student_traits or not major_attributes:
+        return 0.0
+    levels = {"low": 1, "medium": 2, "high": 3}
+    scores = []
+    for key in ("abstract_thinking", "analytical_reasoning", "spatial_perception", "linguistic_ability"):
+        own, expected = student_traits.get(key), major_attributes.get(key)
+        if own in levels and expected in levels:
+            diff = levels[expected] - levels[own]
+            scores.append(1.0 if diff <= 0 else 0.55 if diff == 1 else 0.1)
+    envs = {"structured", "exploratory", "collaborative", "independent"}
+    own, expected = student_traits.get("learning_environment"), major_attributes.get("learning_environment")
+    if own in envs and expected in envs:
+        scores.append(1.0 if own == expected else 0.6 if "exploratory" in (own, expected) else 0.25)
+    teams = {"independent": 1, "balanced": 2, "highly_collaborative": 3}
+    own, expected = student_traits.get("teamwork_intensity"), major_attributes.get("teamwork_intensity")
+    if own in teams and expected in teams:
+        diff = abs(teams[own] - teams[expected])
+        scores.append(1.0 if diff == 0 else 0.6 if diff == 1 else 0.2)
+    return round(sum(scores) / len(scores), 4) if scores else 0.0
 
 
 def extract_6digit_code(major_code: str) -> str:

@@ -106,3 +106,47 @@ class StudentSkillInsight(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
+
+
+class MajorExplanationInsight(Base):
+    """
+    Cache kết quả giải thích độ phù hợp ngành ("Vì sao ngành này phù hợp?") của AI.
+
+    Khoá cache: (profile_hash, major_code).
+    Một khi AI đã phân tích hồ sơ của học sinh đối với ngành này, kết quả được lưu vào DB.
+    Các lần xem sau (hoặc refresh trang) trả về ngay lập tức với 0 token tiêu tốn.
+    """
+    __tablename__ = "major_explanation_insights"
+    __table_args__ = (
+        UniqueConstraint("profile_hash", "major_code", name="uq_major_explanation_profile_major"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[Optional[uuid.UUID]] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    profile_hash: Mapped[str] = mapped_column(
+        String(64), index=True, nullable=False,
+        comment="SHA-256 của hồ sơ năng lực đã ẩn danh"
+    )
+    major_code: Mapped[str] = mapped_column(
+        String(20), nullable=False, index=True,
+        comment="Mã ngành MOET"
+    )
+    major_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    detailed_explanation: Mapped[str] = mapped_column(Text, nullable=False)
+    riasec_alignment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    academic_alignment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    diagnostic_readiness: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    strengths: Mapped[List[str]] = mapped_column(JSONB, default=list, nullable=False)
+    recommended_focus_areas: Mapped[List[str]] = mapped_column(JSONB, default=list, nullable=False)
+    is_ai_generated: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    model_name: Mapped[Optional[str]] = mapped_column(String(120), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )

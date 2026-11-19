@@ -30,7 +30,7 @@ class Major(Base):
         comment="Official Level-IV MOET major code, e.g. 7480201 for Information Technology"
     )
     name: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
-    category: Mapped[str] = mapped_column(String(100), default="Kh?c", nullable=False, index=True, comment="MOET broad field or category according to Circular 09/2022/TT-BGD?T")
+    category: Mapped[str] = mapped_column(String(100), default="Khác", nullable=False, index=True, comment="MOET broad field or category according to Circular 09/2022/TT-BGDĐT")
     degree_level: Mapped[str] = mapped_column(String(50), default="Đại học", nullable=False)
     
     # 6-Dimensional Holland RIASEC Vector: {"R": 0.1, "I": 0.9, "A": 0.2, "S": 0.3, "E": 0.4, "C": 0.6}

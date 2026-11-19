@@ -1,233 +1,96 @@
-import { readStorage, writeStorage } from "./storage"
+import { readStorage } from "./storage"
 
-export async function apiRequest<T>(
-  path: string,
-  fallback: T,
-  init?: RequestInit,
-): Promise<T> {
-  const isGet = !init?.method || init.method.toUpperCase() === "GET"
-  const cacheKey = `career-guide:${path}`
-  const token = readStorage<string | null>("career-guide:token", null)
-  const authHeaders: Record<string, string> = token
-    ? { Authorization: `Bearer ${token}` }
-    : {}
+export const SESSION_INVALID_EVENT = "career-guide:session-invalid"
+export const SESSION_CHANGED_EVENT = "career-guide:session-changed"
 
+export class ApiError extends Error {
+  status: number
+  code: string
+  constructor(message: string, status = 0, code = "NETWORK_ERROR") {
+    super(message)
+    this.name = "ApiError"
+    this.status = status
+    this.code = code
+  }
+}
+
+export function currentToken() {
+  return readStorage<string | null>("career-guide:token", null)
+}
+
+export function expireSession(token: string | null, message: string) {
+  if (token && token === currentToken()) {
+    window.dispatchEvent(new CustomEvent(SESSION_INVALID_EVENT, { detail: { token, message } }))
+  }
+}
+
+/** Chỉ dùng HTTP thật; không lưu phản hồi quản trị hoặc dữ liệu người khác vào bộ nhớ bền. */
+export async function apiFetch(path: string, init: RequestInit = {}, timeoutMs = 20000): Promise<Response> {
+  const token = currentToken()
+  const controller = new AbortController()
+  const cancel = () => controller.abort()
+  init.signal?.addEventListener("abort", cancel, { once: true })
+  if (init.signal?.aborted) controller.abort()
+  const timer = window.setTimeout(cancel, timeoutMs)
+  const headers = new Headers(init.headers)
+  if (token) headers.set("Authorization", `Bearer ${token}`)
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json")
+  }
   try {
-    const response = await fetch(`/api${path}`, {
-      ...init,
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders,
-        ...init?.headers,
-      },
+    const response = await fetch(path.startsWith("/api/") ? path : `/api${path}`, {
+      ...init, headers, signal: controller.signal, cache: "no-store",
     })
-    if (!response.ok) throw new Error(`HTTP ${response.status}`)
-    const data = (await response.json()) as T
-    if (isGet) {
-      writeStorage(cacheKey, data)
+    // Giữ timeout và AbortSignal đến khi nhận đủ body, kể cả máy chủ đã gửi headers.
+    const body = await response.arrayBuffer()
+    if (currentToken() !== token) throw new DOMException("Phiên đăng nhập đã thay đổi.", "AbortError")
+    if (response.status === 401) expireSession(token, "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.")
+    if (response.status === 403 && token && !path.endsWith("/identity/me")) {
+      window.dispatchEvent(new CustomEvent(SESSION_CHANGED_EVENT))
     }
-    return data
-  } catch {
-    if (isGet) {
-      const cached = readStorage<T | null>(cacheKey, null)
-      if (cached) return cached
-      writeStorage(cacheKey, fallback)
-    }
+    return new Response([204, 205, 304].includes(response.status) ? null : body, { status: response.status, statusText: response.statusText, headers: response.headers })
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error
+    if (error instanceof ApiError) throw error
+    throw new ApiError("Không kết nối được máy chủ. Kiểm tra mạng và thử lại.")
+  } finally {
+    window.clearTimeout(timer)
+    init.signal?.removeEventListener("abort", cancel)
+  }
+}
+
+export async function requestJSON<T>(path: string, init: RequestInit = {}, timeoutMs = 20000): Promise<T> {
+  const token = currentToken()
+  const response = await apiFetch(path, init, timeoutMs)
+  const data: unknown = response.status === 204 ? null : await response.json().catch(() => null)
+  if (currentToken() !== token) throw new DOMException("Phiên đăng nhập đã thay đổi.", "AbortError")
+  if (!response.ok) {
+    const detail = data && typeof data === "object" && "detail" in data ? data.detail : null
+    const message = typeof detail === "string" ? detail
+      : detail && typeof detail === "object" && "message" in detail ? String(detail.message)
+      : response.status === 422 ? "Dữ liệu chưa hợp lệ. Kiểm tra lại các trường đã nhập."
+      : `Không thể hoàn tất yêu cầu (HTTP ${response.status}).`
+    const code = detail && typeof detail === "object" && "code" in detail ? String(detail.code) : `HTTP_${response.status}`
+    throw new ApiError(message, response.status, code)
+  }
+  return data as T
+}
+
+/** Các màn hình đọc có thể cung cấp trạng thái rỗng; lỗi ghi dùng requestJSON để hiển thị đúng. */
+export async function apiRequest<T>(path: string, fallback: T, init?: RequestInit): Promise<T> {
+  try {
+    return await requestJSON<T>(path, init)
+  } catch (error) {
+    if (error instanceof DOMException && error.name === "AbortError") throw error
+    if (path.startsWith("/admin/") || path.includes("llm-config") || path.includes("llm-status")) throw error
     return fallback
   }
 }
 
-interface LocalUserRecord {
-  id: string
-  email: string
-  full_name: string
-  password?: string
-  role: string
+export function authPost<T>(path: string, body: unknown): Promise<T> {
+  return requestJSON<T>(path, { method: "POST", body: JSON.stringify(body) })
 }
 
-const LOCAL_USERS_KEY = "career-guide:local-users"
-
-function handleLocalAuthFallback<T>(path: string, body: unknown): T {
-  const payload = (body && typeof body === "object" ? body : {}) as Record<
-    string,
-    unknown
-  >
-  const rawEmail = String(payload.email || "").trim().toLowerCase()
-  const password = String(payload.password || "")
-  const fullName = String(
-    payload.full_name || rawEmail.split("@")[0] || "Học sinh",
-  ).trim()
-
-  const users = readStorage<LocalUserRecord[]>(LOCAL_USERS_KEY, [
-    {
-      id: "admin-default",
-      email: "admin@careerguide.vn",
-      full_name: "Quản trị viên AI CareerGuide",
-      password: "admin",
-      role: "ADMIN",
-    },
-  ])
-
-  if (path.includes("/identity/register")) {
-    if (rawEmail === "admin@careerguide.vn") {
-      throw new Error("Email này đã được đăng ký trong hệ thống.")
-    }
-    const existing = users.find((u) => u.email.toLowerCase() === rawEmail)
-    if (existing) {
-      throw new Error("Email này đã được đăng ký. Vui lòng đăng nhập.")
-    }
-    const newUser: LocalUserRecord = {
-      id: `user-${Date.now()}`,
-      email: rawEmail,
-      full_name: fullName,
-      password,
-      role: "STUDENT",
-    }
-    writeStorage(LOCAL_USERS_KEY, [...users, newUser])
-    return {
-      id: newUser.id,
-      email: newUser.email,
-      full_name: newUser.full_name,
-      role: newUser.role,
-    } as unknown as T
-  }
-
-  if (path.includes("/identity/login")) {
-    const matched = users.find((u) => u.email.toLowerCase() === rawEmail)
-    if (matched) {
-      if (
-        matched.password &&
-        matched.password !== password &&
-        !(rawEmail === "admin@careerguide.vn" && password.length >= 5)
-      ) {
-        throw new Error("Email hoặc mật khẩu không chính xác.")
-      }
-      return {
-        access_token: `local-jwt-${matched.id}-${Date.now()}`,
-        token_type: "bearer",
-        role: matched.role,
-        user: {
-          id: matched.id,
-          email: matched.email,
-          full_name: matched.full_name,
-          role: matched.role,
-        },
-      } as unknown as T
-    }
-
-    const inferredRole =
-      rawEmail === "admin@careerguide.vn" ? "ADMIN" : "STUDENT"
-    const autoUser: LocalUserRecord = {
-      id: `user-${Date.now()}`,
-      email: rawEmail,
-      full_name: fullName,
-      password,
-      role: inferredRole,
-    }
-    writeStorage(LOCAL_USERS_KEY, [...users, autoUser])
-    return {
-      access_token: `local-jwt-${autoUser.id}-${Date.now()}`,
-      token_type: "bearer",
-      role: autoUser.role,
-      user: {
-        id: autoUser.id,
-        email: autoUser.email,
-        full_name: autoUser.full_name,
-        role: autoUser.role,
-      },
-    } as unknown as T
-  }
-
-  if (
-    path.includes("/identity/google-login") ||
-    path.includes("/identity/google/callback")
-  ) {
-    const googleEmail = rawEmail || "student@gmail.com"
-    const role = googleEmail === "admin@careerguide.vn" ? "ADMIN" : "STUDENT"
-    return {
-      access_token: `google-jwt-${Date.now()}`,
-      token_type: "bearer",
-      role,
-      user: {
-        id: String(payload.google_id || googleEmail),
-        email: googleEmail,
-        full_name: fullName,
-        role,
-      },
-    } as unknown as T
-  }
-
-  throw new Error("Dịch vụ xác thực tạm thời gián đoạn.")
-}
-
-export async function authPost<T>(path: string, body: unknown): Promise<T> {
-  const token = readStorage<string | null>("career-guide:token", null)
-  const authHeaders: Record<string, string> = token
-    ? { Authorization: `Bearer ${token}` }
-    : {}
-
-  try {
-    const response = await fetch(`/api${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders,
-      },
-      body: JSON.stringify(body),
-    })
-
-    if ([404, 405, 502, 503, 504].includes(response.status)) {
-      return handleLocalAuthFallback<T>(path, body)
-    }
-
-    const data = await response.json().catch(() => null)
-    if (!response.ok) {
-      const detail =
-        data && typeof data === "object" && "detail" in data
-          ? String((data as { detail: unknown }).detail)
-          : `Lỗi xác thực (HTTP ${response.status})`
-      throw new Error(detail)
-    }
-
-    return data as T
-  } catch (err: unknown) {
-    if (
-      err instanceof TypeError ||
-      (err instanceof Error && /HTTP (404|405|502|503|504)/.test(err.message))
-    ) {
-      return handleLocalAuthFallback<T>(path, body)
-    }
-    throw err
-  }
-}
-
-export async function authPut<T>(path: string, body: unknown): Promise<T> {
-  const token = readStorage<string | null>("career-guide:token", null)
-  const authHeaders: Record<string, string> = token
-    ? { Authorization: `Bearer ${token}` }
-    : {}
-
-  try {
-    const response = await fetch(`/api${path}`, {
-      method: "PUT",
-      headers: {
-        "Content-Type": "application/json",
-        ...authHeaders,
-      },
-      body: JSON.stringify(body),
-    })
-
-    const data = await response.json().catch(() => null)
-    if (!response.ok) {
-      const detail =
-        data && typeof data === "object" && "detail" in data
-          ? String((data as { detail: unknown }).detail)
-          : `Lỗi cập nhật (HTTP ${response.status})`
-      throw new Error(detail)
-    }
-
-    return data as T
-  } catch (err: unknown) {
-    throw err
-  }
+export function authPut<T>(path: string, body: unknown): Promise<T> {
+  return requestJSON<T>(path, { method: "PUT", body: JSON.stringify(body) })
 }

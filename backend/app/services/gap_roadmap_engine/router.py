@@ -27,7 +27,7 @@ async def get_major_roadmap(
 ):
     """
     Retrieves verified study roadmap directly indexed by major_code from cache (<= 1s response time).
-    Falls back gracefully to static verified template if detailed curriculum is still in curation.
+    Returns an explicitly unverified exploration template when no curated roadmap exists.
     """
     return await service.get_cached_major_roadmap(db, major_code)
 
@@ -59,13 +59,10 @@ async def personalize_roadmap_for_student(
     """
     from app.services.llamaindex_rag_orchestrator.guidance_rag import personalize_guidance
     
-    gap_result = await service.get_student_major_skill_gaps(db, current_user.id, major_code)
-    missing_skills = [s["skill_name"] for s in gap_result.get("missing_skills", [])]
-    
     req = GuidancePersonalizationRequest(
         major_code=major_code,
         user_id=current_user.id,
-        missing_skills=missing_skills,
+        missing_skills=[],
         weekly_hours_available=weekly_hours_available
     )
     return await personalize_guidance(db, req)

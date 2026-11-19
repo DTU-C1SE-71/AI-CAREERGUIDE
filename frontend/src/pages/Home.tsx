@@ -21,7 +21,7 @@ import { PageContainer } from "../components/layout/PageContainer"
 const pillars = [
   {
     icon: Compass,
-    weight: "45% trọng số",
+    weight: "Trụ cột 1 · Hệ số động",
     category: "Sở thích nghề nghiệp",
     title: "Holland RIASEC",
     text: "30 câu hỏi thực tế định vị 6 nhóm xu hướng nghề nghiệp: Kỹ thuật, Nghiên cứu, Nghệ thuật, Xã hội, Quản lý và Nghiệp vụ.",
@@ -29,7 +29,7 @@ const pillars = [
   },
   {
     icon: BarChart3,
-    weight: "35% trọng số",
+    weight: "Trụ cột 2 · Hệ số động",
     category: "Năng lực học tập",
     title: "Chuẩn hóa Z-Score",
     text: "Đối chiếu điểm số học bạ và thi cử theo các tổ hợp môn xét tuyển, chuẩn hóa độ lệch điểm để dự báo chính xác cơ hội trúng tuyển.",
@@ -37,7 +37,7 @@ const pillars = [
   },
   {
     icon: Brain,
-    weight: "20% trọng số",
+    weight: "Trụ cột 3 · Hệ số động",
     category: "Phong cách nhận thức",
     title: "Tư duy & Thích ứng",
     text: "8 chiều đánh giá phương thức tiếp thu, ra quyết định và thích ứng với môi trường học thuật đại học lẫn thị trường việc làm.",
@@ -136,7 +136,7 @@ export function Home() {
                   Bắt đầu đánh giá
                 </Button>
               </Link>
-              <Link to="/dashboard" className="w-full sm:w-auto">
+              <Link to="/majors" className="w-full sm:w-auto">
                 <Button
                   className="w-full sm:w-auto"
                   variant="secondary"

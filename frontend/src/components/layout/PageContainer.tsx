@@ -17,7 +17,7 @@ export function PageContainer({
 
   return (
     <div
-      className={`mx-auto w-full ${widths[size]} px-4 sm:px-6 lg:px-8 xl:px-10 ${className}`}
+      className={`mx-auto w-full ${widths[size]} px-3.5 sm:px-6 lg:px-8 xl:px-10 ${className}`}
     >
       {children}
     </div>

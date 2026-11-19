@@ -53,6 +53,56 @@ from app.services.llamaindex_rag_orchestrator.guidance_rag import (
 from app.services.gap_roadmap_engine.service import generate_static_fallback_roadmap
 
 
+
+# @blast-radius: core, api, db, integration
+# Fixture chỉ dùng dữ liệu tổng hợp và HTTP stub; không đọc DB/provider người dùng.
+from sqlalchemy import select
+from cryptography.fernet import Fernet
+from app.models.taxonomy import Major
+from test_ai_config_runtime import stubs
+
+SOURCE_TITLE = "Nguồn học liệu tổng hợp"
+SOURCE_URL = "https://vnu.edu.vn/curriculum/7480201"
+SOURCE_TEXT = "Tài liệu tổng hợp: Toán học, Logic, Python và Cơ sở dữ liệu. Thực hành ba mốc kỹ năng. Nguồn tham khảo: " + SOURCE_URL
+
+
+def roadmap_payload():
+    return {"major_code": "7480201", "major_title": "Công nghệ thông tin",
+            "prerequisite_knowledge": ["Toán học", "Logic"], "target_skills": ["Python", "Cơ sở dữ liệu"],
+            "milestones": [{"step": i, "title": f"Mốc học tập {i}", "description": "Thực hành kiến thức nền", "duration_weeks": 2, "learning_objectives": ["Đọc tài liệu"], "actions": ["Làm bài tập"]} for i in range(1, 4)],
+            "reference_materials": [{"title": SOURCE_TITLE, "author_or_institution": "Nguồn tổng hợp", "url": SOURCE_URL}],
+            "source_title": SOURCE_TITLE, "source_url": SOURCE_URL, "source_page": None}
+
+
+async def seed_major(db):
+    major = Major(major_code="7480201", name="Công nghệ thông tin", category="Máy tính và công nghệ thông tin", riasec_vector={"R": .6, "I": .9, "A": .3, "S": .3, "E": .4, "C": .7}, cognitive_attributes={"thinking": "logical"}, industry_outlook="Thông tin tổng hợp đã kiểm thử", is_active=True)
+    db.add(major)
+    await db.commit()
+    return major
+
+
+async def seed_admin(db):
+    admin = User(email="synthetic-admin@example.test", full_name="Admin tổng hợp", hashed_password="synthetic-non-login-hash", role=UserRole.ADMIN, is_active=True)
+    db.add(admin)
+    await db.commit()
+    return admin
+
+
+async def seed_staging(db):
+    record = StagingRecord(stream_type=StagingStreamType.STREAM_B_ROADMAP, status=StagingStatus.PENDING, major_code="7480201", content_hash=hashlib.sha256(uuid.uuid4().bytes).hexdigest(), extracted_payload=roadmap_payload(), raw_content=SOURCE_TEXT, source_title=SOURCE_TITLE, source_url=SOURCE_URL)
+    db.add(record)
+    await db.commit()
+    return record
+
+
+async def configured_snapshot(db, url, monkeypatch):
+    from test_ai_config_runtime import draft_for
+    from app.services.ai_config.service import apply_config, resolve_snapshot
+    monkeypatch.setattr(settings, "AI_CONFIG_ENCRYPTION_KEY", Fernet.generate_key().decode())
+    await apply_config(db, await draft_for(db, url), "synthetic-config-admin")
+    return await resolve_snapshot(db)
+
+
 # =========================================================================
 # 1. PII SANITIZATION TESTS (Law 91/2025/QH15 & OWASP ASVS Level 2)
 # =========================================================================
@@ -174,51 +224,47 @@ class TestStreamBDiscovery:
         assert is_url_whitelisted("https://buy-cheap-diploma.xyz/degree", settings.WHITELISTED_SEARCH_DOMAINS) is False
         assert is_url_whitelisted("https://social-network.org/post/123", settings.WHITELISTED_SEARCH_DOMAINS) is False
 
-    @pytest.mark.anyio
-    async def test_discover_academic_resources_via_tavily_fallback(self):
-        # When no external API key, provides verified fallback domain
-        results = await discover_academic_resources_via_tavily("7480201", "Công nghệ thông tin")
-        assert len(results) > 0
-        assert is_url_whitelisted(results[0]["url"], settings.WHITELISTED_SEARCH_DOMAINS) is True
-        assert "7480201" in results[0]["url"]
+    @pytest.mark.asyncio
+    async def test_missing_tavily_key_never_invents_fallback_source(self, monkeypatch):
+        monkeypatch.setattr(settings, "TAVILY_API_KEY", "")
+        with pytest.raises(HTTPException) as exc:
+            await discover_academic_resources_via_tavily("7480201", "Công nghệ thông tin")
+        assert exc.value.status_code == 503
+        assert "Chưa cấu hình Tavily" in exc.value.detail
 
-    @pytest.mark.anyio
-    async def test_extract_roadmap_structure_matches_pydantic_schema(self):
-        payload = await extract_roadmap_with_llm(
-            major_code="7480201",
-            major_title="Công nghệ thông tin",
-            source_title="Chương trình đào tạo chuẩn ĐHQG",
-            source_url="https://vnu.edu.vn/curriculum/7480201",
-            scraped_content="Đề cương môn học..."
-        )
+    @pytest.mark.asyncio
+    async def test_extract_roadmap_structure_matches_pydantic_schema(self, ai_runtime_db, stubs, monkeypatch):
+        db = ai_runtime_db
+        a, _ = stubs
+        snapshot = await configured_snapshot(db, a.url, monkeypatch)
+        evidence = roadmap_payload()
+        a.payload = {"choices": [{"message": {"content": json.dumps(evidence)}, "finish_reason": "stop"}]}
+        payload = await extract_roadmap_with_llm("7480201", "Công nghệ thông tin", SOURCE_TITLE, SOURCE_URL, SOURCE_TEXT, snapshot=snapshot, db=db)
         assert isinstance(payload, ExtractedRoadmapPayload)
         assert payload.major_code == "7480201"
         assert len(payload.prerequisite_knowledge) >= 2
         assert len(payload.target_skills) >= 2
         assert len(payload.milestones) >= 3
-        for idx, m in enumerate(payload.milestones, start=1):
-            assert m.step == idx
-            assert len(m.actions) > 0
-            assert len(m.learning_objectives) > 0
+        for idx, milestone in enumerate(payload.milestones, start=1):
+            assert milestone.step == idx
+            assert milestone.actions and milestone.learning_objectives
+        assert a.received[0]["body"]["model"] == snapshot.model
 
-    @pytest.mark.anyio
-    async def test_stream_b_duplicate_staged_roadmap_triggers_409(self):
-        db = AsyncMock()
-        # Mock database returning existing duplicate record
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = StagingRecord(
-            content_hash="mock_hash",
-            stream_type=StagingStreamType.STREAM_B_ROADMAP,
-            status=StagingStatus.PENDING,
-            source_title="Title"
-        )
-        db.execute.return_value = mock_res
-
-        with patch("app.services.llamaindex_rag_orchestrator.stream_b_discovery.discover_academic_resources_via_tavily") as mock_disc:
-            mock_disc.return_value = [{"title": "Chương trình", "url": "https://vnu.edu.vn/curriculum/7480201", "snippet": "Snippet", "raw_content": "Content"}]
-            with pytest.raises(HTTPException) as exc:
-                await discover_and_stage_roadmap(db, "7480201", "Công nghệ thông tin")
-            assert exc.value.status_code == status.HTTP_409_CONFLICT
+    @pytest.mark.asyncio
+    async def test_stream_b_duplicate_staged_roadmap_triggers_409(self, ai_runtime_db, stubs, monkeypatch):
+        db = ai_runtime_db
+        a, _ = stubs
+        await seed_major(db)
+        await configured_snapshot(db, a.url, monkeypatch)
+        a.payload = {"choices": [{"message": {"content": json.dumps(roadmap_payload())}, "finish_reason": "stop"}]}
+        with patch("app.services.llamaindex_rag_orchestrator.stream_b_discovery.discover_academic_resources_via_tavily", new=AsyncMock(return_value=[{"title": SOURCE_TITLE, "url": SOURCE_URL, "raw_content": SOURCE_TEXT}])):
+            with patch("app.services.llamaindex_rag_orchestrator.stream_b_discovery.fetch_with_jina_reader", new=AsyncMock(return_value=SOURCE_TEXT)):
+                first = await discover_and_stage_roadmap(db, "7480201", "Công nghệ thông tin")
+                assert first.status == StagingStatus.PENDING
+                with pytest.raises(HTTPException) as exc:
+                    await discover_and_stage_roadmap(db, "7480201", "Công nghệ thông tin")
+                assert exc.value.status_code == 409
+        assert len((await db.execute(select(StagingRecord))).scalars().all()) == 1
 
 
 # =========================================================================
@@ -238,11 +284,16 @@ class TestVectorEmbedding:
         vec2 = generate_deterministic_embedding(text)
         assert vec1 == vec2
 
-    @pytest.mark.anyio
-    async def test_get_text_embedding_returns_1536_vector(self):
-        vec = await get_text_embedding("Kiến thức tiên quyết Toán rời rạc")
-        assert len(vec) == 1536
-        assert all(isinstance(x, float) for x in vec)
+    @pytest.mark.asyncio
+    async def test_get_text_embedding_returns_1536_vector(self, ai_runtime_db, stubs, monkeypatch):
+        a, _ = stubs
+        snapshot = await configured_snapshot(ai_runtime_db, a.url, monkeypatch)
+        vector = [1.0] + [0.0] * 1535
+        a.payload = {"data": [{"embedding": vector}]}
+        vec = await get_text_embedding("Kiến thức tiên quyết Toán rời rạc", snapshot=snapshot, db=ai_runtime_db)
+        assert len(vec) == 1536 and all(isinstance(x, float) for x in vec)
+        assert vec == vector
+        assert a.received[0]["path"].endswith("/embeddings")
 
 
 # =========================================================================
@@ -250,126 +301,50 @@ class TestVectorEmbedding:
 # =========================================================================
 
 class TestHITLGovernance:
-    @pytest.mark.anyio
-    async def test_admin_update_pending_staging_payload(self):
-        db = AsyncMock()
-        record_id = uuid.uuid4()
-        record = StagingRecord(
-            id=record_id,
-            stream_type=StagingStreamType.STREAM_B_ROADMAP,
-            status=StagingStatus.PENDING,
-            major_code="7480201",
-            content_hash="hash1",
-            extracted_payload={"title": "Original Title"},
-            source_title="Source",
-            source_url="https://vnu.edu.vn"
-        )
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = record
-        db.execute.return_value = mock_res
+    @pytest.mark.asyncio
+    async def test_admin_update_pending_staging_payload(self, ai_runtime_db):
+        db = ai_runtime_db
+        await seed_major(db)
+        record = await seed_staging(db)
+        changed = roadmap_payload()
+        changed["milestones"][0]["title"] = "Nền tảng đã kiểm chứng"
+        updated = await update_staging_record(db, record.id, StagingRecordUpdate(extracted_payload=changed, source_title=SOURCE_TITLE))
+        await db.refresh(updated)
+        assert updated.extracted_payload["milestones"][0]["title"] == "Nền tảng đã kiểm chứng"
+        assert updated.source_title == SOURCE_TITLE and updated.status == StagingStatus.PENDING
 
-        update_data = StagingRecordUpdate(
-            extracted_payload={"title": "Updated Refined Title"},
-            source_title="Verified Source Title"
-        )
-        updated = await update_staging_record(db, record_id, update_data)
-        assert updated.extracted_payload["title"] == "Updated Refined Title"
-        assert updated.source_title == "Verified Source Title"
-        assert db.commit.called
-
-    @pytest.mark.anyio
-    async def test_review_approval_publishes_to_major_roadmaps_and_vector(self):
-        db = AsyncMock()
-        db.add = MagicMock()
-        admin_user = User(id=uuid.uuid4(), email="admin@careerguide.vn", role=UserRole.ADMIN)
-        record_id = uuid.uuid4()
-        
-        roadmap_payload = {
-            "major_title": "Công nghệ thông tin",
-            "prerequisite_knowledge": ["Toán học", "Logic"],
-            "target_skills": ["Lập trình Python", "Cơ sở dữ liệu"],
-            "milestones": [
-                {
-                    "step": 1,
-                    "title": "Nhập môn Lập trình",
-                    "description": "Làm quen với Python",
-                    "duration_weeks": 4,
-                    "learning_objectives": ["Viết hàm", "Xử lý mảng"],
-                    "actions": ["Làm bài tập LeetCode", "Đọc giáo trình"]
-                }
-            ],
-            "reference_materials": [
-                {"title": "Giáo trình CSDL", "author_or_institution": "HUST", "url": "https://hust.edu.vn"}
-            ]
-        }
-        
-        record = StagingRecord(
-            id=record_id,
-            stream_type=StagingStreamType.STREAM_B_ROADMAP,
-            status=StagingStatus.PENDING,
-            major_code="7480201",
-            content_hash="hash_approval_test",
-            extracted_payload=roadmap_payload,
-            source_title="ĐHQG Hà Nội",
-            source_url="https://vnu.edu.vn"
-        )
-        
-        # db.execute returns: 1st for get_staging_record, 2nd for select(MajorRoadmap)
-        mock_res1 = MagicMock()
-        mock_res1.scalar_one_or_none.return_value = record
-        mock_res2 = MagicMock()
-        mock_res2.scalar_one_or_none.return_value = None  # No prior cached roadmap
-        db.execute.side_effect = [mock_res1, mock_res2]
-
-        review_req = StagingRecordReview(
-            status=StagingStatus.APPROVED,
-            review_notes="Đã kiểm tra kỹ khung chương trình đối chiếu Thông tư 09."
-        )
-
-        reviewed = await review_and_publish_staging_record(db, record_id, admin_user, review_req)
-        
+    @pytest.mark.asyncio
+    async def test_review_approval_publishes_to_major_roadmaps_and_vector(self, ai_runtime_db, stubs, monkeypatch):
+        db = ai_runtime_db
+        a, _ = stubs
+        await seed_major(db)
+        admin = await seed_admin(db)
+        record = await seed_staging(db)
+        await configured_snapshot(db, a.url, monkeypatch)
+        a.payload = {"data": [{"embedding": [1.0] + [0.0] * 1535}]}
+        reviewed = await review_and_publish_staging_record(db, record.id, admin, StagingRecordReview(status=StagingStatus.APPROVED, review_notes="Đã đối chiếu nguồn tổng hợp."))
         assert reviewed.status == StagingStatus.APPROVED
-        assert reviewed.reviewed_by == admin_user.id
-        assert reviewed.review_notes == "Đã kiểm tra kỹ khung chương trình đối chiếu Thông tư 09."
-        
-        # Verify publications added to db session
-        added_objects = [call.args[0] for call in db.add.call_args_list]
-        roadmap_added = any(isinstance(obj, MajorRoadmap) and obj.is_fallback is False for obj in added_objects)
-        embeddings_added = [obj for obj in added_objects if isinstance(obj, KnowledgeEmbedding)]
-        
-        assert roadmap_added is True
-        assert len(embeddings_added) >= 3  # overview, milestone, reference materials
-        for emb in embeddings_added:
-            assert len(emb.embedding) == 1536
-            assert emb.major_code == "7480201"
+        assert reviewed.reviewed_by == admin.id
+        assert reviewed.review_notes == "Đã đối chiếu nguồn tổng hợp."
+        roadmap = (await db.execute(select(MajorRoadmap))).scalar_one()
+        embeddings = (await db.execute(select(KnowledgeEmbedding))).scalars().all()
+        assert roadmap.is_fallback is False
+        assert len(embeddings) >= 3
+        for embedding in embeddings:
+            assert len(embedding.embedding) == 1536
+            assert embedding.major_code == "7480201"
+        assert len(a.received) == len(embeddings)
 
-    @pytest.mark.anyio
-    async def test_review_rejection_does_not_publish_roadmap(self):
-        db = AsyncMock()
-        admin_user = User(id=uuid.uuid4(), email="admin@careerguide.vn", role=UserRole.ADMIN)
-        record_id = uuid.uuid4()
-        record = StagingRecord(
-            id=record_id,
-            stream_type=StagingStreamType.STREAM_B_ROADMAP,
-            status=StagingStatus.PENDING,
-            major_code="7480201",
-            content_hash="hash_reject",
-            extracted_payload={"title": "Invalid Curriculum"},
-            source_title="Source",
-            source_url="https://vnu.edu.vn"
-        )
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = record
-        db.execute.return_value = mock_res
-
-        review_req = StagingRecordReview(
-            status=StagingStatus.REJECTED,
-            review_notes="Nội dung không chuẩn hóa."
-        )
-        reviewed = await review_and_publish_staging_record(db, record_id, admin_user, review_req)
-        
+    @pytest.mark.asyncio
+    async def test_review_rejection_does_not_publish_roadmap(self, ai_runtime_db):
+        db = ai_runtime_db
+        await seed_major(db)
+        admin = await seed_admin(db)
+        record = await seed_staging(db)
+        reviewed = await review_and_publish_staging_record(db, record.id, admin, StagingRecordReview(status=StagingStatus.REJECTED, review_notes="Nội dung chưa đủ bằng chứng."))
         assert reviewed.status == StagingStatus.REJECTED
-        assert not any(isinstance(call.args[0], MajorRoadmap) for call in db.add.call_args_list)
+        assert not (await db.execute(select(MajorRoadmap))).scalars().all()
+        assert not (await db.execute(select(KnowledgeEmbedding))).scalars().all()
 
 
 # =========================================================================
@@ -386,7 +361,7 @@ class TestGuidanceRAGAndFallback:
         assert "reference_materials" in template
 
     @pytest.mark.anyio
-    async def test_uncurated_major_immediately_serves_static_fallback(self):
+    async def test_unknown_major_is_rejected_before_personalization(self):
         db = AsyncMock()
         # Mock database returning no cached roadmap
         mock_res1 = MagicMock()
@@ -401,81 +376,35 @@ class TestGuidanceRAGAndFallback:
             missing_skills=["Tư duy thuật toán", "Lập trình căn bản"],
             weekly_hours_available=12
         )
-        res = await personalize_guidance(db, req)
-        assert res.is_fallback is True
-        assert res.major_code == "7480999"
-        assert len(res.schedule) == 3 or len(res.schedule) == 4
-        assert res.schedule[0].focus_skill == "Tư duy thuật toán"
+        from fastapi import HTTPException
+        with pytest.raises(HTTPException) as error:
+            await personalize_guidance(db, req)
+        assert error.value.status_code == 404
 
-    @pytest.mark.anyio
-    async def test_ai_api_timeout_triggers_graceful_static_fallback(self):
-        db = AsyncMock()
-        cached_roadmap = MajorRoadmap(
-            major_code="7480201",
-            title="Lộ trình CNTT",
-            version="1.0-approved",
-            is_fallback=False,
-            roadmap_data={
-                "major_title": "Công nghệ thông tin",
-                "milestones": [
-                    {"step": 1, "title": "Bước 1", "learning_objectives": ["A"], "actions": ["B"]}
-                ]
-            }
-        )
-        mock_res1 = MagicMock()
-        mock_res1.scalar_one_or_none.return_value = cached_roadmap
-        mock_res2 = MagicMock()
-        mock_res2.scalar_one_or_none.return_value = None
-        db.execute.side_effect = [mock_res1, mock_res2]
+    @pytest.mark.asyncio
+    @patch("app.services.gap_roadmap_engine.service.get_student_major_skill_gaps", new_callable=AsyncMock, return_value={})
+    async def test_personalization_does_not_call_slow_llm(self, gaps, ai_runtime_db):
+        db = ai_runtime_db
+        await seed_major(db)
+        req = GuidancePersonalizationRequest(major_code="7480201", user_id=uuid.uuid4(), missing_skills=["Cơ sở dữ liệu"], weekly_hours_available=10)
+        with patch("app.services.ai_config.adapter.chat", side_effect=asyncio.TimeoutError) as provider:
+            response = await personalize_guidance(db, req)
+            provider.assert_not_called()
+        assert response.is_fallback is True
+        assert "mẫu khám phá" in response.personalization_summary
+        assert response.schedule and response.schedule[0].focus_skill != "Cơ sở dữ liệu"
 
-        req = GuidancePersonalizationRequest(
-            major_code="7480201",
-            user_id=uuid.uuid4(),
-            missing_skills=["Cơ sở dữ liệu"],
-            weekly_hours_available=10
-        )
-
-        # Simulate OpenAI timing out (> 8.0s)
-        async def slow_llm_call(*args, **kwargs):
-            await asyncio.sleep(15.0)  # Exceeds 8.0s timeout
-
-        with patch("app.services.llamaindex_rag_orchestrator.guidance_rag.settings.OPENAI_API_KEY", "mock_key"):
-            with patch("app.services.llamaindex_rag_orchestrator.guidance_rag.call_llm_for_personalization", side_effect=asyncio.TimeoutError):
-                response = await personalize_guidance(db, req)
-                
-                assert response.is_fallback is True
-                assert "AI phản hồi quá 8 giây" in response.personalization_summary
-                assert len(response.schedule) > 0
-                assert response.schedule[0].focus_skill == "Cơ sở dữ liệu"
-
-    @pytest.mark.anyio
-    async def test_ai_network_error_triggers_graceful_fallback(self):
-        db = AsyncMock()
-        cached_roadmap = MajorRoadmap(
-            major_code="7480201",
-            title="Lộ trình CNTT",
-            version="1.0-approved",
-            is_fallback=False,
-            roadmap_data={"milestones": [{"step": 1, "title": "Step 1"}]}
-        )
-        mock_res1 = MagicMock()
-        mock_res1.scalar_one_or_none.return_value = cached_roadmap
-        mock_res2 = MagicMock()
-        mock_res2.scalar_one_or_none.return_value = None
-        db.execute.side_effect = [mock_res1, mock_res2]
-
-        req = GuidancePersonalizationRequest(
-            major_code="7480201",
-            user_id=uuid.uuid4(),
-            missing_skills=["Cấu trúc dữ liệu"],
-            weekly_hours_available=8
-        )
-
-        with patch("app.services.llamaindex_rag_orchestrator.guidance_rag.settings.OPENAI_API_KEY", "mock_key"):
-            with patch("app.services.llamaindex_rag_orchestrator.guidance_rag.call_llm_for_personalization", side_effect=RuntimeError("Connection Reset by Peer")):
-                response = await personalize_guidance(db, req)
-                assert response.is_fallback is True
-                assert "Sự cố kết nối AI API" in response.personalization_summary
+    @pytest.mark.asyncio
+    @patch("app.services.gap_roadmap_engine.service.get_student_major_skill_gaps", new_callable=AsyncMock, return_value={})
+    async def test_personalization_is_independent_of_provider_errors(self, gaps, ai_runtime_db):
+        db = ai_runtime_db
+        await seed_major(db)
+        req = GuidancePersonalizationRequest(major_code="7480201", user_id=uuid.uuid4(), missing_skills=["Cấu trúc dữ liệu"], weekly_hours_available=8)
+        with patch("app.services.ai_config.adapter.chat", side_effect=RuntimeError("Synthetic provider failure")) as provider:
+            response = await personalize_guidance(db, req)
+            provider.assert_not_called()
+        assert response.is_fallback is True
+        assert "mẫu khám phá" in response.personalization_summary
 
 
 # =========================================================================
@@ -490,41 +419,18 @@ class TestSecurityAndGuardrails:
         assert admin.role == UserRole.ADMIN
         assert student.role != UserRole.ADMIN
 
-    @pytest.mark.anyio
-    async def test_cache_lookup_latency_is_under_one_second(self):
-        db = AsyncMock()
-        now = datetime.now(timezone.utc)
-        cached_roadmap = MajorRoadmap(
-            id=uuid.uuid4(),
-            major_code="7480201",
-            title="Lộ trình CNTT",
-            version="1.0-approved",
-            is_fallback=False,
-            roadmap_data={
-                "milestones": [],
-                "prerequisite_knowledge": ["Toán"],
-                "target_skills": ["Lập trình"],
-                "reference_materials": [],
-                "source_title": "ĐHQG",
-                "source_url": "https://vnu.edu.vn"
-            },
-            created_at=now,
-            updated_at=now
-        )
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = cached_roadmap
-        db.execute.return_value = mock_res
-
+    @pytest.mark.asyncio
+    async def test_cache_lookup_latency_is_under_one_second(self, ai_runtime_db):
         import time
-        t0 = time.perf_counter()
-        # Direct DB query simulation
         from app.services.gap_roadmap_engine.service import get_cached_major_roadmap
+        db = ai_runtime_db
+        await seed_major(db)
+        db.add(MajorRoadmap(major_code="7480201", title="Lộ trình CNTT", version="1.0-approved", is_fallback=False, roadmap_data=roadmap_payload()))
+        await db.commit()
+        start = time.perf_counter()
         result = await get_cached_major_roadmap(db, "7480201")
-        elapsed = time.perf_counter() - t0
-        
-        # Must execute within 1.0s SLA (NFR01)
-        assert elapsed < 1.0
-        assert result.major_code == "7480201"
+        assert time.perf_counter() - start < 1.0
+        assert result.major_code == "7480201" and result.is_fallback is False
 
 # =========================================================================
 # 7. AI EXPLANATION & AI COUNSELOR CHAT TESTS (FR06 & LAW 91/2025 COMPLIANCE)
@@ -532,20 +438,12 @@ class TestSecurityAndGuardrails:
 
 class TestAIExplanationAndChatCounselor:
     @pytest.mark.anyio
-    async def test_ai_explanation_strictly_anonymized_and_includes_diagnostics(self):
+    async def test_ai_explanation_strictly_anonymized_and_includes_diagnostics(self, ai_runtime_db):
         from app.schemas.rag import AIExplanationRequest
         from app.services.llamaindex_rag_orchestrator.guidance_rag import explain_recommendation_with_ai
 
-        db = AsyncMock()
-        mock_major = MagicMock()
-        mock_major.name = "Công nghệ thông tin"
-        mock_major.category = "Máy tính và công nghệ thông tin"
-        mock_major.id = uuid.uuid4()
-        
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = mock_major
-        mock_res.scalars.return_value.all.return_value = []
-        db.execute.return_value = mock_res
+        db = ai_runtime_db
+        await seed_major(db)
 
         req = AIExplanationRequest(
             major_code="7480201",
@@ -566,15 +464,42 @@ class TestAIExplanationAndChatCounselor:
         assert "09" not in resp.detailed_explanation
 
     @pytest.mark.anyio
-    async def test_ai_counselor_chat_sanitizes_pii_and_responds(self):
+    async def test_ai_explanation_database_caching(self, ai_runtime_db):
+        from app.schemas.rag import AIExplanationRequest
+        from app.services.llamaindex_rag_orchestrator.guidance_rag import explain_recommendation_with_ai
+        from app.models.insight import MajorExplanationInsight
+        from sqlalchemy import select
+
+        db = ai_runtime_db
+        await seed_major(db)
+
+        req = AIExplanationRequest(
+            major_code="7480201",
+            riasec_scores={"R": 0.85, "I": 0.90},
+            grades_by_subject={"math": 9.0},
+        )
+
+        resp1 = await explain_recommendation_with_ai(db, req)
+        assert resp1.major_code == "7480201"
+
+        # Check DB has cached record
+        stmt = select(MajorExplanationInsight).where(MajorExplanationInsight.major_code == "7480201")
+        cached = (await db.execute(stmt)).scalar_one_or_none()
+        assert cached is not None
+        assert cached.major_code == "7480201"
+        assert cached.detailed_explanation == resp1.detailed_explanation
+
+        # Second call returns cached content with 0 extra token overhead
+        resp2 = await explain_recommendation_with_ai(db, req)
+        assert resp2.detailed_explanation == resp1.detailed_explanation
+
+    @pytest.mark.anyio
+    async def test_ai_counselor_chat_sanitizes_pii_and_responds(self, ai_runtime_db):
         from app.schemas.rag import AIChatRequest
         from app.services.llamaindex_rag_orchestrator.guidance_rag import chat_with_career_counselor
 
-        db = AsyncMock()
-        mock_res = MagicMock()
-        mock_res.scalar_one_or_none.return_value = None
-        mock_res.scalars.return_value.all.return_value = []
-        db.execute.return_value = mock_res
+        db = ai_runtime_db
+        await seed_major(db)
 
         # Student sends message containing accidental PII
         req = AIChatRequest(
@@ -592,76 +517,55 @@ class TestAIExplanationAndChatCounselor:
         # Ensure student's personal phone number was not echoed or exposed
         assert "0987654321" not in resp.reply
 
-    def test_llm_status_reports_model_and_masked_key(self):
+    @pytest.mark.asyncio
+    async def test_llm_status_reports_model_and_masked_key(self, ai_runtime_db, monkeypatch):
         from app.services.llamaindex_rag_orchestrator.guidance_rag import get_llm_status
-        status_info = get_llm_status()
-        from app.core.config import settings
-        assert status_info.model == settings.LLM_MODEL
-        assert status_info.embedding_model == "text-embedding-3-small"
-        assert isinstance(status_info.is_key_configured, bool)
+        monkeypatch.setattr(settings, "LLM_API_KEY", "sk-synth-status-test-only")
+        status_info = await get_llm_status(ai_runtime_db)
+        assert status_info["active"]["model"] == settings.LLM_MODEL
+        assert status_info["credential"]["state"] == "SET"
+        assert status_info["credential"]["masked"]
+        assert "sk-synth-status-test-only" not in json.dumps(status_info)
 
-    @pytest.mark.anyio
-    async def test_llm_connection_test_without_key_reports_clean_failure(self):
-        from app.schemas.rag import LLMConnectionTestRequest
+    @pytest.mark.asyncio
+    async def test_llm_connection_test_without_key_reports_clean_failure(self, ai_runtime_db):
+        from app.schemas.ai_config import AIConfigProbe
+        from app.services.llamaindex_rag_orchestrator.guidance_rag import get_llm_status, test_llm_connection
+        state = await get_llm_status(ai_runtime_db)
+        active = state["active"]
+        req = AIConfigProbe(source_mode="ENV", protocol=active["protocol"], base_url=active["base_url"], model=active["model"], auth_mode="BEARER", credential_action="KEEP", base_revision_token=state["revision_token"], probe_request_id="without-key", draft_digest="draft")
+        result = await test_llm_connection(req, ai_runtime_db, "test-without-key")
+        assert result["success"] is False
+        assert result["status_code"] == 409
+        assert result["code"] == "UNCONFIGURED_CREDENTIAL"
+
+    @pytest.mark.asyncio
+    async def test_llm_connection_test_with_actual_http_stub(self, ai_runtime_db, stubs, monkeypatch):
         from app.services.llamaindex_rag_orchestrator.guidance_rag import test_llm_connection
-        req = LLMConnectionTestRequest(api_key="")
-        result = await test_llm_connection(req)
-        assert result.success is False
-        assert result.status_code == 400
-        assert "Chưa cấu hình API Key" in result.message
+        from test_ai_config_runtime import draft_for, probe_for
+        a, _ = stubs
+        request = probe_for(await draft_for(ai_runtime_db, a.url, model="synthetic-probe-model"))
+        result = await test_llm_connection(request, ai_runtime_db, "probe-integration")
+        assert result["success"] is True
+        assert result["status_code"] == 200
+        assert result["model_used"] == "synthetic-probe-model"
+        assert result["latency_ms"] >= 0
+        assert len(a.received) == 1 and a.received[0]["body"]["max_tokens"] == 64
 
-    @pytest.mark.anyio
-    async def test_llm_connection_test_with_mocked_success(self):
-        from app.schemas.rag import LLMConnectionTestRequest
-        from app.services.llamaindex_rag_orchestrator.guidance_rag import test_llm_connection
-        with patch("openai.AsyncOpenAI") as mock_openai_cls:
-            mock_client = MagicMock()
-            mock_chat = AsyncMock()
-            mock_choice = MagicMock()
-            mock_choice.message.content = "PONG"
-            mock_response = MagicMock(choices=[mock_choice])
-            mock_chat.completions.create.return_value = mock_response
-            mock_client.chat = mock_chat
-            mock_openai_cls.return_value = mock_client
-
-            req = LLMConnectionTestRequest(api_key="sk-test-valid-key", model="deepseek-4.1-flash-ckey")
-            result = await test_llm_connection(req)
-            assert result.success is True
-            assert result.status_code == 200
-            assert result.model_used == "deepseek-4.1-flash-ckey"
-            assert result.preview_reply == "PONG"
-            assert result.latency_ms >= 0.0
-
-    @pytest.mark.anyio
-    async def test_dynamic_max_token_resolution_from_provider_models(self):
-        from app.core.llm_client import (
-            _match_model_record,
-            _parse_capabilities,
-            resolve_model_token_limits,
-            clear_model_caps_cache,
-        )
-        from app.services.llamaindex_rag_orchestrator.guidance_rag import get_llm_status
-
+    @pytest.mark.asyncio
+    async def test_dynamic_token_resolution_respects_safe_budget_and_exact_model(self, ai_runtime_db):
+        from app.core.llm_client import _match_model_record, _parse_capabilities, resolve_model_token_limits, clear_model_caps_cache
+        from app.services.ai_config.service import resolve_snapshot
         clear_model_caps_cache()
-        sample_models = [
-            {
-                "id": "cx/gpt-6-luna",
-                "capabilities": {"contextWindow": 272000, "maxOutput": 128000},
-                "context_length": 272000,
-                "max_completion_tokens": 128000,
-            }
-        ]
-        matched = _match_model_record(sample_models, "gpt-6-luna")
+        models = [{"id": "cx/gpt-6-luna", "capabilities": {"contextWindow": 272000, "maxOutput": 128000}}]
+        assert _match_model_record(models, "gpt-6-luna") is None
+        matched = _match_model_record(models, "cx/gpt-6-luna")
         assert matched is not None
         caps = _parse_capabilities(matched)
         assert caps["max_output_tokens"] == 128000
-        assert caps["context_window"] == 272000
-        assert caps["max_context_chars"] >= 240000
-
-        limits = await resolve_model_token_limits()
-        assert limits["max_output_tokens"] >= 128000
-
-        status_info = get_llm_status()
-        assert status_info.max_tokens >= 128000
-        assert status_info.context_window >= 272000
-
+        assert caps["context_window"] == 272000 and caps["max_context_chars"] == 1000000
+        snapshot = await resolve_snapshot(ai_runtime_db, allow_unconfigured=True)
+        with patch("app.services.ai_config.adapter.list_models", side_effect=AssertionError("No key must not call provider")) as listing:
+            limits = await resolve_model_token_limits(snapshot)
+            listing.assert_not_called()
+        assert limits["max_output_tokens"] <= 4096

@@ -8,7 +8,8 @@ class Settings(BaseSettings):
         env_file=(".env", "backend/.env"),
         env_file_encoding="utf-8",
         case_sensitive=True,
-        extra="ignore"
+        extra="ignore",
+        hide_input_in_errors=True
     )
 
     PROJECT_NAME: str = "AI CareerGuide Backend"
@@ -45,6 +46,12 @@ class Settings(BaseSettings):
 
     # AI Assistant & LLM Services (Persona: Navi - AI CareerGuide)
     AI_ASSISTANT_NAME: str = "Navi"
+    LLM_PROTOCOL: str = "openai_compatible"
+    LLM_AUTH_MODE: str = "BEARER"
+    AI_CONFIG_ENCRYPTION_KEY: str = ""
+    AI_CONFIG_ENCRYPTION_KEY_ID: str = "primary"
+    AI_LOCAL_ALLOWED_BASE_URLS: List[str] = []
+    AI_PROBE_LIMIT_PER_MINUTE: int = 6
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://codex.fosta.app/v1"
     LLM_MODEL: str = "gpt-6-luna"
@@ -125,17 +132,13 @@ class Settings(BaseSettings):
 
 
 
-    @model_validator(mode="after")
-    def sync_api_keys(self) -> "Settings":
-        # Đồng bộ 2 chiều: Ưu tiên LLM_API_KEY (chuẩn Navi), fallback sang OPENAI_API_KEY hoặc XKIRO_API_KEY
-        eff_key = self.LLM_API_KEY or self.OPENAI_API_KEY or self.XKIRO_API_KEY or self.XAI_API_KEY
-        self.LLM_API_KEY = eff_key
-        self.OPENAI_API_KEY = eff_key
-        self.XKIRO_API_KEY = eff_key
 
-        eff_base = self.LLM_BASE_URL or self.OPENAI_BASE_URL or self.XAI_BASE_URL
-        self.LLM_BASE_URL = eff_base
-        self.OPENAI_BASE_URL = eff_base
+    @model_validator(mode="after")
+    def require_production_signing_key(self):
+        if self.ENVIRONMENT.lower() in {"production", "prod"}:
+            key = self.SECRET_KEY
+            if len(key) < 32 or key == type(self).model_fields["SECRET_KEY"].default or any(marker in key.lower() for marker in ("change-me", "changeme", "your-secret", "placeholder")):
+                raise ValueError("Production yêu cầu SECRET_KEY riêng, ngẫu nhiên và dài ít nhất 32 ký tự.")
         return self
 
 

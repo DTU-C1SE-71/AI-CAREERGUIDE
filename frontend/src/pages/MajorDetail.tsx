@@ -10,7 +10,7 @@ import {
   Loader2,
 } from "lucide-react"
 import { useEffect, useState } from "react"
-import { Link, useParams } from "react-router"
+import { Link, useLocation, useParams } from "react-router"
 import { Button } from "../components/common/Button"
 import { Card } from "../components/common/Card"
 import { PageContainer } from "../components/layout/PageContainer"
@@ -22,9 +22,8 @@ import { SkillAnalysisCard } from "../components/xai/SkillAnalysisCard"
 import { TrendBadge } from "../components/xai/TrendBadge"
 import { useAuth } from "../context/AuthContext"
 import { MOET_435_MAJORS } from "../data/moetMajors435"
-import { useAssessment } from "../hooks/useAssessment"
+import { useSelectedAssessment } from "../hooks/useSelectedAssessment"
 import { apiRequest } from "../services/api"
-import { majors as fallbackMajors } from "../services/mockData"
 import { readStorage, writeStorage } from "../services/storage"
 import type { MajorInsight, StudentSkillAnalysis } from "../types/insight"
 import type { Major } from "../types/major"
@@ -62,19 +61,27 @@ interface AIExplanationApiPayload {
 interface SavedRoadmapItem {
   code: string
   label: string
-  status: "TARGET" | "REACH"
+  status: "TARGET" | "REACH" | "UNKNOWN"
+}
+
+function catalogMajor(id?: string): Major {
+  const catalog = MOET_435_MAJORS.find(item => item.major_code === id)
+  return {
+    id: id || "", code: id || "", name: catalog?.name_vi || "Chưa xác định ngành",
+    category: catalog?.category, university: catalog?.category || "Chưa có thông tin ngành",
+    match: null, feasibility: "UNKNOWN", feasibility_label: "Chưa đủ bằng chứng đối chiếu",
+    fit: { interest: null, academic: null, cognitive: null }, explanation: "Chưa có phân tích hồ sơ.", gaps: [],
+  }
 }
 
 export function MajorDetail() {
   const { id } = useParams()
-  const { assessment } = useAssessment()
+  const location = useLocation()
+  const fromCatalog = location.state?.from === "/majors"
+  const assessment = useSelectedAssessment()
   const { user } = useAuth()
-  const [major, setMajor] = useState<Major>(() => {
-    return (
-      fallbackMajors.find((item) => item.id === id || item.code === id) ??
-      fallbackMajors[0]
-    )
-  })
+  const [major, setMajor] = useState<Major>(() => catalogMajor(id))
+  const [hasEvaluation, setHasEvaluation] = useState(false)
   const [taxDetail, setTaxDetail] = useState<TaxonomyMajorDetail | null>(null)
   const [majorInsight, setMajorInsight] = useState<MajorInsight | null>(null)
   const [skillAnalysis, setSkillAnalysis] =
@@ -87,10 +94,7 @@ export function MajorDetail() {
     null,
   )
   const [savedList, setSavedList] = useState<SavedRoadmapItem[]>(() =>
-    readStorage<SavedRoadmapItem[]>("career-guide:saved-roadmaps", [
-      { code: "7480101", label: "Khoa học máy tính", status: "TARGET" },
-      { code: "7460108", label: "Khoa học dữ liệu", status: "REACH" },
-    ]),
+    readStorage<SavedRoadmapItem[]>("career-guide:saved-roadmaps", []),
   )
 
   useEffect(() => {
@@ -104,69 +108,25 @@ export function MajorDetail() {
     setInsightLoading(true)
     setSkillLoading(false)
 
-    const localMatch = fallbackMajors.find(
-      (item) => item.id === id || item.code === id,
-    )
-    if (localMatch) {
-      setMajor(localMatch)
-    } else {
-      const catalogItem = MOET_435_MAJORS.find((item) => item.major_code === id)
-      if (catalogItem) {
-        setMajor({
-          id: catalogItem.major_code,
-          code: catalogItem.major_code,
-          name: catalogItem.name_vi,
-          category: catalogItem.category,
-          university: `Khối ${(catalogItem.subject_blocks || ["A00", "A01", "D01"]).join(", ")} · Chuẩn Bộ GD&ĐT`,
-          match: 88,
-          feasibility: "TARGET",
-          fit: { interest: 88, academic: 88, cognitive: 88 },
-          explanation: `### Vì sao phù hợp?\nNgành **${catalogItem.name_vi}** (Mã ${catalogItem.major_code}) thuộc lĩnh vực **${catalogItem.category}** theo danh mục 435 ngành chuẩn Bộ GD&ĐT.`,
-          gaps: [
-            "Kiến thức nền tảng ngành",
-            "Ngoại ngữ chuyên ngành",
-            "Kỹ năng thực hành dự án",
-          ],
-        })
-      }
-    }
-
-    const codeToLookup = localMatch?.code || id
-
-    // Build student profile metrics from AssessmentContext for AI explanation
-    const riasecScores: Record<string, number> = {}
-    for (const dim of ["R", "I", "A", "S", "E", "C"]) {
-      const vals: number[] = []
-      for (let i = 1; i <= 5; i++) {
-        const v = assessment.answers?.[`${dim}${i}`]
-        if (typeof v === "number" && v > 0) vals.push(v)
-      }
-      if (vals.length > 0) {
-        const avg = vals.reduce((a, b) => a + b, 0) / vals.length
-        riasecScores[dim] = Number((avg / 5).toFixed(2))
-      }
-    }
-
-    const gradesBySubject: Record<string, number> = Object.fromEntries(
-      (assessment.scores || []).map((s) => [s.subject, s.score]),
-    )
+    setMajor(catalogMajor(id))
+    setHasEvaluation(false)
+    setTaxDetail(null)
+    const codeToLookup = id
 
     const evalPayload = buildEvaluateProfilePayload(assessment, 435, {
       gender: user?.gender,
       grade_level: user?.grade_level,
     })
     const hasUserAssessment =
-      Boolean(evalPayload.riasec_answers) ||
-      Boolean(evalPayload.grades_by_subject)
+      Object.keys(evalPayload.riasec_answers).length > 0 ||
+      Object.keys(evalPayload.grades_by_subject).length > 0 ||
+      Object.keys(evalPayload.cognitive_answers).length > 0
 
     // 1. Fetch Major Taxonomy & Deterministic 435-major Constraint Evaluation
     Promise.all([
-      hasUserAssessment
-        ? apiRequest<{ majors?: Major[] } | null>("/recommender/evaluate", null, {
-            method: "POST",
-            body: JSON.stringify(evalPayload),
-          })
-        : apiRequest<Major[] | null>("/recommender/majors?top_k=435", null),
+      apiRequest<{ majors?: Major[]; blocked_goals?: Major[] } | null>("/recommender/evaluate", null, {
+        method: "POST", body: JSON.stringify(evalPayload),
+      }),
       apiRequest<TaxonomyMajorDetail | null>(
         `/taxonomy/majors/${codeToLookup}`,
         null,
@@ -176,13 +136,14 @@ export function MajorDetail() {
         if (!mounted) return
         const recList = Array.isArray(evalOrList)
           ? evalOrList
-          : evalOrList?.majors
+          : [...(evalOrList?.majors || []), ...(evalOrList?.blocked_goals || [])]
         if (recList && Array.isArray(recList)) {
           const found = recList.find(
             (m) => m.id === id || m.code === id || m.code === codeToLookup,
           )
           if (found) {
             setMajor(found)
+            setHasEvaluation(true)
           }
         }
         if (taxonomyInfo && taxonomyInfo.major_code) {
@@ -201,22 +162,43 @@ export function MajorDetail() {
             trend_sources: taxonomyInfo.trend_sources ?? prev.trend_sources,
             university:
               prev.university ||
-              `${taxonomyInfo.category || "Khối ngành chuẩn Bộ GD&ĐT"} · Khối ${(taxonomyInfo.subject_blocks || ["A00", "A01", "D01"]).join(", ")}`,
+              `${taxonomyInfo.category || "Khối ngành chuẩn Bộ GD&ĐT"} · Khối ${(taxonomyInfo.subject_blocks || []).join(", ")}`,
           }))
         }
       })
+      .catch(() => {})
       .finally(() => {
         if (mounted) setLoading(false)
       })
 
     // 2. Agent "Phân tích ngành": nội dung đào tạo + vị trí nghề nghiệp (cache-first)
-    apiRequest<MajorInsight | null>(`/major-insights/${codeToLookup}`, null)
-      .then((insight) => {
-        if (mounted && insight) setMajorInsight(insight)
-      })
-      .finally(() => {
-        if (mounted) setInsightLoading(false)
-      })
+    const insightCacheKey = `careerguide:insight:${codeToLookup}`
+    const cachedInsightRaw = sessionStorage.getItem(insightCacheKey)
+    if (cachedInsightRaw) {
+      try {
+        const parsed = JSON.parse(cachedInsightRaw)
+        if (parsed) {
+          setMajorInsight(parsed)
+          setInsightLoading(false)
+        }
+      } catch {
+        sessionStorage.removeItem(insightCacheKey)
+      }
+    } else {
+      apiRequest<MajorInsight | null>(`/major-insights/${codeToLookup}`, null)
+        .then((insight) => {
+          if (mounted && insight) {
+            setMajorInsight(insight)
+            try {
+              sessionStorage.setItem(insightCacheKey, JSON.stringify(insight))
+            } catch {}
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (mounted) setInsightLoading(false)
+        })
+    }
 
     // 3. Agent "Phân tích kỹ năng": ưu/nhược điểm học tập + kỹ năng cần bổ sung
     if (hasUserAssessment) {
@@ -226,105 +208,96 @@ export function MajorDetail() {
         null,
         {
           method: "POST",
-          body: JSON.stringify({
-            major_code: codeToLookup,
-            riasec_scores:
-              Object.keys(riasecScores).length > 0 ? riasecScores : undefined,
-            grades_by_subject:
-              Object.keys(gradesBySubject).length > 0
-                ? gradesBySubject
-                : undefined,
-            cognitive_preferences:
-              Object.keys(assessment.cognitive || {}).length > 0
-                ? assessment.cognitive
-                : undefined,
-          }),
+          body: JSON.stringify({ ...evalPayload, major_code: codeToLookup }),
         },
       )
         .then((analysis) => {
           if (mounted && analysis) setSkillAnalysis(analysis)
         })
+        .catch(() => {})
         .finally(() => {
           if (mounted) setSkillLoading(false)
         })
     }
 
-    // 4. Automatically call AI Explanation API on page entry
-    apiRequest<AIExplanationApiPayload | null>(
-      "/rag-governance/explain-recommendation",
-      null,
-      {
-        method: "POST",
-        body: JSON.stringify({
-          major_code: codeToLookup,
-          riasec_scores:
-            Object.keys(riasecScores).length > 0 ? riasecScores : undefined,
-          grades_by_subject:
-            Object.keys(gradesBySubject).length > 0
-              ? gradesBySubject
-              : undefined,
-          cognitive_preferences:
-            Object.keys(assessment.cognitive || {}).length > 0
-              ? assessment.cognitive
-              : undefined,
-        }),
-      },
-    )
-      .then((aiRes) => {
-        if (!mounted || !aiRes) return
-        let cleanDetail = (aiRes.detailed_explanation || "").trim()
-        if (cleanDetail.startsWith("{")) {
-          try {
-            const parsed = JSON.parse(cleanDetail)
-            if (parsed.detailed_explanation) {
-              cleanDetail = String(parsed.detailed_explanation)
-            }
-          } catch {
-            const match = cleanDetail.match(
-              /"detailed_explanation"\s*:\s*"((?:\\"|[^"])*)"/,
-            )
-            if (match?.[1]) {
-              cleanDetail = match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"')
+    // 4. Automatically call AI Explanation API on page entry (session-cached for instant 0-token navigation)
+    const explanationCacheKey = `careerguide:ai_explanation:${codeToLookup}:${user?.id || "guest"}:${JSON.stringify(evalPayload.riasec_answers || {})}:${JSON.stringify(evalPayload.grades_by_subject || {})}`
+    const cachedExplanation = sessionStorage.getItem(explanationCacheKey)
+    if (cachedExplanation) {
+      setAiExplanationText(cachedExplanation)
+      setAiExplaining(false)
+    } else {
+      apiRequest<AIExplanationApiPayload | null>(
+        "/rag-governance/explain-recommendation",
+        null,
+        {
+          method: "POST",
+          body: JSON.stringify({ ...evalPayload, major_code: codeToLookup }),
+        },
+      )
+        .then((aiRes) => {
+          if (!mounted || !aiRes) return
+          let cleanDetail = (aiRes.detailed_explanation || "").trim()
+          if (cleanDetail.startsWith("{")) {
+            try {
+              const parsed = JSON.parse(cleanDetail)
+              if (parsed.detailed_explanation) {
+                cleanDetail = String(parsed.detailed_explanation)
+              }
+            } catch {
+              const match = cleanDetail.match(
+                /"detailed_explanation"\s*:\s*"((?:\\"|[^"])*)"/,
+              )
+              if (match?.[1]) {
+                cleanDetail = match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"')
+              }
             }
           }
-        }
 
-        const lines: string[] = []
-        if (!cleanDetail.includes("###") && !cleanDetail.includes("##")) {
-          lines.push("### Vì sao phù hợp?", "")
-        }
-        if (cleanDetail) {
-          lines.push(cleanDetail, "")
-        }
-        if (aiRes.riasec_alignment) {
-          lines.push(`- **Sở thích nghề nghiệp:** ${aiRes.riasec_alignment}`)
-        }
-        if (aiRes.academic_alignment) {
-          lines.push(`- **Năng lực học tập:** ${aiRes.academic_alignment}`)
-        }
-        if (aiRes.strengths && aiRes.strengths.length > 0) {
-          lines.push(
-            `- **Điểm mạnh nổi bật:** ${aiRes.strengths.join(" · ")}`,
-          )
-        }
-        setAiExplanationText(lines.join("\n"))
+          const lines: string[] = []
+          if (cleanDetail) {
+            lines.push(cleanDetail)
+          }
+          if (!aiRes.is_ai_generated) {
+            if (!cleanDetail.includes("###") && !cleanDetail.includes("##")) {
+              lines.unshift("### Đối chiếu hồ sơ và ngành học", "")
+            }
+            if (aiRes.riasec_alignment) {
+              lines.push(`- **Sở thích nghề nghiệp:** ${aiRes.riasec_alignment}`)
+            }
+            if (aiRes.academic_alignment) {
+              lines.push(`- **Năng lực học tập:** ${aiRes.academic_alignment}`)
+            }
+            if (aiRes.strengths && aiRes.strengths.length > 0) {
+              lines.push(
+                `- **Điểm mạnh nổi bật:** ${aiRes.strengths.join(" · ")}`,
+              )
+            }
+          }
+          const formattedText = lines.join("\n\n")
+          setAiExplanationText(formattedText)
+          try {
+            sessionStorage.setItem(explanationCacheKey, formattedText)
+          } catch {}
 
-        if (
-          aiRes.recommended_focus_areas &&
-          aiRes.recommended_focus_areas.length > 0
-        ) {
-          setMajor((prev) => ({
-            ...prev,
-            gaps:
-              prev.gaps && prev.gaps.length > 0
-                ? prev.gaps
-                : aiRes.recommended_focus_areas!,
-          }))
-        }
-      })
-      .finally(() => {
-        if (mounted) setAiExplaining(false)
-      })
+          if (
+            aiRes.recommended_focus_areas &&
+            aiRes.recommended_focus_areas.length > 0
+          ) {
+            setMajor((prev) => ({
+              ...prev,
+              gaps:
+                prev.gaps && prev.gaps.length > 0
+                  ? prev.gaps
+                  : aiRes.recommended_focus_areas!,
+            }))
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (mounted) setAiExplaining(false)
+        })
+    }
 
     return () => {
       mounted = false
@@ -349,7 +322,7 @@ export function MajorDetail() {
           {
             code: major.code,
             label: major.name,
-            status: major.feasibility === "REACH" ? "REACH" : "TARGET",
+            status: "UNKNOWN",
           },
         ]
     setSavedList(next)
@@ -362,7 +335,7 @@ export function MajorDetail() {
       ? majorInsight.subject_blocks
       : taxDetail?.subject_blocks && taxDetail.subject_blocks.length > 0
         ? taxDetail.subject_blocks
-        : ["A00", "A01", "D01", "D07"]
+        : []
 
   const blockText = rawBlocks
     .map((b) => formatBlockWithSubjects(b, { short: true }))
@@ -381,11 +354,11 @@ export function MajorDetail() {
         {/* Navigation & Actions Top Bar */}
         <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
           <Link
-            to="/dashboard"
+            to={fromCatalog ? "/majors" : "/dashboard"}
             className="inline-flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/80 px-3.5 py-2 text-xs font-bold text-slate-600 shadow-2xs backdrop-blur-md transition-colors hover:border-sky-300 hover:text-sky-700"
           >
             <ArrowLeft size={14} />
-            Quay lại bảng điều khiển
+            {fromCatalog ? "Quay lại danh mục ngành" : "Quay lại đề xuất ngành học"}
           </Link>
 
           <div className="flex items-center gap-2.5">
@@ -433,6 +406,7 @@ export function MajorDetail() {
                 )}
 
                 <FeasibilityBadge
+                  readiness={major.readiness}
                   value={major.feasibility}
                   label={major.feasibility_label}
                 />
@@ -472,18 +446,18 @@ export function MajorDetail() {
               </p>
 
               {/* Fit dimensions breakdown */}
-              {major.fit && (
+              {hasEvaluation && major.fit && (
                 <div className="mt-4 inline-flex flex-wrap items-center gap-3.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 px-4 py-2 text-xs font-semibold text-slate-700 shadow-2xs">
                   <span>
-                    Sở thích: <strong className="text-sky-600 font-extrabold">{major.fit.interest}%</strong>
+                    Sở thích: <strong className="text-sky-600 font-extrabold">{major.fit.interest == null ? "Chưa có dữ liệu" : `${major.fit.interest}/100`}</strong>
                   </span>
                   <span className="text-slate-300">·</span>
                   <span>
-                    Học lực: <strong className="text-sky-600 font-extrabold">{major.fit.academic}%</strong>
+                    Học lực: <strong className="text-sky-600 font-extrabold">{major.fit.academic == null ? "Chưa có dữ liệu" : `${major.fit.academic}/100`}</strong>
                   </span>
                   <span className="text-slate-300">·</span>
                   <span>
-                    Nhận thức: <strong className="text-cyan-600 font-extrabold">{major.fit.cognitive}%</strong>
+                    Thiên hướng tự khai: <strong className="text-cyan-600 font-extrabold">{major.fit.cognitive == null ? "Chưa có dữ liệu" : `${major.fit.cognitive}/100`}</strong>
                   </span>
                 </div>
               )}
@@ -492,11 +466,12 @@ export function MajorDetail() {
             {/* Match score prominent badge */}
             <div className="flex flex-col items-start lg:items-end rounded-2xl bg-sky-50/60 p-4 border border-sky-100 sm:bg-transparent sm:border-0 sm:p-0">
               <span className="text-4xl sm:text-5xl font-black text-sky-600 tracking-tight">
-                {major.match}%
+                {hasEvaluation && major.match != null ? `${major.match}/100` : "—"}
               </span>
               <span className="mt-0.5 text-xs font-bold uppercase tracking-wider text-slate-500">
-                Độ tương thích
+                Điểm gợi ý tham khảo
               </span>
+              <span className="mt-1 max-w-56 text-xs text-slate-500">Không phải xác suất trúng tuyển hay kết quả đo kỹ năng.</span>
             </div>
           </div>
         </Card>
@@ -506,7 +481,7 @@ export function MajorDetail() {
           {/* Main Column: Explanation, Competency Gaps & Skill Analysis (8 cols on xl, 7 cols on lg) */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-6">
             <ExplanationBox
-              content={aiExplanationText || major.explanation}
+              content={aiExplanationText || (hasEvaluation ? major.explanation : "Chưa có kết quả đối chiếu hồ sơ. Hãy thử lại khi dịch vụ hoạt động.")}
               loading={aiExplaining}
             />
 

@@ -2,6 +2,7 @@ import uuid
 from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
+from app.schemas.rag import GuidanceEvidenceRequest
 
 
 class TrainingContent(BaseModel):
@@ -35,20 +36,12 @@ class MajorInsightResponse(BaseModel):
     generated_at: Optional[str] = None
 
 
-class StudentSkillAnalysisRequest(BaseModel):
-    major_code: Optional[str] = Field(default=None, description="Ngành mục tiêu (tuỳ chọn)")
-    riasec_scores: Dict[str, float] = Field(
-        default_factory=dict,
-        description="Vector RIASEC đã chuẩn hoá, ví dụ {'I': 0.85, 'R': 0.6}",
+class StudentSkillAnalysisRequest(GuidanceEvidenceRequest):
+    """Shared evidence contract used by student skill analysis and guidance."""
+    major_code: Optional[str] = Field(
+        default=None, pattern=r"^[0-9]{7}$", description="Ngành mục tiêu (tuỳ chọn)"
     )
-    grades_by_subject: Dict[str, float] = Field(
-        default_factory=dict, description="Điểm học bạ theo môn"
-    )
-    cognitive_preferences: Dict[str, str] = Field(
-        default_factory=dict, description="8 thiên hướng nhận thức từ bài test"
-    )
-    dominant_traits: List[str] = Field(default_factory=list)
-    aspiration: Optional[Dict[str, Any]] = None
+    dominant_traits: List[str] = Field(default_factory=list, max_length=20)
 
 
 class InsightPoint(BaseModel):

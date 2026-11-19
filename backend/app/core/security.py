@@ -37,7 +37,7 @@ def check_and_rehash(hashed_password: str) -> bool:
 
 def create_access_token(subject: str, role: str, expires_delta: Optional[timedelta] = None) -> str:
     """Creates a signed JSON Web Token (JWT) with subject (user id) and role."""
-    if expires_delta:
+    if expires_delta is not None:
         expire = datetime.now(timezone.utc) + expires_delta
     else:
         expire = datetime.now(timezone.utc) + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -55,7 +55,18 @@ def create_access_token(subject: str, role: str, expires_delta: Optional[timedel
 def decode_access_token(token: str) -> Optional[Dict[str, Any]]:
     """Decodes and validates a JWT access token."""
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"require": ["sub", "exp", "iat"]},
+        )
+        if not isinstance(payload.get("sub"), str) or not payload["sub"]:
+            return None
+        if any(isinstance(payload[key], bool) or not isinstance(payload[key], (int, float)) for key in ("exp", "iat")):
+            return None
+        if payload["iat"] > payload["exp"]:
+            return None
         return payload
-    except jwt.PyJWTError:
+    except (jwt.PyJWTError, ValueError, TypeError, OverflowError):
         return None

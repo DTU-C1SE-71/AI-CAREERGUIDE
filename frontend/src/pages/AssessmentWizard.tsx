@@ -8,7 +8,6 @@ import {
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
-  Eye,
   Layers,
   LayoutDashboard,
   ListChecks,
@@ -46,8 +45,9 @@ import {
   type RiasecDimension,
 } from "../data/onetMiniIpQuestions"
 import { useAssessment } from "../hooks/useAssessment"
-import { apiRequest } from "../services/api"
+import { apiRequest, currentToken } from "../services/api"
 import type { CareerAspirationInput } from "../types/assessment"
+import { getValidRiasecAnswer } from "../utils/assessmentPayload"
 
 export interface QuestionItem {
   code: string
@@ -90,19 +90,6 @@ const CANONICAL_30_CODES: string[] = [
 
 const RIASEC_ORDER: RiasecDimension[] = ["R", "I", "A", "S", "E", "C"]
 
-const DEFAULT_SUBJECT_SCORES: Record<string, number> = {
-  Toán: 8.2,
-  "Ngữ văn": 7.4,
-  "Tiếng Anh": 7.8,
-  "Vật lý": 8.0,
-  "Hóa học": 7.5,
-  "Sinh học": 7.0,
-  "Lịch sử": 7.2,
-  "Địa lý": 7.5,
-  "GDKT & Pháp luật": 8.0,
-  "Tin học / Công nghệ": 8.4,
-}
-
 const defaultRiasecFallback: QuestionItem[] = CANONICAL_30_CODES.map(
   (code, idx) => {
     const found = ONET_MINI_IP_ITEMS.find((i) => i.code === code)
@@ -117,7 +104,7 @@ const defaultRiasecFallback: QuestionItem[] = CANONICAL_30_CODES.map(
 
 export function AssessmentWizard() {
   const { user, token } = useAuth()
-  const { assessment, history, update, reset, recordCompletedAttempt } = useAssessment()
+  const { assessment, history, update, reset, recordCompletedAttempt, selectHistoryAttempt } = useAssessment()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [sessionStarted, setSessionStarted] = useState<boolean>(
@@ -126,6 +113,8 @@ export function AssessmentWizard() {
   const [isReviewMode, setIsReviewMode] = useState<boolean>(
     () => searchParams.get("review") === "true",
   )
+  const submittingRef = useRef(false)
+  const [submitting, setSubmitting] = useState(false)
   const [cardScale, setCardScale] = useState<"normal" | "large">("large")
   const [step, setStep] = useState<number>(assessment.step || 1)
   const [scores, setScores] = useState<Record<string, number>>(() => {
@@ -135,10 +124,9 @@ export function AssessmentWizard() {
     const initial: Record<string, number> = {}
     HIGH_SCHOOL_SUBJECTS.forEach((subj) => {
       const existing = mapped[subj.name]
-      initial[subj.name] =
-        typeof existing === "number" && Number.isFinite(existing)
-          ? Math.min(10, Math.max(0, existing))
-          : (DEFAULT_SUBJECT_SCORES[subj.name] ?? 7.5)
+      if (typeof existing === "number" && Number.isFinite(existing)) {
+        initial[subj.name] = existing
+      }
     })
     return initial
   })
@@ -303,20 +291,6 @@ export function AssessmentWizard() {
     [assessment.answers, update]
   )
 
-  // Apply 1-screen Radar score (1..5) to all 5 items of a RIASEC dimension
-  const setGroupLevel = useCallback(
-    (dim: RiasecDimension, levelValue: number) => {
-      const nextAnswers = { ...assessment.answers }
-      ONET_MINI_IP_ITEMS.filter((i) => i.dimension === dim).forEach((item) => {
-        const cIdx = CANONICAL_30_CODES.indexOf(item.code)
-        nextAnswers[item.code] = levelValue
-        if (cIdx >= 0) nextAnswers[`1-${cIdx}`] = levelValue
-      })
-      update({ answers: nextAnswers })
-    },
-    [assessment.answers, update]
-  )
-
   // Stats across 6 RIASEC dimensions
   const riasecGroupCounts = useMemo(() => {
     const counts: Record<RiasecDimension, number> = {
@@ -328,7 +302,7 @@ export function AssessmentWizard() {
       C: 0,
     }
     CANONICAL_30_CODES.forEach((code, idx) => {
-      const val = assessment.answers[code] ?? assessment.answers[`1-${idx}`]
+      const val = getValidRiasecAnswer(assessment.answers, code, idx)
       if (typeof val === "number" && val >= 1 && val <= 5) {
         counts[code[0] as RiasecDimension] += 1
       }
@@ -338,23 +312,23 @@ export function AssessmentWizard() {
 
   const riasecGroupPct = useMemo(() => {
     const pct: Record<RiasecDimension, number> = {
-      R: 20,
-      I: 20,
-      A: 20,
-      S: 20,
-      E: 20,
-      C: 20,
+      R: 0,
+      I: 0,
+      A: 0,
+      S: 0,
+      E: 0,
+      C: 0,
     }
     RIASEC_ORDER.forEach((dim) => {
       const vals = ONET_MINI_IP_ITEMS.filter((i) => i.dimension === dim)
         .map((i) => {
           const cIdx = CANONICAL_30_CODES.indexOf(i.code)
-          return assessment.answers[i.code] ?? assessment.answers[`1-${cIdx}`]
+          return getValidRiasecAnswer(assessment.answers, i.code, cIdx)
         })
-        .filter((v): v is number => typeof v === "number" && v > 0)
+        .filter((v): v is number => v !== undefined)
       if (vals.length > 0) {
         const avg = vals.reduce((a, b) => a + b, 0) / vals.length
-        pct[dim] = Math.round((avg / 5) * 100)
+        pct[dim] = Math.round(((avg - 1) / 4) * 100)
       }
     })
     return pct
@@ -373,9 +347,9 @@ export function AssessmentWizard() {
       const vals = ONET_MINI_IP_ITEMS.filter((i) => i.dimension === dim)
         .map((i) => {
           const cIdx = CANONICAL_30_CODES.indexOf(i.code)
-          return assessment.answers[i.code] ?? assessment.answers[`1-${cIdx}`]
+          return getValidRiasecAnswer(assessment.answers, i.code, cIdx)
         })
-        .filter((v): v is number => typeof v === "number" && v > 0)
+        .filter((v): v is number => v !== undefined)
       if (vals.length > 0) {
         avgs[dim] = Number(
           (vals.reduce((a, b) => a + b, 0) / vals.length).toFixed(1)
@@ -390,13 +364,6 @@ export function AssessmentWizard() {
     [riasecGroupCounts]
   )
 
-  const topHollandPreview = useMemo(() => {
-    return [...RIASEC_ORDER]
-      .sort((a, b) => (riasecGroupPct[b] || 0) - (riasecGroupPct[a] || 0))
-      .slice(0, 3)
-      .join(" · ")
-  }, [riasecGroupPct])
-
   const aspiration: CareerAspirationInput = useMemo(
     () =>
       assessment.aspiration || {
@@ -410,8 +377,8 @@ export function AssessmentWizard() {
 
   const allRiasecGroupsCovered = useMemo(() => {
     return (
-      totalRiasecAnswered >= 18 &&
-      RIASEC_ORDER.every((dim) => riasecGroupCounts[dim] >= 2)
+      totalRiasecAnswered === 30 &&
+      RIASEC_ORDER.every((dim) => riasecGroupCounts[dim] === 5)
     )
   }, [totalRiasecAnswered, riasecGroupCounts])
 
@@ -535,24 +502,19 @@ export function AssessmentWizard() {
   }
 
   const handleCompleteAssessment = async (skipAspiration = false) => {
-    const finalAnswers: Record<string, number> = { ...assessment.answers }
+    if (submittingRef.current) return
+    if (Object.values(scores).some(value => !Number.isFinite(value) || value < 0 || value > 10)) { setStep(3); return }
+    submittingRef.current = true
+    setSubmitting(true)
+    const finalAnswers: Record<string, number> = {}
     CANONICAL_30_CODES.forEach((code, idx) => {
-      const val = finalAnswers[code] ?? finalAnswers[`1-${idx}`]
-      const safeVal = typeof val === "number" && val > 0 ? val : 3
-      finalAnswers[code] = safeVal
-      finalAnswers[`1-${idx}`] = safeVal
+      const value = getValidRiasecAnswer(assessment.answers, code, idx)
+      if (value !== undefined) finalAnswers[code] = value
     })
 
-    const normalizedScores: SubjectGrade[] = Object.entries(scores).map(
-      ([subject, score]) => {
-        const clamped = Math.min(10, Math.max(0, Number(score) || 0))
-        return {
-          subject,
-          score: clamped,
-          zScore: (clamped - 7.1) / 1.2,
-        }
-      }
-    )
+    const normalizedScores: SubjectGrade[] = Object.entries(scores)
+      .filter(([, score]) => Number.isFinite(score) && score >= 0 && score <= 10)
+      .map(([subject, score]) => ({ subject, score, zScore: null }))
 
     const effectiveAspiration = skipAspiration
       ? {
@@ -571,6 +533,8 @@ export function AssessmentWizard() {
       scores: normalizedScores,
       aspiration: skipAspiration ? undefined : effectiveAspiration,
       completed: true,
+      syncStatus: "LOCAL_ONLY",
+      submissionId: undefined,
     })
 
     const riasecMap: Record<string, number> = {}
@@ -593,41 +557,36 @@ export function AssessmentWizard() {
       score_strategy: effectiveAspiration.scoreStrategy || "FLEXIBLE_PATHWAY",
     }
 
-    // Đồng bộ kết quả đánh giá, nguyện vọng nghề nghiệp và điểm học lực xuống Backend trước khi mở Dashboard
-    const pendingSyncs: Array<Promise<unknown>> = [
-      apiRequest("/assessment/submit", null, {
+    // Local storage is already durable; server success requires a returned snapshot ID.
+    const controller = new AbortController()
+    const timeout = window.setTimeout(() => controller.abort(), 8000)
+    let result: { submission_id?: string } | null = null
+    try {
+      result = await apiRequest<{ submission_id?: string } | null>("/assessment/submit", null, {
         method: "POST",
+        signal: controller.signal,
         body: JSON.stringify({
           riasec_answers: riasecMap,
           cognitive_answers: cogMap,
           aspiration: aspirationPayload,
+          grades_by_subject: Object.fromEntries(normalizedScores.map(({ subject, score }) => [subject, score])),
+          score_context: { kind: "TRANSCRIPT", scale: 10 },
         }),
-      }),
-    ]
-
-    if (Object.keys(scores).length > 0) {
-      pendingSyncs.push(
-        apiRequest("/assessment/grades", null, {
-          method: "POST",
-          body: JSON.stringify({
-            academic_year: "2025-2026",
-            semester: "HK1-L12",
-            grades: scores,
-          }),
-        })
-      )
+      })
+    } catch {
+      result = null
+    } finally {
+      window.clearTimeout(timeout)
+      submittingRef.current = false
+      setSubmitting(false)
     }
-
-    await Promise.race([
-      Promise.allSettled(pendingSyncs),
-      new Promise((resolve) => window.setTimeout(resolve, 1200)),
-    ])
-
-    confetti({
-      particleCount: 75,
-      spread: 65,
-      origin: { y: 0.6 },
-    })
+    if (currentToken() !== token) return
+    if (result?.submission_id) {
+      update({ syncStatus: "SYNCED", submissionId: result.submission_id })
+      confetti({ particleCount: 75, spread: 65, origin: { y: 0.6 } })
+    } else {
+      update({ syncStatus: "LOCAL_ONLY", submissionId: undefined })
+    }
     navigate("/dashboard")
   }
 
@@ -712,6 +671,9 @@ export function AssessmentWizard() {
               <button
                 type="button"
                 onClick={() => {
+                  if (!assessment.completed && history[0]) {
+                    selectHistoryAttempt(history[0].id)
+                  }
                   setIsReviewMode(true)
                   setStep(1)
                   setCardIndex(0)
@@ -800,11 +762,19 @@ export function AssessmentWizard() {
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <button
             type="button"
-            onClick={() => navigate("/dashboard")}
+            onClick={() => {
+              if (hasCompletedAttempt) {
+                setIsReviewMode(false)
+                setSessionStarted(false)
+                window.scrollTo({ top: 0, behavior: "smooth" })
+              } else {
+                navigate("/dashboard")
+              }
+            }}
             className="inline-flex items-center gap-2 rounded-2xl border border-white/90 bg-white/75 px-4 py-2 text-xs sm:text-sm font-extrabold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700 hover:shadow-sm"
           >
             <ArrowLeft className="size-4 text-sky-600" />
-            <span>Quay lại Dashboard</span>
+            <span>Quay lại</span>
           </button>
 
           <div className="flex items-center gap-2">
@@ -820,58 +790,6 @@ export function AssessmentWizard() {
             </button>
           </div>
         </div>
-
-        {/* Review Mode Banner */}
-        {isReviewMode && (
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-sky-200/90 bg-gradient-to-r from-sky-50 via-sky-100/70 to-white/95 p-4 text-sky-950 shadow-sm backdrop-blur-md">
-            <div className="flex items-center gap-3">
-              <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-sky-600 text-white shadow-md">
-                <Eye className="size-6" />
-              </span>
-              <div>
-                <h4 className="text-sm sm:text-base font-black text-sky-950">
-                  Chế độ xem lại các câu hỏi đã trả lời
-                </h4>
-                <p className="text-xs font-semibold text-sky-700">
-                  Bạn đang xem lại các câu trả lời đã lưu trong hệ thống. Nhấn vào từng bước để kiểm tra chi tiết.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  reset()
-                  setStep(1)
-                  setCardIndex(0)
-                  setCogIndex(0)
-                  setIsReviewMode(false)
-                  setSessionStarted(true)
-                }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-sky-300 bg-white px-3 py-2 text-xs font-extrabold text-sky-800 shadow-2xs transition hover:bg-sky-50"
-              >
-                <RotateCcw className="size-3.5" />
-                <span>Bắt đầu bài mới</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setSessionStarted(false)}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white/85 px-3 py-2 text-xs font-bold text-slate-700 shadow-2xs transition hover:bg-slate-100"
-              >
-                <ArrowLeft className="size-3.5" />
-                <span>Quay lại cổng chọn</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => navigate("/dashboard")}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-2 text-xs font-black text-white shadow-xs transition hover:bg-sky-700"
-              >
-                <LayoutDashboard className="size-3.5" />
-                <span>Xem kết quả Dashboard</span>
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Top Liquid Glass Step Bar */}
         <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
@@ -1068,14 +986,14 @@ export function AssessmentWizard() {
               </>
             )}
 
-            {/* MODE B: 1-SCREEN RADAR SLIDERS */}
+            {/* Read-only summary derived from questionnaire answers. */}
             {step1Mode === "radar" && (
               <div className="grid gap-4 rounded-3xl border border-white/90 bg-white/65 p-5 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl md:grid-cols-[1.2fr_0.8fr]">
                 <div className="space-y-2.5">
+                  <p className="mb-3 text-sm text-slate-600">Biểu đồ tự cập nhật theo câu trả lời trắc nghiệm. Chỉnh câu trả lời ở chế độ Thẻ hoặc Danh sách.</p>
                   {RIASEC_ORDER.map((dim) => {
                     const meta = RIASEC_META[dim]
                     const avg = riasecGroupAvg[dim]
-                    const isFilled = riasecGroupCounts[dim] >= 5
                     return (
                       <div
                         key={dim}
@@ -1084,25 +1002,11 @@ export function AssessmentWizard() {
                         <span className="text-sm sm:text-base font-extrabold text-slate-900">
                           {meta.label}
                         </span>
-                        <div className="flex items-center gap-1">
-                          {[1, 2, 3, 4, 5].map((lv) => {
-                            const active = isFilled && Math.round(avg) === lv
-                            return (
-                              <motion.button
-                                key={lv}
-                                type="button"
-                                whileTap={{ scale: 0.9 }}
-                                onClick={() => setGroupLevel(dim, lv)}
-                                className={`size-9 rounded-xl text-sm font-black transition ${
-                                  active
-                                    ? "bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-sm"
-                                    : "bg-sky-50/80 text-sky-800 hover:bg-sky-100"
-                                }`}
-                              >
-                                {lv}
-                              </motion.button>
-                            )
-                          })}
+                        <div className="shrink-0 text-right">
+                          <span className="text-sm font-semibold tabular-nums text-sky-800">
+                            {riasecGroupCounts[dim] ? `${avg.toFixed(1)} / 5` : "Chưa có dữ liệu"}
+                          </span>
+                          <p className="text-xs text-slate-500">{riasecGroupCounts[dim]}/5 câu</p>
                         </div>
                       </div>
                     )
@@ -1230,6 +1134,7 @@ export function AssessmentWizard() {
                       return (
                         <motion.button
                           key={opt.option_key}
+                          data-testid={`cognitive-${currentCog.code}-${opt.option_key}`}
                           type="button"
                           whileHover={{ y: -2, scale: 1.01 }}
                           whileTap={{ scale: 0.98 }}
@@ -1300,10 +1205,12 @@ export function AssessmentWizard() {
             <AcademicInputForm
               scores={scores}
               onChange={(subject, value) =>
-                setScores((prev) => ({
-                  ...prev,
-                  [subject]: Math.min(10, Math.max(0, value)),
-                }))
+                setScores(prev => {
+                  const next = { ...prev }
+                  if (value === undefined) delete next[subject]
+                  else next[subject] = value
+                  return next
+                })
               }
             />
           </div>
@@ -1317,8 +1224,12 @@ export function AssessmentWizard() {
               onChange={(nextAspiration) =>
                 update({ aspiration: nextAspiration })
               }
-              topHollandPreview={topHollandPreview}
-              onSkip={() => handleCompleteAssessment(true)}
+              interestEvidence={{
+                status: totalRiasecAnswered === 30 ? "COMPLETE" : totalRiasecAnswered > 0 ? "PARTIAL" : "MISSING",
+                groups: RIASEC_ORDER.map(code => ({ code, percent: riasecGroupCounts[code] ? riasecGroupPct[code] : null, answered: riasecGroupCounts[code], total: 5 })),
+              }}
+              readOnly={isReviewMode}
+              onSkip={isReviewMode || submitting ? undefined : () => handleCompleteAssessment(true)}
             />
           </div>
         )}
@@ -1354,19 +1265,7 @@ export function AssessmentWizard() {
                 className="text-sm sm:text-base px-5 py-2.5"
                 disabled={!isReviewMode && !allRiasecGroupsCovered}
                 onClick={() => {
-                  const filled: Record<string, number> = {
-                    ...assessment.answers,
-                  }
-                  CANONICAL_30_CODES.forEach((code, idx) => {
-                    if (
-                      filled[code] === undefined &&
-                      filled[`1-${idx}`] === undefined
-                    ) {
-                      filled[code] = 3
-                      filled[`1-${idx}`] = 3
-                    }
-                  })
-                  update({ answers: filled, step: 2 })
+                  update({ step: 2 })
                   setStep(2)
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
@@ -1396,8 +1295,7 @@ export function AssessmentWizard() {
                 className="text-sm sm:text-base px-5 py-2.5"
                 disabled={
                   !isReviewMode &&
-                  Object.values(scores).filter((v) => typeof v === "number")
-                    .length < 3
+                  Object.values(scores).some(value => !Number.isFinite(value) || value < 0 || value > 10)
                 }
                 onClick={() => {
                   setStep(4)
@@ -1433,6 +1331,7 @@ export function AssessmentWizard() {
                     <Button
                       variant="secondary"
                       className="px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-slate-300"
+                      disabled={submitting}
                       onClick={() => handleCompleteAssessment(true)}
                     >
                       Bỏ qua & Xem kết quả
@@ -1440,9 +1339,10 @@ export function AssessmentWizard() {
                     <Button
                       icon={Check}
                       className="px-5 py-2.5 text-xs sm:text-sm font-extrabold"
+                      disabled={submitting}
                       onClick={() => handleCompleteAssessment(false)}
                     >
-                      {aspiration.dreamJob?.trim()
+                      {submitting ? "Đang đồng bộ…" : aspiration.dreamJob?.trim()
                         ? "Phân tích & Xem kết quả"
                         : "Xem kết quả phân tích"}
                     </Button>
@@ -1498,7 +1398,7 @@ function HelpGuideCollapsible() {
                   <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sky-100 text-[10px] font-black text-sky-800">
                     2
                   </span>
-                  <span>Điểm số thể hiện mức độ hứng thú công việc, không đo lường áp lực hay điểm học lực.</span>
+                  <span>Nếu có dịp làm những việc này ở trường, ở nhà hoặc cùng bạn bè, hãy chọn theo cảm nhận thật — không đo điểm học lực.</span>
                 </div>
                 <div className="flex items-start gap-2">
                   <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sky-100 text-[10px] font-black text-sky-800">
@@ -1583,6 +1483,7 @@ function RiasecQuestionsListView({
           return (
             <div
               key={item.code}
+              data-testid={`riasec-${item.code}`}
               className={`flex flex-col sm:flex-row sm:items-center justify-between gap-3.5 rounded-2xl border p-4 backdrop-blur-md transition ${
                 chosenVal
                   ? "border-sky-200/90 bg-white/95 shadow-2xs"
@@ -1736,18 +1637,6 @@ function VerticalQuestionCard({
 
       {/* 3. 5-Level Rating Emoticons with 52px+ Comfortable Tap Targets */}
       <div className="pt-4 border-t border-sky-100/80">
-        {selectedValue && (
-          <div className="mb-2.5 flex items-center justify-center">
-            <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-black text-sky-800 shadow-2xs">
-              <Check className="size-3.5 text-sky-600" />
-              <span>Câu trả lời đã lưu:</span>
-              <span className="text-sky-950 font-black">
-                {ONET_REACTION_SCALE.find((s) => s.value === selectedValue)?.emoji}{" "}
-                {ONET_REACTION_SCALE.find((s) => s.value === selectedValue)?.label} ({selectedValue}/5đ)
-              </span>
-            </span>
-          </div>
-        )}
         <div className="grid grid-cols-5 gap-2 sm:gap-3">
         {ONET_REACTION_SCALE.map((btn) => {
           const active = selectedValue === btn.value

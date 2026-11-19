@@ -15,7 +15,7 @@ import {
   Target,
   X,
 } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, useRef } from "react"
 import Markdown from "react-markdown"
 import { Link, useSearchParams } from "react-router"
 import remarkGfm from "remark-gfm"
@@ -24,9 +24,9 @@ import { Button } from "../components/common/Button"
 import { PageContainer } from "../components/layout/PageContainer"
 import { RoadmapFlow } from "../components/visualization/RoadmapFlow"
 import { useRoadmap } from "../hooks/useRoadmap"
-import { apiRequest } from "../services/api"
-import { roadmap as fallbackRoadmap } from "../services/mockData"
-import type { RoadmapWeek } from "../types/roadmap"
+import { ApiError, requestJSON } from "../services/api"
+import { scheduleToWeeks } from "../utils/roadmapSchedule"
+import type { GuidancePersonalization, SavedRoadmapProgress, RoadmapWeek } from "../types/roadmap"
 
 const availableMajors = [
   { code: "7480101", name: "Khoa học máy tính" },
@@ -104,7 +104,7 @@ interface TaskItemProps {
 }
 
 function TaskItem({
-  taskId: _taskId,
+  taskId,
   taskTitle,
   weekNumber,
   isDone,
@@ -115,6 +115,7 @@ function TaskItem({
 
   return (
     <div
+      data-testid={`roadmap-task-${taskId}`}
       className={`rounded-2xl border p-3 sm:p-3.5 transition-all duration-200 ${
         isDone
           ? "border-emerald-200/90 bg-emerald-50/40"
@@ -224,12 +225,18 @@ export function RoadmapView() {
 
   const [majorCode, setMajorCode] = useState(initialCode)
   const [majorName, setMajorName] = useState(initialName)
-  const [weeks, setWeeks] = useState<RoadmapWeek[]>(fallbackRoadmap)
+  const [weeks, setWeeks] = useState<RoadmapWeek[]>([])
   const [loading, setLoading] = useState(false)
   const [personalizing, setPersonalizing] = useState(false)
   const [savingProgress, setSavingProgress] = useState(false)
   const [savedNotice, setSavedNotice] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
+  const [operationError, setOperationError] = useState<string | null>(null)
+  const [guidance, setGuidance] = useState<GuidancePersonalization | null>(null)
+  const operationVersion = useRef(0)
+  const currentMajor = useRef(majorCode)
+  useEffect(() => { currentMajor.current = majorCode }, [majorCode])
+  useEffect(() => () => { operationVersion.current += 1 }, [])
 
   // Mobile/Tablet Week Accordion State (week-1 open by default)
   const [openWeekAccordions, setOpenWeekAccordions] = useState<
@@ -253,31 +260,37 @@ export function RoadmapView() {
     }
   }, [searchParams, majorCode])
 
-  useEffect(() => {
-    let mounted = true
-    setLoading(true)
-    apiRequest<RoadmapWeek[] | null>(`/roadmap/weeks/${majorCode}`, null)
-      .then((res) => {
-        if (!mounted) return
-        if (res && Array.isArray(res) && res.length > 0) {
-          setWeeks(res)
-        } else {
-          setWeeks(fallbackRoadmap)
-        }
-      })
-      .finally(() => {
-        if (mounted) setLoading(false)
-      })
-    return () => {
-      mounted = false
-    }
-  }, [majorCode])
+  const totalTasks = useMemo(() => weeks.reduce((acc, week) => acc + week.tasks.length, 0), [weeks])
+  const { completed, toggle, restoreCompleted, progress } = useRoadmap(majorCode, totalTasks)
 
-  const totalTasks = useMemo(
-    () => weeks.reduce((acc, w) => acc + (w.tasks?.length || 0), 0) || 12,
-    [weeks],
-  )
-  const { completed, toggle, progress } = useRoadmap(majorCode, totalTasks)
+  useEffect(() => {
+    const controller = new AbortController()
+    setLoading(true); setWeeks([]); setGuidance(null); setOperationError(null)
+    Promise.all([
+      requestJSON<RoadmapWeek[]>(`/roadmap/weeks/${majorCode}`, { signal: controller.signal }),
+      requestJSON<SavedRoadmapProgress>(`/roadmap/progress/${majorCode}`, { signal: controller.signal }).catch(error => {
+        if (error instanceof ApiError && error.status === 404) return null
+        throw error
+      }),
+    ]).then(([baseWeeks, saved]) => {
+      if (controller.signal.aborted) return
+      const savedGuidance = saved?.personalized_schedule?.guidance
+      const effectiveWeeks = savedGuidance ? scheduleToWeeks(savedGuidance, majorCode) : baseWeeks
+      setWeeks(effectiveWeeks)
+      setGuidance(savedGuidance || null)
+      if (saved) {
+        const savedTasks = saved.personalized_schedule?.completed_tasks
+        const allowed = new Set(effectiveWeeks.flatMap(week => week.tasks.map((_, index) => `${week.id}-${index}`)))
+        const finished = Array.isArray(savedTasks) ? savedTasks.filter(task => typeof task === "string" && allowed.has(task))
+          : effectiveWeeks.filter(week => saved.completed_milestones.includes(week.week)).flatMap(week => week.tasks.map((_, index) => `${week.id}-${index}`))
+        restoreCompleted(finished)
+      }
+    }).catch(error => {
+      if (!controller.signal.aborted) setOperationError(error instanceof Error ? error.message : "Không tải được lộ trình và tiến độ.")
+    }).finally(() => { if (!controller.signal.aborted) setLoading(false) })
+    return () => controller.abort()
+  }, [majorCode, restoreCompleted])
+
   const selectedWeek = weeks.find((item) => item.id === selected)
 
   const handleSelectMajor = (code: string) => {
@@ -291,90 +304,45 @@ export function RoadmapView() {
   const handlePersonalizeByAI = async () => {
     if (personalizing) return
     setPersonalizing(true)
+    setOperationError(null)
+    const expectedMajor = majorCode
+    const version = ++operationVersion.current
     try {
-      const res = await apiRequest<{
-        personalized_milestones?: Array<{
-          week?: number
-          title: string
-          description: string
-          actions?: string[]
-        }>
-      } | null>(
-        `/roadmap/roadmaps/${majorCode}/personalized?weekly_hours_available=10`,
-        null,
-        {
-          method: "POST",
-        },
+      const result = await requestJSON<GuidancePersonalization>(
+        `/roadmap/roadmaps/${majorCode}/personalized?weekly_hours_available=10`, { method: "POST" },
       )
-      if (
-        res &&
-        res.personalized_milestones &&
-        res.personalized_milestones.length > 0
-      ) {
-        const eyebrows = [
-          "Nền tảng AI",
-          "Thực hành sâu",
-          "Dự án cá nhân",
-          "Về đích",
-        ]
-        const updated: RoadmapWeek[] = res.personalized_milestones
-          .slice(0, 4)
-          .map((m, idx) => ({
-            id: `week-${idx + 1}`,
-            week: idx + 1,
-            eyebrow: eyebrows[idx] || `Tuần ${idx + 1}`,
-            title: m.title,
-            description: m.description,
-            content: `## ${m.title}\n\n${m.description}\n\n### Hoạt động cá nhân hóa theo Competency Gaps:\n${(m.actions || []).map((a) => `- ${a}`).join("\n")}`,
-            tasks:
-              m.actions && m.actions.length > 0
-                ? m.actions
-                : weeks[idx]?.tasks || fallbackRoadmap[idx].tasks,
-          }))
-        setWeeks(updated)
-      } else {
-        setWeeks((current) =>
-          current.map((w, idx) => ({
-            ...w,
-            eyebrow: `${w.eyebrow} · AI Tối ưu`,
-            tasks: [
-              ...w.tasks.slice(0, 2),
-              idx === 0
-                ? `Bù kỹ năng nền tảng ngành ${majorName} (45 phút/ngày)`
-                : idx === 1
-                  ? `Thực hành bài tập chuẩn hóa Z-Score cho ${majorName}`
-                  : idx === 2
-                    ? `Hoàn thiện mini-project thực tế ngành ${majorName}`
-                    : `Tổng kết hồ sơ năng lực & phản tư định hướng ${majorCode}`,
-            ],
-          })),
-        )
-      }
-      setSavedNotice(
-        "Đã cá nhân hóa lộ trình 4 tuần theo khoảng trống kỹ năng của bạn!",
-      )
+      if (version !== operationVersion.current || currentMajor.current !== expectedMajor) return
+      setWeeks(scheduleToWeeks(result, expectedMajor))
+      setGuidance(result)
+      restoreCompleted([])
+      setSavedNotice(result.is_fallback
+        ? "Đã lập lịch theo hồ sơ từ mẫu khám phá. Cần đối chiếu chương trình của trường; bấm Lưu tiến độ để giữ lịch này."
+        : "Đã lập lịch theo hồ sơ từ lộ trình có nguồn. Bấm Lưu tiến độ để giữ lịch này.")
       window.setTimeout(() => setSavedNotice(null), 3500)
+    } catch (error) {
+      if (version === operationVersion.current) setOperationError(error instanceof Error ? error.message : "Không cá nhân hóa được lộ trình.")
     } finally {
-      setPersonalizing(false)
+      if (version === operationVersion.current) setPersonalizing(false)
     }
   }
 
   const handleSaveProgress = async () => {
-    setSavingProgress(true)
+    if (savingProgress) return
+    setSavingProgress(true); setOperationError(null)
+    const expectedMajor = majorCode
+    const version = ++operationVersion.current
     try {
-      await apiRequest("/roadmap/progress", null, {
+      const finishedWeeks = weeks.filter(week => week.tasks.length > 0 && week.tasks.every((_, index) => completed.includes(`${week.id}-${index}`))).map(week => week.week)
+      await requestJSON("/roadmap/progress", {
         method: "POST",
-        body: JSON.stringify({
-          major_code: majorCode,
-          completed_milestones: completed,
-          completion_percentage: progress,
-        }),
+        body: JSON.stringify({ major_code: majorCode, current_step: weeks.find(week => !finishedWeeks.includes(week.week))?.week || weeks.length || 1,
+          completed_milestones: finishedWeeks, personalized_schedule: { completed_tasks: completed, guidance } }),
       })
-      setSavedNotice(`Đã lưu tiến độ (${progress}%) cho ngành ${majorName}!`)
-      window.setTimeout(() => setSavedNotice(null), 3000)
-    } finally {
-      setSavingProgress(false)
-    }
+      if (version !== operationVersion.current || currentMajor.current !== expectedMajor) return
+      setSavedNotice(`Đã lưu tiến độ (${progress}%) cho ngành ${majorName}.`)
+    } catch (error) {
+      if (version === operationVersion.current) setOperationError(error instanceof Error ? error.message : "Chưa lưu được tiến độ lên máy chủ.")
+    } finally { if (version === operationVersion.current) setSavingProgress(false) }
   }
 
   return (
@@ -385,6 +353,9 @@ export function RoadmapView() {
       className="min-h-[calc(100vh-72px)] py-8 sm:py-10"
     >
       <PageContainer className="max-w-7xl">
+        {operationError && <p role="alert" className="mb-5 rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800">{operationError}</p>}
+        {!loading && weeks.length === 0 && <p className="mb-5 text-sm text-slate-600">Chưa có dữ liệu lộ trình cho ngành này.</p>}
+        {guidance && <div role="status" data-testid="roadmap-provenance" className="mb-5 rounded-xl border border-sky-200 bg-sky-50 p-4 text-sm text-sky-900"><p className="font-semibold">{guidance.is_fallback ? "Mẫu khám phá cần đối chiếu" : "Lộ trình có nguồn tham khảo"}</p><p className="mt-2">{guidance.personalization_summary}</p><p className="mt-2">Lịch được dựng từ dữ liệu hồ sơ; không phải kết luận do LLM sinh.</p></div>}
         {/* Toast Notification */}
         {savedNotice && (
           <motion.div
@@ -403,7 +374,7 @@ export function RoadmapView() {
           <div>
             <div className="flex flex-wrap items-center gap-2.5 mb-2">
               <Link
-                to={`/major/${majorCode}`}
+                to={`/majors/${majorCode}`}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 px-3 py-1.5 text-xs font-bold text-slate-600 shadow-2xs backdrop-blur-md transition-colors hover:border-sky-300 hover:text-sky-700"
               >
                 <ArrowLeft size={13} />
@@ -447,11 +418,12 @@ export function RoadmapView() {
               <Button
                 variant="secondary"
                 icon={Sparkles}
+                disabled={personalizing || savingProgress || !weeks.length}
                 loading={personalizing}
                 onClick={handlePersonalizeByAI}
                 className="text-xs"
               >
-                Tối ưu hóa bằng AI
+                Cá nhân hóa theo hồ sơ
               </Button>
 
               <Button

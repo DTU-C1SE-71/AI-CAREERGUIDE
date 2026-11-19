@@ -9,6 +9,9 @@ Creates:
 """
 
 import os
+if __name__ == "__main__" and (os.environ.get("ENVIRONMENT") != "test" or os.environ.get("ALLOW_SYNTHETIC_DEMO_SEED") != "1"):
+    raise RuntimeError("Demo seed bị tắt. Dùng seed_catalog.py và create_admin.py cho môi trường thật.")
+import os
 import sys
 import json
 import sqlite3

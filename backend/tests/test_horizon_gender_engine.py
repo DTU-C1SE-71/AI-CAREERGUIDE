@@ -144,3 +144,71 @@ def test_cohort_fairness_audit():
     assert audit["is_fair"] is True
     assert 0.80 <= audit["disparate_impact_ratio"] <= 1.25
     assert audit["status"] == "PASS"
+
+
+@pytest.mark.asyncio
+async def test_dashboard_bundle_complete_profile_preserves_feasibility_and_horizon_gender():
+    from app.services.recommender.service import evaluate_dashboard_profile_bundle
+
+    ans = {
+        f"{g}{i}": (5 if g in ("R", "I") else 4 if g in ("A", "C") else 2)
+        for g in "RIASEC"
+        for i in range(1, 6)
+    }
+    cog = {f"COG_{i}": "A" for i in range(1, 9)}
+    grades = {
+        "Toán": 8.5,
+        "Vật lý": 8.0,
+        "Hóa học": 8.0,
+        "Ngữ văn": 8.3,
+        "Lịch sử": 8.3,
+        "Địa lý": 8.3,
+        "Tiếng Anh": 8.2,
+    }
+
+    res_12_female = await evaluate_dashboard_profile_bundle(
+        None,
+        uuid.uuid4(),
+        top_k=20,
+        inline_profile={
+            "riasec_answers": ans,
+            "cognitive_answers": cog,
+            "grades_by_subject": grades,
+        },
+        gender="Nữ",
+        grade_level="Lớp 12",
+    )
+    assert "Lớp 12" in res_12_female["horizon_label"]
+    top_field_12 = res_12_female["funnel"]["tier1_fields"][0]
+    top_major_12 = top_field_12["majors"][0]
+    assert top_major_12.feasibility_tier == "TARGET"
+    assert top_major_12.readiness["status"] == "READY_REFERENCE"
+    assert top_major_12.best_matching_block is not None
+    assert top_major_12.best_block_score is not None
+    assert top_major_12.benchmark_cutoff is not None
+    assert "Chưa đủ cơ sở đối chiếu" not in top_major_12.feasibility_label
+    assert "Lớp 12" in top_major_12.explanation
+    assert any(
+        m.nudge_badge == "Khuyến khích Nữ sinh STEM & Công nghệ"
+        for m in res_12_female["majors"]
+    )
+
+    res_10_male = await evaluate_dashboard_profile_bundle(
+        None,
+        uuid.uuid4(),
+        top_k=20,
+        inline_profile={
+            "riasec_answers": ans,
+            "cognitive_answers": cog,
+            "grades_by_subject": grades,
+        },
+        gender="Nam",
+        grade_level="Lớp 10",
+    )
+    assert "Lớp 10" in res_10_male["horizon_label"]
+    assert (
+        res_10_male["weights_applied"]["w_riasec"]
+        > res_12_female["weights_applied"]["w_riasec"]
+    )
+    top_major_10 = res_10_male["funnel"]["tier1_fields"][0]["majors"][0]
+    assert "Lớp 10" in top_major_10.explanation

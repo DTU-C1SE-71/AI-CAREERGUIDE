@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_optional_current_user, require_admin_actor
+from app.core.dependencies import get_optional_current_user, require_admin_actor, oauth2_scheme_optional
 from app.models.identity import User
 from app.schemas.insight import (
     MajorInsightResponse,
@@ -17,31 +17,33 @@ router = APIRouter(prefix="/major-insights", tags=["Major Insight & Student Skil
 @router.get(
     "/{major_code}",
     response_model=MajorInsightResponse,
-    summary="Nội dung đào tạo & vị trí nghề nghiệp của ngành (cache-first, chỉ gọi AI lần đầu)",
+    summary="Nội dung đào tạo & vị trí nghề nghiệp của ngành (theo danh mục, có bộ nhớ đệm)",
 )
 async def get_major_insight(
     major_code: str,
     refresh: bool = Query(default=False, description="Bỏ cache và sinh lại nội dung"),
+    token: str = Depends(oauth2_scheme_optional),
     db: AsyncSession = Depends(get_db),
 ):
     """
-    Đọc `major_insights` theo major_code. Nếu chưa có, agent gọi AI một lần rồi lưu DB;
-    các lần xem sau trả về ngay từ DB, không phát sinh chi phí token.
+    Đọc danh mục ngành đang hoạt động và trả thông tin tham khảo tất định; cache đổi khi nội dung danh mục đổi.
     """
+    if refresh:
+        await require_admin_actor(token, db)
     return await service.get_or_create_major_insight(db, major_code, refresh=refresh)
 
 
 @router.post(
     "/{major_code}/regenerate",
     response_model=MajorInsightResponse,
-    summary="Admin: bỏ cache và sinh lại nội dung đào tạo của một ngành bằng AI",
+    summary="Admin: bỏ cache và cập nhật nội dung đào tạo từ danh mục",
 )
 async def regenerate_major_insight(
     major_code: str,
     admin_actor: dict = Depends(require_admin_actor),
     db: AsyncSession = Depends(get_db),
 ):
-    """Xoá bản ghi cũ và gọi AI sinh lại nội dung; kết quả mới được ghi đè vào DB."""
+    """Tạo lại thông tin từ danh mục ngành hiện hành."""
     return await service.get_or_create_major_insight(db, major_code, refresh=True)
 
 
@@ -56,7 +58,7 @@ async def delete_major_insight(
 ):
     """
     Xoá bản ghi trong `major_insights`. Lần xem tiếp theo của học sinh sẽ sinh lại
-    nội dung (tốn một lần gọi AI) và cache lại như bình thường.
+    nội dung từ danh mục và cache lại như bình thường.
     """
     deleted = await service.delete_major_insight(db, major_code)
     return {

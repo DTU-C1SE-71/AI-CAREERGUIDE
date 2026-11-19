@@ -15,8 +15,9 @@ import {
   Sparkles,
   Trash2,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState, useRef } from "react"
 import { readStorage } from "../../services/storage"
+import { apiFetch } from "../../services/api"
 import { Button } from "../common/Button"
 import { TrendBadge } from "../xai/TrendBadge"
 
@@ -139,24 +140,36 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
   const [showMethodology, setShowMethodology] = useState(false)
   const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({})
   const [showAllSources, setShowAllSources] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState("")
+  const [page, setPage] = useState(1)
+  const mounted = useRef(true)
+  const operation = useRef(false)
+
 
   const loadSavedStatus = useCallback(async () => {
+    setLoading(true); setLoadError(null)
     try {
-      const r = await fetch("/api/v1/taxonomy/trend-agent/status")
-      if (!r.ok) return
+      const r = await apiFetch("/api/v1/taxonomy/trend-agent/status")
+      if (!r.ok) throw new Error(`Không tải được trạng thái xu hướng (HTTP ${r.status}).`)
       const res: TrendAgentStatusPayload = await r.json()
+      if (!mounted.current) return
       setStatusData(res)
       if (res.focus_query && /202[6-9]/.test(res.focus_query)) {
         setFocusQuery(res.focus_query)
       }
       if ((res.total_trending_marked || 0) > 0) setExpanded(true)
-    } catch {
-      // ignore initial load error
-    }
+    } catch (error) {
+      if (mounted.current) setLoadError(error instanceof Error ? error.message : "Không tải được trạng thái xu hướng.")
+      throw error
+    } finally { if (mounted.current) setLoading(false) }
   }, [])
 
   useEffect(() => {
-    void loadSavedStatus()
+    mounted.current = true
+    void loadSavedStatus().catch(() => {})
+    return () => { mounted.current = false }
   }, [loadSavedStatus])
 
   const getAdminAuthHeader = (): Record<string, string> => {
@@ -165,9 +178,11 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
   }
 
   const handleRunAgent = async () => {
+    if (operation.current) return
+    operation.current = true
     setRunning(true)
     try {
-      const res = await fetch("/api/v1/taxonomy/trend-agent/run", {
+      const res = await apiFetch("/api/v1/taxonomy/trend-agent/run", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -190,6 +205,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
         throw new Error(errData?.detail || `Lỗi HTTP ${res.status}`)
       }
       const data: TrendAgentStatusPayload = await res.json()
+      if (!mounted.current) return
       setStatusData({
         ...data,
         has_run: true,
@@ -207,7 +223,8 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
         true,
       )
     } finally {
-      setRunning(false)
+      operation.current = false
+      if (mounted.current) setRunning(false)
     }
   }
 
@@ -217,9 +234,11 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
       onNotify("Không có ngành xu hướng nào trong bản nháp để lưu.", true)
       return
     }
+    if (operation.current) return
+    operation.current = true
     setSavingToDb(true)
     try {
-      const res = await fetch("/api/v1/taxonomy/trend-agent/save", {
+      const res = await apiFetch("/api/v1/taxonomy/trend-agent/save", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -252,6 +271,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
         throw new Error(errData?.detail || `Lỗi HTTP ${res.status}`)
       }
       const saved: TrendAgentStatusPayload = await res.json()
+      if (!mounted.current) return
       setStatusData({
         ...saved,
         has_run: true,
@@ -268,13 +288,14 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
         true,
       )
     } finally {
-      setSavingToDb(false)
+      operation.current = false
+      if (mounted.current) setSavingToDb(false)
     }
   }
 
   const handleDiscardDraft = async () => {
-    await loadSavedStatus()
-    onNotify("Đã hủy bản nháp và khôi phục dữ liệu xu hướng đang lưu trong CSDL.")
+    try { await loadSavedStatus(); onNotify("Đã tải lại dữ liệu xu hướng đang lưu trong CSDL.") }
+    catch { onNotify("Chưa tải được dữ liệu đang lưu. Bản nháp chưa bị thay đổi.", true) }
   }
 
   const handleTierChange = async (majorCode: string, nextTier: string) => {
@@ -323,9 +344,11 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
       return
     }
 
+    if (operation.current) return
+    operation.current = true
     setUpdatingCode(majorCode)
     try {
-      const res = await fetch(`/api/v1/taxonomy/trend-agent/majors/${majorCode}`, {
+      const res = await apiFetch(`/api/v1/taxonomy/trend-agent/majors/${majorCode}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -339,19 +362,23 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const updated: TrendAgentStatusPayload = await res.json()
+      if (!mounted.current) return
       setStatusData(updated)
       onNotify(`Đã cập nhật bậc xu hướng cho mã ${majorCode} trong CSDL.`)
     } catch {
       onNotify("Không cập nhật được bậc ưu tiên ngành.", true)
     } finally {
-      setUpdatingCode(null)
+      operation.current = false
+      if (mounted.current) setUpdatingCode(null)
     }
   }
 
   const handleClearTrends = async () => {
+    if (operation.current || !window.confirm("Xóa các đánh dấu xu hướng đang lưu?")) return
+    operation.current = true
     setClearing(true)
     try {
-      const res = await fetch("/api/v1/taxonomy/trend-agent/clear", {
+      const res = await apiFetch("/api/v1/taxonomy/trend-agent/clear", {
         method: "DELETE",
         headers: { ...getAdminAuthHeader() },
       })
@@ -361,21 +388,23 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
       }
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
       const cleared: TrendAgentStatusPayload = await res.json()
+      if (!mounted.current) return
       setStatusData(cleared)
       setExpanded(false)
       onNotify("Đã xóa toàn bộ đánh dấu ngành xu hướng.")
     } catch {
       onNotify("Không thể xóa đánh dấu xu hướng.", true)
     } finally {
-      setClearing(false)
+      operation.current = false
+      if (mounted.current) setClearing(false)
     }
   }
 
-  const trendingList = statusData?.trending_majors || []
-  const filteredMajors = useMemo(() => {
-    if (tierFilter === "ALL") return trendingList
-    return trendingList.filter((m) => m.trend_tier === tierFilter)
-  }, [trendingList, tierFilter])
+  const trendingList = useMemo(() => statusData?.trending_majors || [], [statusData])
+  const filteredMajors = useMemo(() => trendingList.filter(item => (tierFilter === "ALL" || item.trend_tier === tierFilter) && `${item.major_name} ${item.major_code} ${item.category || ""}`.toLocaleLowerCase("vi").includes(search.trim().toLocaleLowerCase("vi"))), [trendingList, tierFilter, search])
+  const totalPages = Math.max(1, Math.ceil(filteredMajors.length / 25))
+  const currentPage = Math.min(page, totalPages)
+  const pageRows = filteredMajors.slice((currentPage - 1) * 25, currentPage * 25)
 
   const counts = statusData?.tier_counts || {}
   const totalMarked = statusData?.total_trending_marked || 0
@@ -392,6 +421,9 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
 
   return (
     <div className="glass-card mb-5 rounded-3xl p-4 sm:p-5">
+      {loading && <p role="status" className="mb-4 text-sm text-slate-600">Đang tải dữ liệu xu hướng…</p>}
+      {loadError && <div role="alert" className="admin-notice is-error"><span>{loadError}</span><button type="button" className="admin-button" onClick={() => void loadSavedStatus().catch(() => {})}>Thử lại</button></div>}
+      {!loading && !loadError && totalMarked === 0 && <p className="mb-4 text-sm text-slate-600">Chưa có danh sách xu hướng được lưu. Chạy tìm kiếm để tạo bản nháp và rà soát nguồn.</p>}
       <div className="flex flex-col justify-between gap-3 lg:flex-row lg:items-center">
         <div className="flex items-start gap-3">
           <span className="grid size-11 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-xs">
@@ -508,9 +540,10 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
       {/* Wide Search Prompt Bar + Preset 2026 Chips */}
       <div className="mt-3.5 space-y-2.5 rounded-2xl border border-sky-100 bg-sky-50/50 p-3.5">
         <div className="flex flex-wrap items-center gap-2.5">
-          <div className="relative min-w-[280px] flex-1">
+          <div className="relative min-w-0 flex-1">
             <Globe size={15} className="absolute left-3 top-2.5 text-sky-500" />
             <input
+              aria-label="Chủ đề tìm xu hướng"
               value={focusQuery}
               onChange={(e) => setFocusQuery(e.target.value)}
               placeholder="Nhập từ khóa xu hướng thị trường lao động 2026..."
@@ -522,6 +555,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
           <Button
             onClick={handleRunAgent}
             loading={running}
+            disabled={running || savingToDb || clearing || Boolean(updatingCode)}
             icon={Radar}
             className="!min-h-9 !px-4 !text-xs !bg-sky-600 hover:!bg-sky-700 shrink-0"
           >
@@ -572,6 +606,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
                   disabled={clearing}
                   onClick={handleClearTrends}
                   title="Xóa toàn bộ đánh dấu xu hướng trong CSDL"
+                  aria-label="Xóa toàn bộ đánh dấu xu hướng"
                   className="inline-flex h-9 items-center gap-1 rounded-xl border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-500 hover:border-rose-200 hover:text-rose-600 disabled:opacity-50 cursor-pointer shrink-0"
                 >
                   <Trash2 size={13} />
@@ -656,7 +691,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
                   <button
                     key={tab.id}
                     type="button"
-                    onClick={() => setTierFilter(tab.id)}
+                    onClick={() => { setTierFilter(tab.id); setPage(1) }}
                     className={`relative rounded-lg px-3 py-1.5 text-xs font-bold transition cursor-pointer ${
                       isActive ? "text-white shadow-xs" : "bg-white text-slate-600 hover:bg-sky-50"
                     }`}
@@ -718,6 +753,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
             )}
           </AnimatePresence>
 
+          <label className="admin-field m-4">Tìm ngành xu hướng<input type="search" value={search} onChange={event => { setSearch(event.target.value); setPage(1) }} /></label>
           <div className="max-h-[460px] overflow-x-auto overflow-y-auto">
             <table className="w-full min-w-[960px] border-collapse text-left text-sm">
               <thead className="sticky top-0 z-10 bg-slate-50 text-xs font-bold uppercase tracking-wider text-slate-600 shadow-2xs border-b border-slate-200">
@@ -731,14 +767,14 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {filteredMajors.map((item, idx) => {
+                {pageRows.map((item, idx) => {
                   const isCitationOpen = Boolean(expandedCitations[item.major_code])
                   const sources = item.trend_sources || []
 
                   return (
                     <tr key={item.major_code} className="hover:bg-sky-50/40">
                       <td className="px-3 py-3 text-center text-xs font-bold text-slate-400 tabular-nums">
-                        {idx + 1}
+                        {(currentPage - 1) * 25 + idx + 1}
                       </td>
                       <td className="px-3 py-3">
                         <span className="inline-block rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700">
@@ -812,7 +848,8 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
                       </td>
                       <td className="px-3 py-3 text-right">
                         <select
-                          disabled={updatingCode === item.major_code || savingToDb}
+                          aria-label={`Bậc xu hướng ngành ${item.major_name}`}
+                          disabled={Boolean(updatingCode) || savingToDb || running || clearing}
                           value={item.trend_tier}
                           onChange={(e) => handleTierChange(item.major_code, e.target.value)}
                           className="h-8 rounded-lg border border-slate-200 bg-white px-2.5 text-xs font-bold text-slate-700 outline-none transition focus:border-sky-400 focus:ring-2 focus:ring-sky-100 cursor-pointer"
@@ -828,7 +865,9 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
                 })}
               </tbody>
             </table>
+            {pageRows.length === 0 && <p className="p-5 text-sm text-slate-600">Không có ngành khớp bộ lọc.</p>}
           </div>
+          <div className="admin-pagination px-4"><span>{filteredMajors.length} ngành · Trang {currentPage}/{totalPages}</span><button className="admin-button" type="button" disabled={currentPage <= 1} onClick={() => setPage(currentPage - 1)}>Trước</button><button className="admin-button" type="button" disabled={currentPage >= totalPages} onClick={() => setPage(currentPage + 1)}>Sau</button></div>
         </div>
       )}
     </div>

@@ -4,8 +4,8 @@ import type { RoadmapWeek } from "../types/roadmap"
 export interface RiasecRadarPoint {
   key: string
   label: string
-  value: number // Điểm sở thích RIASEC (%)
-  academicValue: number // Điểm học tập quy đổi (%)
+  value: number | null // Điểm sở thích RIASEC (%)
+  academicValue: number | null // Điểm học tập quy đổi (%)
   subjectMapping?: string // Tổ hợp/Môn học đối chiếu
   fullMark: number
 }
