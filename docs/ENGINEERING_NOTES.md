@@ -122,8 +122,17 @@
 | 4 | **Major Insight Agent** | `major_insight/service.py` (`/{major_code}`) | Cache DB + Danh mục | Cung cấp nội dung đào tạo & vị trí nghề nghiệp của ngành, cache theo dấu vân tay danh mục hiện hành. |
 | 5 | **Career Counselor & System Help AI Agent** | `llamaindex_rag_orchestrator/guidance_rag.py`, `chat_scope.py`, `guidance_boundary.py`, `system_help.py` | **LLM Agent + Guardrails 3 lớp** | 3 vai trò: Tư vấn chọn ngành (grounded trên `guidance_facts`), Trợ giảng học tập/lập trình, và Hỗ trợ sử dụng AI CareerGuide. Chặn prompt injection & rò rỉ thông tin nội bộ ngay từ lớp tiền xử lý (0 token). |
 | 6 | **Dual-Stream Knowledge & HITL Governance Agents** | `stream_a_ingest.py`, `stream_b_discovery.py`, `hitl_governance.py` | RAG + HITL | Stream A nạp PDF tài liệu chuẩn; Stream B tìm kiếm nguồn học thuật whitelist (`.edu.vn`, `coursera.org`, `roadmap.sh`...) qua Tavily, đi qua hàng đợi Admin kiểm duyệt. |
-| 7 | **Labor Market Trend Agent** | `taxonomy/trend_agent.py` | Admin Agent | Phân tích & gán hạng xu hướng ngành (`TIER_1..3`) cho Admin phê duyệt, đồng bộ trực tiếp vào HA-GAE v3.1. |
+| 7 | **Labor Market Trend Agent (Strict Evidence-Only)** | `taxonomy/trend_agent.py` | Admin Agent (Web + LLM) | Quét báo chí đúng theo `focus_query` của Admin (Tavily + Google/Bing News RSS), đối chiếu **bằng chứng trực tiếp 1-1** (tên ngành chuẩn / `STRICT_MAJOR_SYNONYMS`), tuyệt đối **không** lấy ngành từ bảng cứng, **không** nhồi quota CSDL, **không** gắn link giả; trả rỗng `no_matching_majors` nếu báo không đề cập ngành nào. |
 | 8 | **Gap & 4-Week Roadmap Engine** | `gap_roadmap_engine/gap_engine.py`, `service.py` | Cache Write-Once/Read-Many | Tính lỗ hổng kỹ năng tiên quyết và sinh lộ trình trải nghiệm/ôn tập 4 tuần theo `major_code` (có fallback tĩnh). |
+
+### 3.1. Nâng cấp **Strict Evidence-Only** cho Labor Market Trend Agent (`taxonomy/trend_agent.py`)
+- **Vấn đề trước kiểm toán:** Bản cũ chứa bảng hard-code `CATEGORY_BASELINE_REPRESENTATIVES`, chỉ tiêu lấp nhóm `CATEGORY_TREND_QUOTA` ($\ge 3$ ngành/nhóm), vòng lặp bốc đại ngành từ CSDL, chùm từ khóa `TREND_TOPIC_CLUSTERS` gây bắn chéo ngành không liên quan (VD: *du lịch* đôn *Thú y* / *Thủy sản*), và gán `fallback_article_refs = articles[:2]` làm nguồn dẫn chứng giả.
+- **Giải pháp đã áp dụng (`Zero Fabrication`):**
+  1. Xóa hoàn toàn `CATEGORY_BASELINE_REPRESENTATIVES`, `CATEGORY_TREND_QUOTA`, `TREND_TOPIC_CLUSTERS`, vòng lặp bốc ngành từ DB và `fallback_article_refs`.
+  2. `search_trending_majors_online` chỉ tìm đúng theo `focus_query` Admin nhập (loại bỏ 5 truy vấn cứng ngoài lề).
+  3. `_extract_candidates_from_articles` chỉ chấp nhận ngành có tên chuẩn hoặc từ đồng nghĩa 1-1 không mơ hồ (`STRICT_MAJOR_SYNONYMS`, khớp biên từ `(?<!\w)...(?!\w)`, không khớp nhầm từ `"ai"` trong tiếng Việt) xuất hiện trực tiếp trong ít nhất 1 bài báo thật (`evidence_score >= 2.0`), và `sources` chỉ chứa đúng các bài báo nhắc tới ngành đó.
+  4. Khi không có ngành nào được đề cập trực tiếp trong bài báo, `run_trend_discovery_agent` trả trung thực `status: "no_matching_majors"` và `trending_majors: []`.
+  5. Kiểm thử hồi quy tại `backend/tests/test_trend_evidence.py`.
 
 ---
 
