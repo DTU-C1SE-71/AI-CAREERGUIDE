@@ -710,7 +710,7 @@ export function Dashboard() {
             </div>
 
             {recommendationMode === "ai" && (
-              <div className="mb-6 space-y-6">
+              <div className="mb-6">
                 <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200/80 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-900 sm:rounded-3xl sm:px-5 sm:py-3.5 sm:text-sm">
                   <div className="flex items-center gap-2.5">
                     <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-indigo-600 text-white">
@@ -742,16 +742,24 @@ export function Dashboard() {
                     Quay lại Thuật toán
                   </button>
                 </div>
+              </div>
+            )}
 
-                {/* AI Đối chiếu nguyện vọng */}
-                <AspirationAlignmentCard
-                  analysis={data?.aspirationAnalysis ?? null}
-                  currentAspiration={effectiveAssessment.aspiration}
-                  onUpdateAspiration={handleUpdateAspiration}
-                  isAnalyzing={isAnalyzingAspiration}
-                  readOnly={activeAttemptIndex > 0}
-                />
+            {/* Đối chiếu nguyện vọng nghề nghiệp & học lực (hiển thị tức thì ở cả 2 chế độ; nhận xét AI bổ sung khi bật chế độ Có AI) */}
+            <div className="mb-6">
+              <AspirationAlignmentCard
+                analysis={data?.aspirationAnalysis ?? null}
+                currentAspiration={effectiveAssessment.aspiration}
+                onUpdateAspiration={handleUpdateAspiration}
+                isAnalyzing={isAnalyzingAspiration}
+                readOnly={activeAttemptIndex > 0}
+                isAiMode={recommendationMode === "ai"}
+                aiCoachingSummary={skillAnalysis?.summary ?? null}
+              />
+            </div>
 
+            {recommendationMode === "ai" && (
+              <div className="mb-6">
                 {/* AI Phân tích kỹ năng & điểm mạnh/yếu (chỉ gọi khi mở chế độ AI) */}
                 <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
               </div>

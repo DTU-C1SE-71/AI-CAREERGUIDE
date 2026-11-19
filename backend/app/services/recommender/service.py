@@ -48,6 +48,8 @@ from app.services.recommender.engine import (
     format_block_with_subjects,
     calculate_market_trend_compatibility,
     CROSS_FIELD_SUBSTITUTION_MAP,
+    STANDARD_SUBJECT_BLOCKS,
+    get_major_subject_requirements,
 )
 
 from app.services.recommender.readiness import (
@@ -174,6 +176,7 @@ def _publish_readiness(item: MajorRecommendationItem, *, preserve_complete_feasi
             if item.best_matching_block
             else "Cần đối chiếu trường và phương thức tuyển sinh"
         )
+        feas_meta = item.score_breakdown.get("feasibility") or {}
         if item.best_block_score is not None and item.feasibility_tier in ("TARGET", "SAFETY", "SAFE"):
             evidence.update({
                 "status": "READY_REFERENCE",
@@ -183,6 +186,8 @@ def _publish_readiness(item: MajorRecommendationItem, *, preserve_complete_feasi
                 "benchmark_cutoff": item.benchmark_cutoff,
                 "min_recommended": item.min_recommended,
                 "violations": list(item.constraint_violations or []),
+                "gaps": [],
+                "missing_subjects": [],
                 "message": item.admission_advice or "Đạt mốc điểm chuẩn tham chiếu của ngành.",
             })
         elif item.feasibility_tier == "REACH":
@@ -194,6 +199,8 @@ def _publish_readiness(item: MajorRecommendationItem, *, preserve_complete_feasi
                 "benchmark_cutoff": item.benchmark_cutoff,
                 "min_recommended": item.min_recommended,
                 "violations": list(item.constraint_violations or []),
+                "gaps": list(feas_meta.get("gaps") or []),
+                "missing_subjects": list(feas_meta.get("missing_subjects") or []),
                 "message": item.admission_advice or "Cần cải thiện thêm điểm số hoặc điều kiện môn tiên quyết.",
             })
         item.score_breakdown["feasibility"] = evidence
@@ -707,6 +714,48 @@ async def calculate_3pillar_recommendations(
             has_academic_data=has_any_grades,
         )
 
+        heuristic_missing_subjects: List[str] = []
+        heuristic_gaps: List[Dict[str, Any]] = []
+        if has_any_grades and not effective_matched and admitted_codes:
+            best_cand_missing: Optional[List[str]] = None
+            for blk_code in admitted_codes:
+                blk_def = STANDARD_SUBJECT_BLOCKS.get(blk_code)
+                if not blk_def or not blk_def.get("subjects"):
+                    continue
+                missing = [s for s in blk_def["subjects"] if s not in norm_raw_grades]
+                if best_cand_missing is None or len(missing) < len(best_cand_missing):
+                    best_cand_missing = missing
+            if best_cand_missing:
+                heuristic_missing_subjects = best_cand_missing
+        elif effective_matched and feasibility.get("feasibility_tier") == "REACH":
+            min_any, req_subjects = get_major_subject_requirements(
+                major.major_code,
+                major.name,
+                getattr(major, "category", "") or "",
+            )
+            for subj in (block_subjs or []):
+                if subj not in norm_raw_grades:
+                    continue
+                sc = float(norm_raw_grades[subj])
+                req_val = float(max(min_any, req_subjects.get(subj, 0.0)))
+                if sc < req_val:
+                    heuristic_gaps.append({
+                        "kind": "SUBJECT_SCORE",
+                        "subject": subj,
+                        "actual": round(sc, 3),
+                        "required": round(req_val, 3),
+                        "delta": round(req_val - sc, 3),
+                    })
+            if raw_block_sum is not None and feasibility.get("benchmark_cutoff") is not None:
+                cutoff_val = float(feasibility["benchmark_cutoff"])
+                if float(raw_block_sum) < cutoff_val:
+                    heuristic_gaps.append({
+                        "kind": "TOTAL_SCORE",
+                        "amount": round(cutoff_val - float(raw_block_sum), 3),
+                    })
+        feasibility["gaps"] = heuristic_gaps
+        feasibility["missing_subjects"] = heuristic_missing_subjects
+
         if readiness.get("block"):
             best_block = readiness["block"]
             readiness_tier = {"READY_REFERENCE": "TARGET", "NEEDS_IMPROVEMENT": "REACH", "UNKNOWN": "UNKNOWN"}[readiness["status"]]
@@ -715,6 +764,8 @@ async def calculate_3pillar_recommendations(
                 "feasibility_label": {"TARGET": "Đạt mốc tham chiếu", "REACH": "Cần cải thiện", "UNKNOWN": "Chưa đủ bằng chứng"}[readiness_tier],
                 "constraint_passed": readiness["status"] == "READY_REFERENCE",
                 "constraint_violations": readiness.get("violations", []),
+                "gaps": list(readiness.get("gaps") or []),
+                "missing_subjects": list(readiness.get("missing_subjects") or []),
                 "admission_advice": readiness.get("message"),
                 "best_block_score": readiness.get("block_score"),
                 "benchmark_cutoff": readiness.get("benchmark_cutoff"),

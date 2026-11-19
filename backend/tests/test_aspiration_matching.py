@@ -210,3 +210,44 @@ def test_every_atomic_choice_round_trips_to_same_intent():
         result = analyze(label)
         assert result['match_status'] == 'MATCHED', label
         assert result['intent_candidates'][0]['id'] == intent_id
+
+
+def test_subfacet_veto_surfaces_trait_warning_on_dream_major():
+    vetoed = major(
+        '7210205',
+        'Thanh nhạc',
+        score_riasec=0.22,
+        overall_score=0.31,
+        score_breakdown={
+            'subfacet_gate': {
+                'status': 'STRONG_VETO',
+                'note': 'Cổng sở thích hẹp (A4 = 1/5): Bạn chọn Rất không thích Âm nhạc.',
+            }
+        },
+    )
+    complete_interest = {'status': 'COMPLETE', 'groups': [{'code': 'A', 'percent': 75, 'answered': 5, 'total': 5}]}
+    result = analyze('Ca sĩ', [vetoed], interest_evidence=complete_interest)
+    assert result['match_status'] == 'MATCHED'
+    dream = result['dream_majors'][0]
+    assert dream['subfacet_status'] == 'STRONG_VETO'
+    assert dream['riasec_fit'] == 22
+    assert 'A4 = 1/5' in (dream['trait_warning'] or '')
+    assert any('A4 = 1/5' in t for t in result['key_takeaways'])
+
+
+@pytest.mark.parametrize('job,goal_code,goal_name,rel_code,rel_name', [
+    ('Kỹ sư thiết kế vi mạch', '7520202', 'Thiết kế vi mạch', '7510301', 'Công nghệ kỹ thuật điện, điện tử'),
+    ('Luật sư', '7380101', 'Luật', '7380108', 'Luật quốc tế'),
+    ('Dược sĩ', '7720201', 'Dược học', '7720601', 'Kỹ thuật xét nghiệm y học'),
+])
+def test_expanded_related_paths_surface_ready_related_majors(job, goal_code, goal_name, rel_code, rel_name):
+    pool = [
+        major(goal_code, goal_name, readiness={'status': 'NEEDS_IMPROVEMENT', 'violations': ['Thiếu điểm']}),
+        major(rel_code, rel_name, ready('A00', 24)),
+    ]
+    result = analyze(job, pool, strategy='FLEXIBLE_PATHWAY')
+    assert result['match_status'] == 'MATCHED'
+    assert [item['major_code'] for item in result['dream_majors']] == [goal_code]
+    assert any(item['major_code'] == rel_code for item in result['current_options'])
+    assert any(item['major_code'] == rel_code for item in result['recommended_substitutes'])
+

@@ -45,6 +45,9 @@ export interface AspirationMajorBrief {
   riasec_fit: number | null
   academic_fit: number | null
   cognitive_fit: number | null
+  subfacet_status?: "STRONG_VETO" | "SOFT_PENALTY" | "AFFINITY_BOOST" | "NEUTRAL"
+  subfacet_note?: string | null
+  trait_warning?: string | null
   feasibility_tier: "TARGET" | "REACH" | "UNKNOWN"
   feasibility_label: string
   best_matching_block?: string | null

@@ -145,14 +145,36 @@ def _serialize_major_brief(item, role_tag='DREAM', *, interest_complete=False, r
     readiness = _readiness(item)
     academic_known = readiness['status'] in {'READY_REFERENCE', 'NEEDS_IMPROVEMENT'}
     block = readiness.get('block')
+    score_breakdown = getattr(item, 'score_breakdown', None) or {}
+    subfacet = score_breakdown.get('subfacet_gate') or {}
+    if not isinstance(subfacet, dict):
+        subfacet = {}
+    riasec_pct = round(item.score_riasec * 100) if interest_complete else None
+    subfacet_status = subfacet.get('status', 'NEUTRAL') if interest_complete else 'NEUTRAL'
+    subfacet_note = subfacet.get('note') if interest_complete else None
+    trait_warning = None
+    if interest_complete:
+        if subfacet_status in ('STRONG_VETO', 'SOFT_PENALTY'):
+            trait_warning = (
+                subfacet_note
+                or 'Ngành mục tiêu này đang mâu thuẫn với câu trả lời Không thích trong bài trắc nghiệm sở thích của bạn.'
+            )
+        elif riasec_pct is not None and riasec_pct < 45:
+            trait_warning = (
+                f'Độ tương thích sở thích RIASEC khá thấp ({riasec_pct}%): '
+                'Đặc trưng nghề nghiệp này lệch khá nhiều so với nhóm sở thích nổi trội của bạn.'
+            )
     return {
         'major_code': item.major_code, 'major_name': item.major_name,
         'category': item.category or 'Khác',
         'overall_match': round(item.overall_score * 100) if interest_complete and academic_known else None,
-        'riasec_fit': round(item.score_riasec * 100) if interest_complete else None,
+        'riasec_fit': riasec_pct,
         'academic_fit': round(item.score_academic * 100) if academic_known else None,
         'cognitive_fit': (getattr(item, 'fit', None) or {}).get('cognitive'),
-        'preference_evidence': (getattr(item, 'score_breakdown', None) or {}).get('aspiration_preferences', {}),
+        'preference_evidence': score_breakdown.get('aspiration_preferences', {}),
+        'subfacet_status': subfacet_status,
+        'subfacet_note': subfacet_note,
+        'trait_warning': trait_warning,
         'score_meaning': 'HEURISTIC_FIT_NOT_ADMISSION_PROBABILITY',
         'feasibility_tier': 'TARGET' if readiness['status'] == 'READY_REFERENCE' else ('REACH' if academic_known else 'UNKNOWN'),
         'feasibility_label': {'READY_REFERENCE': 'Đạt mốc tham chiếu', 'NEEDS_IMPROVEMENT': 'Cần cải thiện', 'UNKNOWN': 'Chưa đủ dữ liệu'}[readiness['status']],
@@ -182,6 +204,43 @@ RELATED_PATHS = {
     'AI': ({'7480103', '7460108'}, 'Cùng sử dụng lập trình và xử lý dữ liệu; chương trình và vị trí nghề nghiệp khác nhau.'),
     'DATA': ({'7480101', '7480103'}, 'Cùng sử dụng lập trình và phân tích dữ liệu; cần đối chiếu chương trình đào tạo.'),
     'PHYSICIAN': ({'7720301', '7720601'}, 'Cùng môi trường chăm sóc sức khỏe nhưng là nghề khác, không cấp bằng bác sĩ hay bảo đảm liên thông.'),
+    'DENTIST': ({'7720101', '7720601'}, 'Cùng khối ngành Sức khỏe nhưng văn bằng và phạm vi hành nghề khác Nha sĩ.'),
+    'PHARMACIST': ({'7720601', '7420201', '7440112'}, 'Cùng nền tảng Hóa - Sinh ứng dụng; Công nghệ sinh học/Hóa học không cấp bằng Dược sĩ.'),
+    'NURSE': ({'7720603', '7720601', '7720401'}, 'Cùng nhóm chăm sóc và hỗ trợ điều trị trong hệ thống y tế.'),
+    'LAB_TECH': ({'7420201', '7720301'}, 'Cùng làm việc trong lĩnh vực xét nghiệm và sinh học y sinh.'),
+    'REHABILITATION': ({'7720301', '7720401'}, 'Cùng nhóm chăm sóc phục hồi và sức khỏe cộng đồng.'),
+    'NUTRITION': ({'7540101', '7720301'}, 'Cùng nghiên cứu dinh dưỡng và an toàn thực phẩm cho sức khỏe.'),
+    'CYBER': ({'7480102', '7480201', '7480103'}, 'Cùng nhóm Máy tính và CNTT; có thể định hướng chuyên sâu bảo mật từ nền tảng mạng và phần mềm.'),
+    'CHIP': ({'7440180', '7480106', '7510301', '7510302'}, 'Cùng lĩnh vực bán dẫn, phần cứng, điện tử và hệ thống nhúng; phù hợp làm lộ trình nền tảng vào ngành vi mạch.'),
+    'AUTOMOTIVE': ({'7510205', '7520103', '7520114'}, 'Cùng nhóm cơ khí động lực và cơ điện tử ứng dụng trong công nghiệp ô tô.'),
+    'ACCOUNTANT': ({'7340302', '7340201', '7340101'}, 'Cùng khối Kinh doanh - Tài chính; kiến thức nền tảng có tính liên thông cao.'),
+    'AUDITOR': ({'7340301', '7340201'}, 'Cùng nhóm Kế toán - Kiểm toán và phân tích tài chính doanh nghiệp.'),
+    'FINANCE': ({'7340205', '7340301', '7310101'}, 'Cùng lĩnh vực tài chính, công nghệ tài chính (Fintech) và kinh tế học.'),
+    'MARKETING': ({'7340122', '7320104', '7340101'}, 'Cùng nhóm tiếp thị số, thương mại điện tử và truyền thông thương hiệu.'),
+    'LOGISTICS': ({'7340120', '7840101', '7340101'}, 'Cùng lĩnh vực chuỗi cung ứng, kinh doanh quốc tế và khai thác vận tải.'),
+    'ECOMMERCE': ({'7340115', '7480104', '7340101'}, 'Cùng kết hợp quản trị kinh doanh, tiếp thị số và hệ thống thông tin.'),
+    'GRAPHIC_DESIGN': ({'7320104', '7210402', '7480201'}, 'Cùng nhóm thiết kế sáng tạo, truyền thông đa phương tiện và giao diện số.'),
+    'ARCHITECT': ({'7580201', '7580102', '7210403'}, 'Cùng lĩnh vực quy hoạch, xây dựng công trình và thiết kế không gian.'),
+    'FASHION': ({'7210403', '7210402', '7540204'}, 'Cùng lĩnh vực mỹ thuật ứng dụng và công nghệ dệt may - thời trang.'),
+    'PSYCHOLOGIST': ({'7760101', '7310301', '7140114'}, 'Cùng nhóm khoa học hành vi, tham vấn học đường và hỗ trợ cộng đồng.'),
+    'SOCIAL_WORK': ({'7310301', '7310401'}, 'Cùng lĩnh vực hỗ trợ xã hội, tâm lý và phát triển cộng đồng.'),
+    'HUMAN_RESOURCES': ({'7340101', '7340406', '7310401'}, 'Cùng khối quản trị tổ chức, nhân sự và tâm lý lao động.'),
+    'LAWYER': ({'7380108', '7380103', '7310205'}, 'Cùng khối Pháp luật và hành chính; cần lưu ý nghề Luật sư/Thẩm phán yêu cầu đào tạo nghiệp vụ sau cử nhân Luật.'),
+    'DIPLOMAT': ({'7310205', '7220201', '7380107'}, 'Cùng nhóm đối ngoại, quốc tế học, ngoại ngữ và luật quốc tế.'),
+    'SINGER': ({'7210201', '7140221'}, 'Cùng lĩnh vực nghệ thuật âm nhạc và sư phạm âm nhạc.'),
+    'ACTOR': ({'7210222', '7210332', '7320104'}, 'Cùng lĩnh vực nghệ thuật sân khấu, điện ảnh và truyền thông.'),
+    'TOUR_GUIDE': ({'7810201', '7220201', '7310630'}, 'Cùng nhóm du lịch, lữ hành, khách sạn và văn hóa - ngoại ngữ.'),
+    'INFORMATION_TECH': ({'7480103', '7480104', '7480101'}, 'Cùng nhóm Máy tính và Công nghệ thông tin với khả năng chuyển đổi vị trí linh hoạt.'),
+    'TEACHER': ({'7140101', '7140114', '7220201'}, 'Cùng lĩnh vực khoa học giáo dục, quản lý giáo dục và đào tạo.'),
+    'BUSINESS': ({'7340120', '7340115', '7340122'}, 'Cùng khối Kinh doanh và Quản lý với nền tảng kiến thức chung.'),
+    'AUTOMATION': ({'7510303', '7520201', '7520107'}, 'Cùng lĩnh vực điều khiển tự động, robot và công nghệ kỹ thuật điện - điện tử.'),
+    'MECHANICAL': ({'7510201', '7520114', '7520130'}, 'Cùng nhóm cơ khí chế tạo, công nghệ kỹ thuật cơ khí và cơ điện tử.'),
+    'ELECTRONICS': ({'7510301', '7510302', '7520202'}, 'Cùng nhóm kỹ thuật điện tử, viễn thông và công nghệ kỹ thuật ứng dụng.'),
+    'JOURNALIST': ({'7320104', '7320105', '7320108'}, 'Cùng lĩnh vực báo chí, truyền thông đại chúng, đa phương tiện và quan hệ công chúng.'),
+    'MEDIA': ({'7320101', '7340115', '7210403'}, 'Cùng nhóm truyền thông số, sáng tạo nội dung, báo chí và thiết kế.'),
+    'SPORTS': ({'7140206', '7720603'}, 'Cùng lĩnh vực giáo dục thể chất, huấn luyện và phục hồi vận động.'),
+    'POLICE': ({'7380101', '7480208'}, 'Lưu ý: Khối trường Công an xét tuyển theo quy chế sơ tuyển riêng; có thể tham khảo ngành Luật hoặc An toàn thông tin dân sự.'),
+    'MILITARY': ({'7520207', '7480208'}, 'Lưu ý: Khối trường Quân đội xét tuyển theo quy chế sơ tuyển riêng; có thể tham khảo các ngành kỹ thuật/công nghệ dân sự tương ứng.'),
 }
 
 
@@ -216,6 +275,15 @@ async def analyze_career_aspiration(
         normalized_codes = {_code(code) for code in related_codes}
         goal_codes = {_code(item.major_code) for item in goals}
         related = [item for item in all_ranked_majors if _code(item.major_code) in normalized_codes - goal_codes]
+    elif match_status == 'MATCHED' and candidates[0]['id'].startswith('MAJOR_') and goals:
+        goal_codes = {_code(item.major_code) for item in goals}
+        goal_prefixes4 = {_code(item.major_code)[:4] for item in goals if len(_code(item.major_code)) >= 4}
+        related = [
+            item for item in all_ranked_majors
+            if _code(item.major_code) not in goal_codes and _code(item.major_code)[:4] in goal_prefixes4
+        ][:4]
+        if related:
+            relation = 'Cùng nhóm ngành đào tạo cấp III theo danh mục Bộ GD&ĐT; cần đối chiếu chương trình chi tiết.'
     if strategy == 'CHALLENGE_TOP':
         related = []
     goal_codes = {item.major_code for item in goals}
@@ -279,16 +347,20 @@ async def analyze_career_aspiration(
         readiness = _readiness(item)
         block = readiness.get('block')
         takeaways.append(f"{item.major_name}: {format_block_with_subjects(block) if block else 'Tổ hợp chưa xác định'}, điểm {readiness.get('block_score')}, mốc tham chiếu {readiness.get('benchmark_cutoff')}.")
+    dream_briefs = [brief(item, 'DREAM') for item in goals]
     primary = goals[0] if goals else None
+    primary_brief = dream_briefs[0] if dream_briefs else None
+    if primary and primary_brief and primary_brief.get('trait_warning'):
+        takeaways.append(f"{primary.major_name}: {primary_brief['trait_warning']}")
     return {
         'has_aspiration': bool(dream or field), 'dream_job': dream, 'desired_field': field,
         'work_values': values, 'preferred_environment': environment, 'score_strategy': strategy,
         'preference_evidence': ((getattr(primary, 'score_breakdown', None) or {}).get('aspiration_preferences', {}) if primary else {}),
         'match_status': match_status, 'intent_candidates': candidates,
         'interest_evidence': evidence, 'alignment_status': status, 'alignment_label': label,
-        'alignment_score': brief(primary, 'DREAM')['overall_match'] if primary else None,
+        'alignment_score': primary_brief['overall_match'] if primary_brief else None,
         'holland_code': holland, 'best_block_summary': '',
-        'dream_majors': [brief(item, 'DREAM') for item in goals],
+        'dream_majors': dream_briefs,
         'current_options': [brief(item, 'CURRENT') for item in current[:6]],
         'exploration_options': [brief(item, 'EXPLORATION') for item in exploration[:6]],
         'recommended_substitutes': [brief(item, 'SUBSTITUTE') for item in substitutes[:2]],

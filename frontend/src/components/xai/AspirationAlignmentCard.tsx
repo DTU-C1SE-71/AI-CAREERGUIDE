@@ -1,4 +1,4 @@
-import { ArrowUpRight, Compass, Edit3, Loader2, X } from "lucide-react"
+import { AlertTriangle, ArrowUpRight, Compass, Edit3, Loader2, Sparkles, X } from "lucide-react"
 import { useRef, useState } from "react"
 import { Link } from "react-router"
 import type { AspirationAnalysisPayload, AspirationMajorBrief, CareerAspirationInput } from "../../types/assessment"
@@ -10,6 +10,14 @@ import { TrendBadge } from "./TrendBadge"
 function MajorBriefTile({ major, current, verified = true }: { major: AspirationMajorBrief; current?: boolean; verified?: boolean }) {
   const readiness = verified ? major.readiness : undefined
   const status = readiness?.status ?? "UNKNOWN"
+  const riasecColor =
+    major.riasec_fit == null
+      ? ""
+      : major.riasec_fit >= 70
+        ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+        : major.riasec_fit >= 45
+          ? "border-sky-200 bg-sky-50 text-sky-800"
+          : "border-rose-200 bg-rose-50 text-rose-800"
   return <Link to={`/majors/${major.major_code}`} className="group block min-w-0 rounded-2xl border border-slate-200 bg-white/80 p-4 transition hover:border-sky-300 hover:shadow-md">
     <div className="flex flex-wrap items-center gap-2 text-xs">
       <span className="font-semibold text-sky-700">Mã {major.major_code}</span>
@@ -17,6 +25,31 @@ function MajorBriefTile({ major, current, verified = true }: { major: Aspiration
       <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{current && status === "READY_REFERENCE" ? "Đạt mốc tham chiếu" : status === "NEEDS_IMPROVEMENT" ? "Cần cải thiện theo mốc" : status === "READY_REFERENCE" ? "Đạt mốc tham chiếu" : "Chưa đủ cơ sở đối chiếu"}</span>
     </div>
     <h4 className="mt-2 font-bold text-slate-900">{major.major_name}</h4>
+    {verified && (major.overall_match != null || major.riasec_fit != null || major.cognitive_fit != null) && (
+      <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold">
+        {major.overall_match != null && (
+          <span className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-indigo-800">
+            Phù hợp tổng thể: {major.overall_match}%
+          </span>
+        )}
+        {major.riasec_fit != null && (
+          <span className={`rounded-lg border px-2 py-0.5 ${riasecColor}`}>
+            Sở thích RIASEC: {major.riasec_fit}%
+          </span>
+        )}
+        {major.cognitive_fit != null && (
+          <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-700">
+            Tư duy: {major.cognitive_fit}%
+          </span>
+        )}
+      </div>
+    )}
+    {verified && major.trait_warning && (
+      <div className="mt-2 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50/90 px-3 py-2 text-xs font-medium text-rose-800">
+        <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-rose-600" />
+        <span>⚠️ {major.trait_warning}</span>
+      </div>
+    )}
     {verified && major.relation_reason && <p className="mt-2 text-xs text-slate-600">{major.relation_reason}</p>}
     <p className="mt-2 text-xs leading-relaxed text-slate-600">{readiness?.message || "Kết quả cũ chưa có bằng chứng đối chiếu. Hãy phân tích lại nguyện vọng."}</p>
     {readiness?.block && <p className="mt-2 text-xs text-slate-700">{formatBlockWithSubjects(readiness.block, { short: true })} · Điểm hiện có: {readiness.block_score ?? "chưa đủ"}{readiness.benchmark_cutoff != null && ` · Mốc: ${readiness.benchmark_cutoff}`}</p>}
@@ -38,9 +71,11 @@ interface AspirationAlignmentCardProps {
   onUpdateAspiration: (next: CareerAspirationInput) => Promise<void>
   isAnalyzing?: boolean
   readOnly?: boolean
+  aiCoachingSummary?: string | null
+  isAiMode?: boolean
 }
 
-export function AspirationAlignmentCard({ analysis, currentAspiration, onUpdateAspiration, isAnalyzing = false, readOnly = false }: AspirationAlignmentCardProps) {
+export function AspirationAlignmentCard({ analysis, currentAspiration, onUpdateAspiration, isAnalyzing = false, readOnly = false, aiCoachingSummary = null, isAiMode = false }: AspirationAlignmentCardProps) {
   const [editing, setEditing] = useState(false)
   const [draftJob, setDraftJob] = useState(currentAspiration?.dreamJob || analysis?.dream_job || "")
   const [saveError, setSaveError] = useState("")
@@ -88,7 +123,16 @@ export function AspirationAlignmentCard({ analysis, currentAspiration, onUpdateA
       {isAnalyzing && (
         <div role="status" className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-800 sm:text-sm">
           <Loader2 className="size-4 shrink-0 animate-spin text-indigo-600" />
-          <span>AI đang phân tích &amp; đối chiếu nguyện vọng...</span>
+          <span>Đang phân tích &amp; đối chiếu nguyện vọng...</span>
+        </div>
+      )}
+      {isAiMode && aiCoachingSummary && !isAnalyzing && (
+        <div className="rounded-2xl border border-indigo-200/90 bg-gradient-to-r from-indigo-50/90 to-sky-50/70 p-4 text-xs sm:text-sm">
+          <p className="flex items-center gap-1.5 font-extrabold text-indigo-950">
+            <Sparkles className="size-4 shrink-0 text-indigo-600" />
+            <span>Góc nhìn Cố vấn AI về Nguyện vọng &amp; Hồ sơ của bạn</span>
+          </p>
+          <p className="mt-1.5 leading-relaxed text-slate-700">{aiCoachingSummary}</p>
         </div>
       )}
       {!isAnalyzing && !modern && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Chưa có phân tích được xác minh cho nguyện vọng này. Kết nối lại và phân tích lại để đối chiếu dữ liệu.</p>}

@@ -117,8 +117,8 @@
 | # | Tên Agent / Engine | Tệp nguồn | Loại | Nhiệm vụ & Cơ chế bảo vệ |
 | :---: | :--- | :--- | :--- | :--- |
 | 1 | **Deterministic 3-Pillar + Sub-facet + HA-GAE v3.1 Engine** | `recommender/engine.py`, `subfacet_gate.py`, `horizon_gender_engine.py`, `service.py` | Toán học tất định (0 LLM) | Chấm điểm 3 trụ cột, Sub-facet Veto/Boost, tái xếp hạng theo Khối lớp/Giới tính/Xu hướng, sinh 3-Sentence XAI. |
-| 2 | **Aspiration Alignment Agent** | `recommender/aspiration_agent.py` | Tất định (`enable_llm=False`) | Nhận diện nghề mong muốn (có xử lý mơ hồ/nhiều nghề), đối chiếu danh mục 435 ngành & mốc điểm chuẩn thực tế. |
-| 3 | **Student Skill Analysis Agent** | `major_insight/service.py` (`/student-skills`) | **LLM Agent (On-Demand)** | Phân tích ưu/nhược điểm học tập & lỗ hổng kỹ năng. Có **Smart Cache SHA-256** (băm đủ RIASEC, tư duy, điểm, nguyện vọng, lớp, giới tính, danh mục) + `asyncio.Lock` chống bấm đúp. |
+| 2 | **Aspiration Alignment Agent (Nâng cấp PA 3)** | `recommender/aspiration_agent.py`, `recommender/service.py`, `AspirationAlignmentCard.tsx` | Tất định (`enable_llm=False`) | Nhận diện 44 nghề chuẩn + danh mục 435 ngành (có xử lý mơ hồ `AMBIGUOUS`), mở rộng `RELATED_PATHS` toàn bộ 44 nghề + liên thông cấp III 4 chữ số, tính chính xác `gaps` (điểm thiếu) & `missing_subjects` (môn thiếu), cảnh báo mâu thuẫn sở thích (`STRONG_VETO` / RIASEC $< 45\%$). |
+| 3 | **Student Skill & Aspiration Coach Agent** | `major_insight/service.py` (`/student-skills`) | **LLM Agent (On-Demand)** | Phân tích ưu/nhược điểm học tập, lỗ hổng kỹ năng **và nhận xét trực tiếp mức độ khớp/lệch với Nghề mơ ước**. Có **Smart Cache SHA-256** (băm đủ RIASEC, tư duy, điểm, nguyện vọng, lớp, giới tính, danh mục) + `asyncio.Lock` chống bấm đúp. |
 | 4 | **Major Insight Agent** | `major_insight/service.py` (`/{major_code}`) | Cache DB + Danh mục | Cung cấp nội dung đào tạo & vị trí nghề nghiệp của ngành, cache theo dấu vân tay danh mục hiện hành. |
 | 5 | **Career Counselor & System Help AI Agent** | `llamaindex_rag_orchestrator/guidance_rag.py`, `chat_scope.py`, `guidance_boundary.py`, `system_help.py` | **LLM Agent + Guardrails 3 lớp** | 3 vai trò: Tư vấn chọn ngành (grounded trên `guidance_facts`), Trợ giảng học tập/lập trình, và Hỗ trợ sử dụng AI CareerGuide. Chặn prompt injection & rò rỉ thông tin nội bộ ngay từ lớp tiền xử lý (0 token). |
 | 6 | **Dual-Stream Knowledge & HITL Governance Agents** | `stream_a_ingest.py`, `stream_b_discovery.py`, `hitl_governance.py` | RAG + HITL | Stream A nạp PDF tài liệu chuẩn; Stream B tìm kiếm nguồn học thuật whitelist (`.edu.vn`, `coursera.org`, `roadmap.sh`...) qua Tavily, đi qua hàng đợi Admin kiểm duyệt. |
@@ -133,6 +133,20 @@
   3. `_extract_candidates_from_articles` chỉ chấp nhận ngành có tên chuẩn hoặc từ đồng nghĩa 1-1 không mơ hồ (`STRICT_MAJOR_SYNONYMS`, khớp biên từ `(?<!\w)...(?!\w)`, không khớp nhầm từ `"ai"` trong tiếng Việt) xuất hiện trực tiếp trong ít nhất 1 bài báo thật (`evidence_score >= 2.0`), và `sources` chỉ chứa đúng các bài báo nhắc tới ngành đó.
   4. Khi không có ngành nào được đề cập trực tiếp trong bài báo, `run_trend_discovery_agent` trả trung thực `status: "no_matching_majors"` và `trending_majors: []`.
   5. Kiểm thử hồi quy tại `backend/tests/test_trend_evidence.py`.
+
+### 3.2. Nâng cấp **Phương án 3 (Toàn diện)** cho Aspiration Alignment Agent (`aspiration_agent.py`, `service.py`, `major_insight/service.py`)
+- **4 hạn chế đã xử lý từ kiểm toán:**
+  1. Trước đây thẻ Đối chiếu Nguyện vọng (`AspirationAlignmentCard`) bị ẩn ở tab mặc định *Thuật toán đề xuất* dù chạy 100% tất định (0ms, 0 token).
+  2. Trên 435 ngành TT74 chưa có `readiness_reference` gắn sẵn, `_publish_readiness` bỏ trống `gaps` và `missing_subjects`, làm giao diện không hiển thị số điểm/môn còn thiếu.
+  3. `_serialize_major_brief` chưa đọc kết quả **Sub-facet Veto Gate (PA 3)** nên không cảnh báo khi học sinh chọn nghề mơ ước trái ngược trực tiếp với câu trắc nghiệm *"Rất không thích"* (VD: `A4 = 1` nhưng chọn *Ca sĩ*).
+  4. Bảng `RELATED_PATHS` cũ chỉ phủ 6/44 nghề (`PILOT`, `CHEF`, `SOFTWARE`, `AI`, `DATA`, `PHYSICIAN`).
+- **Giải pháp đã triển khai (`Phương án 3`):**
+  1. **Hiển thị tức thời + AI Coach theo chế độ (`Dashboard.tsx`, `AspirationAlignmentCard.tsx`):** Đưa thẻ Nguyện vọng hiển thị ở cả chế độ *Thuật toán đề xuất* (tức thì) và *Đề xuất ngành có AI* (bổ sung hộp **"Góc nhìn Cố vấn AI về Nguyện vọng & Hồ sơ của bạn"** kết nối từ `/student-skills`).
+  2. **Điểm thiếu & Môn thiếu chính xác (`service.py`):** Tính `heuristic_missing_subjects` (chọn tổ hợp hợp lệ ít môn thiếu nhất) và `heuristic_gaps` (`SUBJECT_SCORE` + `TOTAL_SCORE`), truyền qua `_publish_readiness` khi hồ sơ đủ bằng chứng sở thích.
+  3. **Cảnh báo Xung đột Sở thích (`aspiration_agent.py`, `AspirationAlignmentCard.tsx`):** Gắn `subfacet_status`, `trait_warning` và các huy hiệu `% Phù hợp tổng thể` / `% Sở thích RIASEC` / `% Tư duy` trên mỗi thẻ ngành mục tiêu (cảnh báo khi bị `STRONG_VETO` / `SOFT_PENALTY` hoặc RIASEC $< 45\%$).
+  4. **Phủ đủ 44 nghề chuẩn & Nhóm ngành 4 chữ số (`aspiration_agent.py`):** Mở rộng `RELATED_PATHS` cho toàn bộ 44 nghề `ATOMIC_CAREERS` (đối chiếu khớp mã thật trong danh mục 435 ngành TT74, tách bạch văn bằng) và bổ sung tự động các ngành cùng nhóm 4 chữ số Bộ GD&ĐT cho truy vấn `MAJOR_*`.
+  5. **AI Coaching có ngữ cảnh Nguyện vọng (`major_insight/service.py`):** Truyền `dream_job` và `score_strategy` vào cả phần tóm tắt tất định lẫn prompt LLM của `/student-skills` (đã sanitize PII, vẫn giữ nguyên khóa cache SHA-256 theo hồ sơ).
+  6. **Kiểm thử hồi quy:** Bổ sung test case tại `backend/tests/test_aspiration_matching.py`.
 
 ---
 
@@ -151,8 +165,8 @@
    - Bộ **38 câu hỏi 100% trải nghiệm học đường THPT** (30 câu RIASEC + 8 câu Tư duy), nhập điểm học bạ/thi thử và Nguyện vọng.
    - Chế độ xem `Thẻ`, `Danh sách`, `Radar`; nút **Quay lại** về cổng chọn làm bài mới / xem lại; lưu đầy đủ lên PostgreSQL và hydrate lại khi đăng nhập lại.
 4. **Khám phá Ngành (`/dashboard` — 2 chế độ tách biệt):**
-   - **Chế độ `Thuật toán đề xuất` (mặc định · Tức thì · 0 AI):** Biểu đồ Radar RIASEC, Top 3 nhóm sở thích, Khối thi tốt nhất (Z-Score), Phễu 2 tầng (Lĩnh vực $\rightarrow$ Ngành) với Sub-facet Veto Gate & HA-GAE v3.1.
-   - **Chế độ `Đề xuất ngành có AI` (On-Demand + Smart Cache):** Chỉ gọi AI khi người dùng bấm mở, hiển thị rõ trạng thái **`AI đang phân tích...`** kèm spinner, tự lưu CSDL và gắn nhãn **`Đã tải từ lịch sử CSDL · 0 token`** khi mở lại cùng hồ sơ.
+   - **Chế độ `Thuật toán đề xuất` (mặc định · Tức thì · 0 AI):** Thẻ Đối chiếu Nguyện vọng (kèm cảnh báo xung đột sở thích, điểm/môn thiếu, ngành liên quan vừa sức), Biểu đồ Radar RIASEC, Top 3 nhóm sở thích, Khối thi tốt nhất (Z-Score), Phễu 2 tầng (Lĩnh vực $\rightarrow$ Ngành) với Sub-facet Veto Gate & HA-GAE v3.1.
+   - **Chế độ `Đề xuất ngành có AI` (On-Demand + Smart Cache):** Chỉ gọi AI khi người dùng bấm mở, bổ sung **"Góc nhìn Cố vấn AI về Nguyện vọng & Hồ sơ của bạn"** + phân tích điểm mạnh/yếu & kỹ năng, hiển thị rõ trạng thái **`AI đang phân tích...`** kèm spinner, tự lưu CSDL và gắn nhãn **`Đã tải từ lịch sử CSDL · 0 token`** khi mở lại cùng hồ sơ.
    - Tiện ích: **Lịch sử các lần làm bài**, **Làm lại**, **Xuất báo cáo PDF**.
 5. **Danh mục 435 Ngành đào tạo (`/majors` & `/majors/:code`):**
    - Tra cứu toàn bộ 435 ngành chuẩn Bộ GD&ĐT theo mã ngành, tên ngành, bộ lọc lĩnh vực; trang chi tiết gồm nội dung đào tạo, khối xét tuyển, cơ hội nghề nghiệp và giải thích phù hợp.
