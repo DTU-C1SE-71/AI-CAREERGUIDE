@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/(.*)",
+      "destination": "https://ai-careerguide-bny3.onrender.com/api/$1"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
