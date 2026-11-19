@@ -1,5 +1,5 @@
 import uuid
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 from app.schemas.rag import GuidanceEvidenceRequest
@@ -63,6 +63,33 @@ class StudentSkillAnalysisResponse(BaseModel):
     strengths: List[InsightPoint] = []
     weaknesses: List[InsightPoint] = []
     skill_gaps: List[SkillGapItem] = []
+    is_ai_generated: bool = False
+    cached: bool = False
+    insight_id: Optional[uuid.UUID] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AspirationMajorSuggestion(BaseModel):
+    major_code: str
+    major_name: str
+    reason: str
+    match_score: Optional[int] = None
+
+
+class AspirationAIAnalysisRequest(GuidanceEvidenceRequest):
+    dream_job: Optional[str] = Field(default=None, max_length=200)
+
+
+class AspirationAIAnalysisResponse(BaseModel):
+    profile_hash: str
+    dream_job: str = ""
+    fit_level: Literal["HIGH", "MEDIUM", "LOW", "UNKNOWN"] = "UNKNOWN"
+    fit_label: str = "Chưa đủ dữ liệu"
+    summary: str
+    reasons_fit: List[InsightPoint] = []
+    reasons_gap: List[InsightPoint] = []
+    better_majors: List[AspirationMajorSuggestion] = []
     is_ai_generated: bool = False
     cached: bool = False
     insight_id: Optional[uuid.UUID] = None

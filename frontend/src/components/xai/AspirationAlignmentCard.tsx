@@ -1,13 +1,40 @@
-import { AlertTriangle, ArrowUpRight, Compass, Edit3, Loader2, Sparkles, X } from "lucide-react"
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  CheckCircle2,
+  Compass,
+  Edit3,
+  Loader2,
+  Sparkles,
+  Target,
+  X,
+} from "lucide-react"
 import { useRef, useState } from "react"
 import { Link } from "react-router"
-import type { AspirationAnalysisPayload, AspirationMajorBrief, CareerAspirationInput } from "../../types/assessment"
+import type {
+  AspirationAnalysisPayload,
+  AspirationMajorBrief,
+  CareerAspirationInput,
+} from "../../types/assessment"
+import type { AspirationAIAnalysis, AspirationMajorSuggestion } from "../../types/insight"
 import { formatBlockWithSubjects } from "../../utils"
 import { QUICK_DREAM_JOBS } from "../assessment/aspirationOptions"
-import { HollandInterestSummary } from "../assessment/HollandInterestSummary"
 import { TrendBadge } from "./TrendBadge"
 
-function MajorBriefTile({ major, current, verified = true }: { major: AspirationMajorBrief; current?: boolean; verified?: boolean }) {
+const FIT_BADGE_STYLE: Record<AspirationAIAnalysis["fit_level"], string> = {
+  HIGH: "border-emerald-200 bg-emerald-50 text-emerald-700",
+  MEDIUM: "border-sky-200 bg-sky-50 text-sky-700",
+  LOW: "border-amber-200 bg-amber-50 text-amber-800",
+  UNKNOWN: "border-slate-200 bg-slate-100 text-slate-700",
+}
+
+function MajorBriefTile({
+  major,
+  verified = true,
+}: {
+  major: AspirationMajorBrief
+  verified?: boolean
+}) {
   const readiness = verified ? major.readiness : undefined
   const status = readiness?.status ?? "UNKNOWN"
   const riasecColor =
@@ -18,70 +45,148 @@ function MajorBriefTile({ major, current, verified = true }: { major: Aspiration
         : major.riasec_fit >= 45
           ? "border-sky-200 bg-sky-50 text-sky-800"
           : "border-rose-200 bg-rose-50 text-rose-800"
-  return <Link to={`/majors/${major.major_code}`} className="group block min-w-0 rounded-2xl border border-slate-200 bg-white/80 p-4 transition hover:border-sky-300 hover:shadow-md">
-    <div className="flex flex-wrap items-center gap-2 text-xs">
-      <span className="font-semibold text-sky-700">Mã {major.major_code}</span>
-      <TrendBadge tier={major.trend_tier} isTrending={major.is_trending} />
-      <span className="rounded-full bg-slate-100 px-2 py-1 text-slate-700">{current && status === "READY_REFERENCE" ? "Đạt mốc tham chiếu" : status === "NEEDS_IMPROVEMENT" ? "Cần cải thiện theo mốc" : status === "READY_REFERENCE" ? "Đạt mốc tham chiếu" : "Chưa đủ cơ sở đối chiếu"}</span>
-    </div>
-    <h4 className="mt-2 font-bold text-slate-900">{major.major_name}</h4>
-    {verified && (major.overall_match != null || major.riasec_fit != null || major.cognitive_fit != null) && (
-      <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold">
-        {major.overall_match != null && (
-          <span className="rounded-lg border border-indigo-200 bg-indigo-50 px-2 py-0.5 text-indigo-800">
-            Phù hợp tổng thể: {major.overall_match}%
+
+  const statusTone =
+    status === "READY_REFERENCE"
+      ? "bg-emerald-50 text-emerald-700"
+      : status === "NEEDS_IMPROVEMENT"
+        ? "bg-amber-50 text-amber-800"
+        : "bg-slate-100 text-slate-600"
+
+  const statusLabel =
+    status === "READY_REFERENCE"
+      ? "Đạt mốc tham chiếu"
+      : status === "NEEDS_IMPROVEMENT"
+        ? "Cần cải thiện điểm"
+        : "Chưa đủ dữ liệu"
+
+  const warningText = verified ? major.subfacet_note || major.trait_warning : null
+
+  return (
+    <Link
+      to={`/majors/${major.major_code}`}
+      className="group flex min-w-0 flex-col justify-between rounded-2xl border border-slate-200 bg-white/85 p-4 transition hover:border-sky-300 hover:shadow-md"
+    >
+      <div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <span className="font-semibold text-sky-700">Mã {major.major_code}</span>
+          <TrendBadge tier={major.trend_tier} isTrending={major.is_trending} />
+          <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${statusTone}`}>
+            {statusLabel}
           </span>
+        </div>
+
+        <h4 className="mt-2 font-bold text-slate-900">{major.major_name}</h4>
+
+        {verified && (major.overall_match != null || major.riasec_fit != null) && (
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[11px] font-semibold">
+            {major.overall_match != null && (
+              <span className="rounded-lg border border-sky-200 bg-sky-50 px-2 py-0.5 text-sky-800">
+                Tổng hợp: {major.overall_match}%
+              </span>
+            )}
+            {major.riasec_fit != null && (
+              <span className={`rounded-lg border px-2 py-0.5 ${riasecColor}`}>
+                Holland: {major.riasec_fit}%
+              </span>
+            )}
+          </div>
         )}
-        {major.riasec_fit != null && (
-          <span className={`rounded-lg border px-2 py-0.5 ${riasecColor}`}>
-            Sở thích RIASEC: {major.riasec_fit}%
-          </span>
+
+        {warningText && (
+          <div className="mt-2.5 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50/90 px-3 py-2 text-xs text-amber-900">
+            <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-amber-600" />
+            <span>{warningText}</span>
+          </div>
         )}
-        {major.cognitive_fit != null && (
-          <span className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-0.5 text-slate-700">
-            Tư duy: {major.cognitive_fit}%
-          </span>
+
+        {readiness?.block && (
+          <p className="mt-2.5 text-xs font-medium text-slate-600">
+            {formatBlockWithSubjects(readiness.block, { short: true })} · Điểm{" "}
+            <span className="font-bold text-slate-800">{readiness.block_score ?? "—"}</span>
+            {readiness.benchmark_cutoff != null && (
+              <>
+                {" "}
+                / Mốc <span className="font-bold text-slate-800">{readiness.benchmark_cutoff}</span>
+              </>
+            )}
+          </p>
         )}
+
+        {!readiness?.block && readiness?.missing_subjects?.length ? (
+          <p className="mt-2 text-xs text-amber-800">
+            Cần bổ sung điểm: {readiness.missing_subjects.join(", ")}
+          </p>
+        ) : null}
       </div>
-    )}
-    {verified && major.trait_warning && (
-      <div className="mt-2 flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50/90 px-3 py-2 text-xs font-medium text-rose-800">
-        <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-rose-600" />
-        <span>⚠️ {major.trait_warning}</span>
+
+      <span className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-xs font-semibold text-sky-700 group-hover:text-sky-800">
+        Xem ngành &amp; lộ trình <ArrowUpRight className="size-4" />
+      </span>
+    </Link>
+  )
+}
+
+function SuggestionMajorCard({ suggestion }: { suggestion: AspirationMajorSuggestion }) {
+  return (
+    <Link
+      to={`/majors/${suggestion.major_code}`}
+      className="group flex min-w-0 flex-col justify-between rounded-2xl border border-slate-200 bg-white/85 p-4 transition hover:border-sky-300 hover:shadow-md"
+    >
+      <div>
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          <span className="font-semibold text-sky-700">Mã {suggestion.major_code}</span>
+          {suggestion.match_score != null && (
+            <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] font-bold text-sky-700">
+              Khớp {suggestion.match_score}%
+            </span>
+          )}
+        </div>
+        <h4 className="mt-2 font-bold text-slate-900">{suggestion.major_name}</h4>
+        <p className="mt-1.5 text-xs leading-relaxed text-slate-600">{suggestion.reason}</p>
       </div>
-    )}
-    {verified && major.relation_reason && <p className="mt-2 text-xs text-slate-600">{major.relation_reason}</p>}
-    <p className="mt-2 text-xs leading-relaxed text-slate-600">{readiness?.message || "Kết quả cũ chưa có bằng chứng đối chiếu. Hãy phân tích lại nguyện vọng."}</p>
-    {readiness?.block && <p className="mt-2 text-xs text-slate-700">{formatBlockWithSubjects(readiness.block, { short: true })} · Điểm hiện có: {readiness.block_score ?? "chưa đủ"}{readiness.benchmark_cutoff != null && ` · Mốc: ${readiness.benchmark_cutoff}`}</p>}
-    {!!readiness?.missing_subjects?.length && <p className="mt-2 text-xs text-amber-800">Cần bổ sung điểm: {readiness.missing_subjects.join(", ")}</p>}
-    {!!readiness?.violations?.length && <p className="mt-2 text-xs text-amber-800">{readiness.violations.join("; ")}</p>}
-    {!!readiness?.gaps?.length && <ul className="mt-2 space-y-1 text-xs text-amber-800" aria-label="Điểm cần cải thiện">{readiness.gaps.map((gap, index) => {
-      if (gap.kind === "SUBJECT_SCORE" && gap.subject && gap.required != null && gap.delta != null) return <li key={index}>Môn {gap.subject}: cần tăng ít nhất {Number(gap.delta.toPrecision(6))} điểm để đạt {gap.required} điểm{gap.actual != null && ` (hiện có ${gap.actual})`}.</li>
-      if (gap.kind === "TOTAL_SCORE" && gap.amount != null) return <li key={index}>Tổng điểm tổ hợp cần tăng ít nhất {Number(gap.amount.toPrecision(6))} điểm để đạt mốc tham chiếu.</li>
-      return null
-    })}</ul>}
-    {status === "READY_REFERENCE" && <p className="mt-2 text-xs text-slate-500">Mốc tham chiếu {readiness?.reference_method === "SUM_THREE_SUBJECTS" ? "theo tổng ba môn" : "đã xác minh"}; không bảo đảm trúng tuyển hoặc thay thế điều kiện từng trường.</p>}
-    <span className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-xs font-semibold text-sky-700">Xem ngành và lộ trình <ArrowUpRight className="size-4" /></span>
-  </Link>
+      <span className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-xs font-semibold text-sky-700 group-hover:text-sky-800">
+        Xem ngành &amp; lộ trình <ArrowUpRight className="size-4" />
+      </span>
+    </Link>
+  )
 }
 
 interface AspirationAlignmentCardProps {
   analysis: AspirationAnalysisPayload | null
+  aiAnalysis?: AspirationAIAnalysis | null
+  aiLoading?: boolean
+  aiError?: string
   currentAspiration?: CareerAspirationInput
   onUpdateAspiration: (next: CareerAspirationInput) => Promise<void>
   isAnalyzing?: boolean
   readOnly?: boolean
-  aiCoachingSummary?: string | null
-  isAiMode?: boolean
 }
 
-export function AspirationAlignmentCard({ analysis, currentAspiration, onUpdateAspiration, isAnalyzing = false, readOnly = false, aiCoachingSummary = null, isAiMode = false }: AspirationAlignmentCardProps) {
+export function AspirationAlignmentCard({
+  analysis,
+  aiAnalysis = null,
+  aiLoading = false,
+  aiError = "",
+  currentAspiration,
+  onUpdateAspiration,
+  isAnalyzing = false,
+  readOnly = false,
+}: AspirationAlignmentCardProps) {
   const [editing, setEditing] = useState(false)
-  const [draftJob, setDraftJob] = useState(currentAspiration?.dreamJob || analysis?.dream_job || "")
+  const [draftJob, setDraftJob] = useState(
+    currentAspiration?.dreamJob || aiAnalysis?.dream_job || analysis?.dream_job || "",
+  )
   const [saveError, setSaveError] = useState("")
   const [saving, setSaving] = useState(false)
   const editVersion = useRef(0)
-  const setDraft = (value: string) => { editVersion.current += 1; setDraftJob(value); setSaveError("") }
+
+  const setDraft = (value: string) => {
+    editVersion.current += 1
+    setDraftJob(value)
+    setSaveError("")
+  }
+
   const apply = async (job: string) => {
     if (saving || readOnly) return
     const version = editVersion.current
@@ -92,57 +197,260 @@ export function AspirationAlignmentCard({ analysis, currentAspiration, onUpdateA
       if (version === editVersion.current) setEditing(false)
     } catch {
       setSaveError("Chưa lưu được nguyện vọng. Nội dung nháp vẫn được giữ; hãy thử lại.")
-    } finally { setSaving(false) }
+    } finally {
+      setSaving(false)
+    }
   }
+
   const modern = Boolean(analysis?.match_status)
-  const goals = isAnalyzing ? [] : analysis?.dream_majors ?? []
-  const current = modern && !isAnalyzing ? (analysis?.current_options ?? []).filter(m => m.readiness?.status === "READY_REFERENCE") : []
-  const goalCodes = new Set(goals.map(m => m.major_code))
-  const currentCodes = new Set(current.map(m => m.major_code))
-  const exploration = (modern && !isAnalyzing ? analysis?.exploration_options ?? [] : []).filter(m => !goalCodes.has(m.major_code) && !currentCodes.has(m.major_code))
-  return <section className="glass-card min-w-0 overflow-hidden rounded-2xl p-4 sm:rounded-3xl sm:p-6">
-    <div className="flex flex-wrap items-start justify-between gap-3">
-      <div><h2 className="flex items-center gap-2 text-lg font-bold text-slate-900"><Compass className="size-5 text-sky-600" /> Nguyện vọng và học lực hiện tại</h2>
-        <p className="mt-1 break-words text-sm text-slate-700">{currentAspiration?.dreamJob || analysis?.dream_job || "Chưa chọn nghề mong muốn"}</p></div>
-      {!readOnly && <button type="button" disabled={saving} onClick={() => { if (!editing) setDraft(currentAspiration?.dreamJob || analysis?.dream_job || ""); setEditing(!editing) }} className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-white px-3 py-2 text-xs font-bold text-sky-700">{editing ? <X className="size-4" /> : <Edit3 className="size-4" />}{editing ? "Đóng" : "Đổi nghề mơ ước"}</button>}
-    </div>
-    {editing && <form className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/50 p-4" onSubmit={event => { event.preventDefault(); void apply(draftJob) }}>
-      <label htmlFor="aspiration-edit" className="text-sm font-semibold text-slate-800">Nghề mong muốn</label>
-      <div className="mt-2 flex flex-col gap-2 sm:flex-row"><input id="aspiration-edit" name="dreamJob" disabled={saving} value={draftJob} onChange={e => setDraft(e.target.value)} className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-sky-500" placeholder="Ví dụ: Bác sĩ Y khoa" />
-        <button type="submit" disabled={saving || isAnalyzing} className="flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50">{saving && <Loader2 className="size-4 animate-spin" />}{saveError ? "Thử lại" : "Lưu và phân tích lại"}</button></div>
-      <div className="mt-3 flex flex-wrap gap-2">{QUICK_DREAM_JOBS.map(chip => <button key={chip.label} type="button" disabled={saving} onClick={() => setDraft(chip.dreamJob)} className="rounded-lg border border-sky-200 bg-white px-2 py-1 text-xs text-sky-800">{chip.label}</button>)}</div>
-      {saveError && <p role="alert" className="mt-3 text-sm text-rose-700">{saveError}</p>}
-    </form>}
-    {!isAnalyzing && ((currentAspiration?.workValues?.length || analysis?.work_values?.length || currentAspiration?.preferredEnvironment || analysis?.preferred_environment)) && <p className="mt-3 rounded-xl bg-slate-50 p-3 text-xs leading-relaxed text-slate-600">
-      {analysis?.preference_evidence?.work_values?.status === "USED" ? "Giá trị công việc đã được đối chiếu với thuộc tính khai báo của ngành mục tiêu." : "Giá trị công việc được giữ trong hồ sơ; chưa có đủ thuộc tính danh mục để xác nhận mức phù hợp với lựa chọn này."}
-      {" Các lựa chọn này không bảo đảm thu nhập, thăng tiến hay điều kiện việc làm."}
-      {(currentAspiration?.preferredEnvironment || analysis?.preferred_environment) && analysis?.preference_evidence?.environment?.status !== "USED" && " Môi trường mong muốn cũng chưa có đủ dữ liệu để đối chiếu."}
-    </p>}
-    {analysis?.interest_evidence && <div className="mt-4"><HollandInterestSummary evidence={analysis.interest_evidence} /></div>}
-    <div className="mt-4 space-y-5">
-      {isAnalyzing && (
-        <div role="status" className="inline-flex items-center gap-2 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-bold text-indigo-800 sm:text-sm">
-          <Loader2 className="size-4 shrink-0 animate-spin text-indigo-600" />
-          <span>Đang phân tích &amp; đối chiếu nguyện vọng...</span>
-        </div>
-      )}
-      {isAiMode && aiCoachingSummary && !isAnalyzing && (
-        <div className="rounded-2xl border border-indigo-200/90 bg-gradient-to-r from-indigo-50/90 to-sky-50/70 p-4 text-xs sm:text-sm">
-          <p className="flex items-center gap-1.5 font-extrabold text-indigo-950">
-            <Sparkles className="size-4 shrink-0 text-indigo-600" />
-            <span>Góc nhìn Cố vấn AI về Nguyện vọng &amp; Hồ sơ của bạn</span>
+  const goals = isAnalyzing ? [] : (analysis?.dream_majors ?? [])
+  const current =
+    modern && !isAnalyzing
+      ? (analysis?.current_options ?? []).filter((m) => m.readiness?.status === "READY_REFERENCE")
+      : []
+  const goalCodes = new Set(goals.map((m) => m.major_code))
+  const fallbackAlternatives = current.filter((m) => !goalCodes.has(m.major_code)).slice(0, 3)
+  const betterMajors = aiAnalysis?.better_majors ?? []
+  const activeDreamJob =
+    currentAspiration?.dreamJob || aiAnalysis?.dream_job || analysis?.dream_job || ""
+
+  return (
+    <section className="glass-card min-w-0 overflow-hidden rounded-2xl p-4 sm:rounded-3xl sm:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-slate-100 pb-4">
+        <div>
+          <h2 className="flex items-center gap-2 text-lg font-bold text-slate-900">
+            <Compass className="size-5 text-sky-600" />
+            Phân tích nguyện vọng với AI
+          </h2>
+          <p className="mt-1 break-words text-sm text-slate-600">
+            Nghề mơ ước:{" "}
+            <span className="font-bold text-slate-900">
+              {activeDreamJob || "Chưa chọn nghề mong muốn"}
+            </span>
           </p>
-          <p className="mt-1.5 leading-relaxed text-slate-700">{aiCoachingSummary}</p>
         </div>
+
+        {!readOnly && (
+          <button
+            type="button"
+            disabled={saving}
+            onClick={() => {
+              if (!editing) setDraft(activeDreamJob)
+              setEditing(!editing)
+            }}
+            className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-white px-3.5 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-50"
+          >
+            {editing ? <X className="size-4" /> : <Edit3 className="size-4" />}
+            {editing ? "Đóng" : "Đổi nghề mơ ước"}
+          </button>
+        )}
+      </div>
+
+      {editing && (
+        <form
+          className="mt-4 rounded-2xl border border-sky-200 bg-sky-50/50 p-4"
+          onSubmit={(event) => {
+            event.preventDefault()
+            void apply(draftJob)
+          }}
+        >
+          <label htmlFor="aspiration-edit" className="text-sm font-semibold text-slate-800">
+            Nghề mong muốn
+          </label>
+          <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+            <input
+              id="aspiration-edit"
+              name="dreamJob"
+              disabled={saving}
+              value={draftJob}
+              onChange={(e) => setDraft(e.target.value)}
+              className="min-w-0 flex-1 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-sky-500"
+              placeholder="Ví dụ: Bác sĩ Y khoa, Kỹ sư phần mềm..."
+            />
+            <button
+              type="submit"
+              disabled={saving || isAnalyzing || aiLoading}
+              className="flex items-center justify-center gap-2 rounded-xl bg-sky-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-sky-700 disabled:opacity-50"
+            >
+              {saving && <Loader2 className="size-4 animate-spin" />}
+              {saveError ? "Thử lại" : "Lưu & phân tích lại"}
+            </button>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {QUICK_DREAM_JOBS.map((chip) => (
+              <button
+                key={chip.label}
+                type="button"
+                disabled={saving}
+                onClick={() => setDraft(chip.dreamJob)}
+                className="rounded-lg border border-sky-200 bg-white px-2.5 py-1 text-xs font-medium text-sky-700 hover:bg-sky-50"
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+          {saveError && (
+            <p role="alert" className="mt-3 text-sm text-rose-700">
+              {saveError}
+            </p>
+          )}
+        </form>
       )}
-      {!isAnalyzing && !modern && <p className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">Chưa có phân tích được xác minh cho nguyện vọng này. Kết nối lại và phân tích lại để đối chiếu dữ liệu.</p>}
-      {!isAnalyzing && modern && analysis?.match_status === "UNRECOGNIZED" && <p className="text-sm text-slate-700">Chưa nhận diện được nghề trong danh mục. Hãy nhập một nghề cụ thể; điều này không có nghĩa bạn không thể theo đuổi nghề đó.</p>}
-      {!isAnalyzing && modern && analysis?.match_status === "AMBIGUOUS" && <div className="rounded-xl bg-amber-50 p-4"><p className="text-sm text-amber-900">Có nhiều nghề trong nguyện vọng. Chọn một nghề để đối chiếu:</p><div className="mt-2 flex flex-wrap gap-2">{analysis.intent_candidates?.map(candidate => <button key={candidate.id} type="button" disabled={readOnly || saving || isAnalyzing} onClick={() => { setDraft(candidate.canonicalDreamJob); setEditing(true); void apply(candidate.canonicalDreamJob) }} className="rounded-lg border border-amber-200 bg-white px-3 py-2 text-sm disabled:opacity-50">{candidate.label}</button>)}</div></div>}
-      <section><h3 className="font-bold text-slate-900">Mục tiêu của bạn</h3><p className="mt-1 text-xs text-slate-500">Nguyện vọng được giữ nguyên dù chưa đủ dữ liệu hoặc chưa đạt mốc tham chiếu.</p>
-        {goals.length > 0 ? <div className="mt-3 grid gap-3 sm:grid-cols-2">{goals.map(major => <MajorBriefTile key={major.major_code} major={major} verified={modern} current={currentCodes.has(major.major_code)} />)}</div> : <p className="mt-2 text-sm text-slate-600">{isAnalyzing ? "Đang nhận diện ngành theo mục tiêu…" : "Chưa có ngành được ghép với mục tiêu này."}</p>}</section>
-      <section><h3 className="font-bold text-slate-900">Lựa chọn đạt mốc tham chiếu hiện tại</h3>
-        {isAnalyzing ? <p className="mt-2 text-sm text-slate-600">Đang đối chiếu bằng chứng học lực…</p> : current.length === 0 ? <p className="mt-2 text-sm leading-relaxed text-slate-600">Chưa có lựa chọn đủ bằng chứng để xếp vào nhóm này. Có thể thiếu mốc tuyển sinh cùng phương thức hoặc dữ liệu điểm; đây không phải kết luận bạn không phù hợp với nghề.</p> : <><p className="mt-2 text-xs text-slate-600">{current.filter(m => goalCodes.has(m.major_code)).map(m => m.major_name).join(", ")}{current.some(m => goalCodes.has(m.major_code)) && " — cũng là mục tiêu của bạn, xem thẻ phía trên."}</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{current.filter(m => !goalCodes.has(m.major_code)).map(major => <MajorBriefTile key={major.major_code} major={major} current />)}</div></>}</section>
-      {exploration.length > 0 && <section><h3 className="font-bold text-slate-900">Cần bổ sung dữ liệu để đối chiếu</h3><p className="mt-1 text-xs text-slate-500">Các ngành liên quan để tìm hiểu thêm; chưa được xác nhận đạt mốc hiện tại.</p><div className="mt-3 grid gap-3 sm:grid-cols-2">{exploration.map(major => <MajorBriefTile key={major.major_code} major={major} />)}</div></section>}
-    </div>
-  </section>
+
+      <div className="mt-4 space-y-5">
+        {(isAnalyzing || aiLoading) && (
+          <div
+            role="status"
+            className="flex items-center gap-3 rounded-2xl border border-sky-200 bg-sky-50/70 px-4 py-4 text-sm font-semibold text-sky-900"
+          >
+            <Loader2 className="size-5 shrink-0 animate-spin text-sky-600" />
+            <span>AI đang đối chiếu nghề mơ ước với sở thích Holland và điểm học tập...</span>
+          </div>
+        )}
+
+        {aiError && !aiLoading && (
+          <p className="rounded-xl border border-amber-200 bg-amber-50 px-3.5 py-2.5 text-xs text-amber-800">
+            {aiError}
+          </p>
+        )}
+
+        {!aiLoading && aiAnalysis && (
+          <div className="rounded-2xl border border-slate-200/80 bg-white/80 p-4 sm:p-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex items-center gap-2">
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-bold ${
+                    FIT_BADGE_STYLE[aiAnalysis.fit_level] || FIT_BADGE_STYLE.UNKNOWN
+                  }`}
+                >
+                  <Sparkles className="size-3.5" />
+                  {aiAnalysis.fit_label}
+                </span>
+              </div>
+
+              {aiAnalysis.cached ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[11px] font-bold text-emerald-700">
+                  <CheckCircle2 className="size-3" />
+                  Đã lưu · 0 token
+                </span>
+              ) : aiAnalysis.is_ai_generated ? (
+                <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-1 text-[11px] font-bold text-sky-700">
+                  <Sparkles className="size-3" />
+                  AI vừa phân tích
+                </span>
+              ) : null}
+            </div>
+
+            <p className="mt-3 text-sm leading-relaxed text-slate-700">{aiAnalysis.summary}</p>
+
+            {(aiAnalysis.reasons_fit.length > 0 || aiAnalysis.reasons_gap.length > 0) && (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                <div className="rounded-xl border border-emerald-200/80 bg-emerald-50/40 p-3.5">
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-emerald-700">
+                    <CheckCircle2 className="size-3.5" /> Điểm phù hợp
+                  </p>
+                  {aiAnalysis.reasons_fit.length > 0 ? (
+                    <ul className="space-y-2">
+                      {aiAnalysis.reasons_fit.map((item) => (
+                        <li key={item.title} className="text-xs leading-relaxed text-slate-700">
+                          <span className="block font-bold text-slate-900">{item.title}</span>
+                          {item.detail}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-slate-500">Chưa ghi nhận điểm khớp nổi bật.</p>
+                  )}
+                </div>
+
+                <div className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-3.5">
+                  <p className="mb-2 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-800">
+                    <AlertTriangle className="size-3.5" /> Điểm cần cân nhắc
+                  </p>
+                  {aiAnalysis.reasons_gap.length > 0 ? (
+                    <ul className="space-y-2">
+                      {aiAnalysis.reasons_gap.map((item) => (
+                        <li key={item.title} className="text-xs leading-relaxed text-slate-700">
+                          <span className="block font-bold text-slate-900">{item.title}</span>
+                          {item.detail}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="text-xs text-slate-500">Không phát hiện trở ngại lớn.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {!isAnalyzing && modern && analysis?.match_status === "AMBIGUOUS" && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <p className="text-sm font-semibold text-amber-900">
+              Nguyện vọng khớp nhiều hướng nghề. Chọn một nghề để đối chiếu:
+            </p>
+            <div className="mt-2.5 flex flex-wrap gap-2">
+              {analysis.intent_candidates?.map((candidate) => (
+                <button
+                  key={candidate.id}
+                  type="button"
+                  disabled={readOnly || saving || isAnalyzing}
+                  onClick={() => {
+                    setDraft(candidate.canonicalDreamJob)
+                    setEditing(true)
+                    void apply(candidate.canonicalDreamJob)
+                  }}
+                  className="rounded-lg border border-amber-200 bg-white px-3 py-1.5 text-xs font-semibold text-amber-900 hover:bg-amber-100/60 disabled:opacity-50"
+                >
+                  {candidate.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {goals.length > 0 && (
+          <section>
+            <h3 className="text-sm font-bold uppercase tracking-wider text-slate-700">
+              Ngành gắn với nghề mơ ước
+            </h3>
+            <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
+              {goals.slice(0, 2).map((major) => (
+                <MajorBriefTile key={major.major_code} major={major} verified={modern} />
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section>
+          <div className="flex items-center gap-2">
+            <Target className="size-4 text-sky-600" />
+            <h3 className="text-sm font-bold uppercase tracking-wider text-sky-700">
+              Gợi ý các ngành phù hợp hơn với hồ sơ của bạn
+            </h3>
+          </div>
+          {betterMajors.length > 0 ? (
+            <div className="mt-2.5 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {betterMajors.map((item) => (
+                <SuggestionMajorCard key={item.major_code} suggestion={item} />
+              ))}
+            </div>
+          ) : fallbackAlternatives.length > 0 ? (
+            <div className="mt-2.5 grid gap-3 sm:grid-cols-2">
+              {fallbackAlternatives.map((major) => (
+                <MajorBriefTile key={major.major_code} major={major} verified={modern} />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-2 text-xs text-slate-500">
+              {aiLoading || isAnalyzing
+                ? "Đang tìm các ngành thay thế phù hợp nhất..."
+                : "Nhập nghề mơ ước và hoàn thành trắc nghiệm để AI đề xuất các ngành phù hợp hơn."}
+            </p>
+          )}
+        </section>
+      </div>
+    </section>
+  )
 }

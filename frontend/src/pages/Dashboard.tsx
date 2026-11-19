@@ -1,6 +1,5 @@
 import { completeTranscriptBlocks } from "../utils/assessmentEvidence"
 import {
-  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
@@ -14,7 +13,6 @@ import {
   RotateCcw,
   Sparkles,
   Trash2,
-  Zap,
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router"
@@ -40,7 +38,7 @@ import type {
   AssessmentState,
   CareerAspirationInput,
 } from "../types/assessment"
-import type { StudentSkillAnalysis } from "../types/insight"
+import type { AspirationAIAnalysis, StudentSkillAnalysis } from "../types/insight"
 import type { FunnelRecommendationData, Major } from "../types/major"
 import { formatBlockWithSubjects } from "../utils"
 import { buildEvaluateProfilePayload, getValidRiasecAnswer } from "../utils/assessmentPayload"
@@ -166,12 +164,17 @@ export function Dashboard() {
   const [reloadNonce, setReloadNonce] = useState(0)
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false)
   const [recommendationMode, setRecommendationMode] = useState<"algorithm" | "ai">("algorithm")
-  const [aiAnalysisTriggered, setAiAnalysisTriggered] = useState(false)
   const [skillAnalysis, setSkillAnalysis] =
     useState<StudentSkillAnalysis | null>(null)
   const [skillLoading, setSkillLoading] = useState(false)
   const skillCacheRef = useRef<Record<string, StudentSkillAnalysis>>({})
   const inFlightAiFingerprintRef = useRef<string | null>(null)
+  const [aspirationAiAnalysis, setAspirationAiAnalysis] =
+    useState<AspirationAIAnalysis | null>(null)
+  const [aspirationAiLoading, setAspirationAiLoading] = useState(false)
+  const [aspirationAiError, setAspirationAiError] = useState("")
+  const aspirationAiCacheRef = useRef<Record<string, AspirationAIAnalysis>>({})
+  const inFlightAspirationAiRef = useRef<string | null>(null)
   const aspirationRequest = useRef(0)
   const profileRef = useRef(effectiveAssessment)
   useEffect(() => { profileRef.current = effectiveAssessment }, [effectiveAssessment])
@@ -268,7 +271,7 @@ export function Dashboard() {
     ],
   )
 
-  // Khi hồ sơ / điểm / lớp / giới tính thay đổi -> hiển thị cache tương ứng nếu đã có, chưa có thì chờ người dùng mở chế độ AI.
+  // Khi hồ sơ / điểm / lớp / giới tính đổi -> hiển thị cache kỹ năng tương ứng ngay nếu có.
   useEffect(() => {
     const cached = skillCacheRef.current[aiProfileFingerprint] ?? null
     setSkillAnalysis(cached)
@@ -277,10 +280,9 @@ export function Dashboard() {
     }
   }, [aiProfileFingerprint])
 
-  // Agent "Phân tích kỹ năng": chỉ gọi AI khi người dùng chủ động mở chế độ "Đề xuất ngành có AI"
-  // + chống bấm đúp (inFlightAiFingerprintRef) + chỉ gọi lại khi aiProfileFingerprint đổi.
+  // Tab 1 ("Đề xuất theo hồ sơ"): phân tích kỹ năng sau khi /recommender/evaluate trả top ngành; dùng Smart DB Cache nếu hồ sơ không đổi.
   useEffect(() => {
-    if (!hasCompletedAssessment || recommendationMode !== "ai" || !aiAnalysisTriggered) {
+    if (!hasCompletedAssessment || recommendationMode !== "algorithm" || isEvaluating || !data) {
       return
     }
     const cached = skillCacheRef.current[aiProfileFingerprint]
@@ -335,7 +337,8 @@ export function Dashboard() {
   }, [
     hasCompletedAssessment,
     recommendationMode,
-    aiAnalysisTriggered,
+    isEvaluating,
+    data,
     aiProfileFingerprint,
     effectiveAssessment,
     profileGender,
@@ -343,15 +346,102 @@ export function Dashboard() {
     topRecommendedMajorCode,
   ])
 
-  const handleOpenAiMode = () => {
-    if (skillLoading && recommendationMode === "ai") return
-    setRecommendationMode("ai")
-    setAiAnalysisTriggered(true)
+  const aspirationAiFingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        answers: effectiveAssessment.answers || {},
+        cognitive: effectiveAssessment.cognitive || {},
+        scores: effectiveAssessment.scores || [],
+        aspiration: effectiveAssessment.aspiration || null,
+        grade: profileGradeLevel || "",
+        gender: profileGender || "",
+      }),
+    [effectiveAssessment, profileGradeLevel, profileGender],
+  )
+
+  useEffect(() => {
+    const cached = aspirationAiCacheRef.current[aspirationAiFingerprint] ?? null
+    setAspirationAiAnalysis(cached)
+    setAspirationAiError("")
+    if (cached) {
+      setAspirationAiLoading(false)
+    }
+  }, [aspirationAiFingerprint])
+
+  // Tab 2 ("Nguyện vọng với AI"): gọi /major-insights/aspiration-ai khi mở tab hoặc khi đổi nghề mơ ước; lưu Smart DB Cache.
+  useEffect(() => {
+    if (!hasCompletedAssessment || recommendationMode !== "ai") {
+      return
+    }
+    const cached = aspirationAiCacheRef.current[aspirationAiFingerprint]
+    if (cached) {
+      setAspirationAiAnalysis(cached)
+      setAspirationAiLoading(false)
+      return
+    }
+    if (inFlightAspirationAiRef.current === aspirationAiFingerprint) {
+      return
+    }
+
+    let mounted = true
+    const fingerprintAtStart = aspirationAiFingerprint
+    inFlightAspirationAiRef.current = fingerprintAtStart
+    const requestPayload = buildEvaluateProfilePayload(effectiveAssessment, undefined, {
+      gender: profileGender,
+      grade_level: profileGradeLevel,
+    })
+    const dreamJob =
+      effectiveAssessment.aspiration?.dreamJob || data?.aspirationAnalysis?.dream_job || ""
+
+    setAspirationAiLoading(true)
+    setAspirationAiError("")
+    requestJSON<AspirationAIAnalysis>("/major-insights/aspiration-ai", {
+      method: "POST",
+      body: JSON.stringify({
+        ...requestPayload,
+        dream_job: dreamJob || undefined,
+      }),
+    })
+      .then((res) => {
+        if (res) {
+          aspirationAiCacheRef.current[fingerprintAtStart] = res
+          if (mounted && aspirationAiFingerprint === fingerprintAtStart) {
+            setAspirationAiAnalysis(res)
+          }
+        }
+      })
+      .catch(() => {
+        if (mounted && aspirationAiFingerprint === fingerprintAtStart) {
+          setAspirationAiError("Chưa thể tải đánh giá AI lúc này. Vui lòng thử lại sau.")
+        }
+      })
+      .finally(() => {
+        if (inFlightAspirationAiRef.current === fingerprintAtStart) {
+          inFlightAspirationAiRef.current = null
+        }
+        if (mounted) setAspirationAiLoading(false)
+      })
+
+    return () => {
+      mounted = false
+    }
+  }, [
+    hasCompletedAssessment,
+    recommendationMode,
+    aspirationAiFingerprint,
+    effectiveAssessment,
+    profileGender,
+    profileGradeLevel,
+    data?.aspirationAnalysis?.dream_job,
+  ])
+
+  const handleOpenProfileTab = () => {
+    setRecommendationMode("algorithm")
     reportTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
-  const handleOpenAlgorithmMode = () => {
-    setRecommendationMode("algorithm")
+  const handleOpenAspirationAiTab = () => {
+    setRecommendationMode("ai")
     reportTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
@@ -649,20 +739,20 @@ export function Dashboard() {
               </div>
             )}
 
-            {/* Bộ chuyển chế độ: Thuật toán đề xuất (tức thì) vs Đề xuất ngành có AI (phân tích sâu) */}
-            <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-white/80 bg-white/60 p-2 shadow-[0_10px_35px_rgba(14,165,233,0.08)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-2.5">
+            {/* 2 Tabs tách biệt: Đề xuất theo hồ sơ (Mặc định) vs Nguyện vọng với AI */}
+            <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-white/80 bg-white/65 p-2 shadow-[0_10px_35px_rgba(14,165,233,0.08)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-2.5">
               <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto">
                 <button
                   type="button"
-                  onClick={handleOpenAlgorithmMode}
+                  onClick={handleOpenProfileTab}
                   className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition sm:rounded-2xl sm:text-sm ${
                     recommendationMode === "algorithm"
                       ? "bg-sky-600 text-white shadow-md shadow-sky-500/20"
                       : "text-slate-600 hover:bg-white hover:text-sky-700"
                   }`}
                 >
-                  <Zap size={15} className="shrink-0" />
-                  <span>Thuật toán đề xuất</span>
+                  <Compass size={15} className="shrink-0" />
+                  <span>Đề xuất theo hồ sơ</span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                       recommendationMode === "algorithm"
@@ -670,225 +760,155 @@ export function Dashboard() {
                         : "bg-sky-100 text-sky-700"
                     }`}
                   >
-                    Tức thì · Không AI
+                    Hồ sơ &amp; Kỹ năng
                   </span>
                 </button>
 
                 <button
                   type="button"
-                  onClick={handleOpenAiMode}
-                  disabled={skillLoading && recommendationMode === "ai"}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition disabled:cursor-wait disabled:opacity-80 sm:rounded-2xl sm:text-sm ${
+                  onClick={handleOpenAspirationAiTab}
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition sm:rounded-2xl sm:text-sm ${
                     recommendationMode === "ai"
-                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
-                      : "text-slate-600 hover:bg-white hover:text-indigo-700"
+                      ? "bg-sky-600 text-white shadow-md shadow-sky-500/20"
+                      : "text-slate-600 hover:bg-white hover:text-sky-700"
                   }`}
                 >
-                  {skillLoading ? (
+                  {aspirationAiLoading ? (
                     <Loader2 size={15} className="shrink-0 animate-spin" />
                   ) : (
                     <Sparkles size={15} className="shrink-0" />
                   )}
-                  <span>{skillLoading ? "AI đang phân tích..." : "Đề xuất ngành có AI"}</span>
+                  <span>Nguyện vọng với AI</span>
                   <span
                     className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
                       recommendationMode === "ai"
                         ? "bg-white/20 text-white"
-                        : "bg-indigo-100 text-indigo-700"
+                        : "bg-sky-100 text-sky-700"
                     }`}
                   >
-                    {skillLoading ? "Đang tải" : "Phân tích sâu"}
+                    Đánh giá nghề mơ ước
                   </span>
                 </button>
               </div>
 
               <p className="px-2 text-[11px] font-medium text-slate-500 sm:text-right sm:text-xs">
                 {recommendationMode === "algorithm"
-                  ? "Tính toán 100% bằng thuật toán 3 trụ cột (RIASEC · Học lực · Tự khai), hiển thị ngay lập tức."
-                  : "Kết hợp thuật toán với AI đối chiếu nguyện vọng & phân tích điểm mạnh/yếu chuyên sâu."}
+                  ? "Tổng hợp hồ sơ Holland, phễu đề xuất ngành 2 tầng và phân tích kỹ năng theo hồ sơ."
+                  : "AI đối chiếu nghề mơ ước với hồ sơ thực tế và gợi ý ngành phù hợp hơn."}
               </p>
             </div>
 
-            {recommendationMode === "ai" && (
-              <div className="mb-6">
-                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200/80 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-900 sm:rounded-3xl sm:px-5 sm:py-3.5 sm:text-sm">
-                  <div className="flex items-center gap-2.5">
-                    <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-indigo-600 text-white">
-                      {skillLoading || isAnalyzingAspiration ? (
-                        <Loader2 size={16} className="animate-spin" />
-                      ) : (
-                        <Sparkles size={16} />
-                      )}
-                    </span>
-                    <div>
-                      <p className="font-extrabold text-indigo-950">
-                        {skillLoading || isAnalyzingAspiration
-                          ? "AI đang phân tích chuyên sâu hồ sơ của bạn..."
-                          : "Chế độ Đề xuất ngành có AI phân tích chuyên sâu"}
-                      </p>
-                      <p className="text-xs font-medium text-indigo-700">
-                        {skillLoading || isAnalyzingAspiration
-                          ? "Vui lòng chờ vài giây trong lúc AI xử lý; kết quả sẽ được lưu lại trong lịch sử CSDL."
-                          : "AI đối chiếu nguyện vọng nghề nghiệp, đánh giá điểm mạnh/yếu kỹ năng dựa trên kết quả thuật toán."}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={handleOpenAlgorithmMode}
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3.5 py-2 text-xs font-extrabold text-indigo-700 transition hover:bg-indigo-100"
-                  >
-                    <ArrowLeft size={14} />
-                    Quay lại Thuật toán
-                  </button>
-                </div>
-              </div>
-            )}
+            {recommendationMode === "algorithm" ? (
+              <>
+                {/* 1. Hồ sơ RIASEC & Phễu Ngành đề xuất 2 tầng */}
+                <div className="mb-6 grid min-w-0 gap-6 xl:grid-cols-12 xl:gap-8">
+                  {/* Left Column: Single Unified Profile Card */}
+                  <div className="min-w-0 xl:col-span-4">
+                    <Card className="rounded-2xl p-4 sm:rounded-3xl sm:p-6 xl:sticky xl:top-6">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold uppercase tracking-wider text-sky-700">
+                            Hồ sơ Định hướng
+                          </p>
+                          <h2 className="mt-1 break-words text-lg font-bold text-slate-900 sm:text-xl xl:text-2xl">
+                            {archetypeTitle}
+                          </h2>
+                        </div>
+                        <Badge tone="sky" className="shrink-0 whitespace-nowrap">{hollandCodeBadge}</Badge>
+                      </div>
 
-            {/* Đối chiếu nguyện vọng nghề nghiệp & học lực (hiển thị tức thì ở cả 2 chế độ; nhận xét AI bổ sung khi bật chế độ Có AI) */}
-            <div className="mb-6">
-              <AspirationAlignmentCard
-                analysis={data?.aspirationAnalysis ?? null}
-                currentAspiration={effectiveAssessment.aspiration}
-                onUpdateAspiration={handleUpdateAspiration}
-                isAnalyzing={isAnalyzingAspiration}
-                readOnly={activeAttemptIndex > 0}
-                isAiMode={recommendationMode === "ai"}
-                aiCoachingSummary={skillAnalysis?.summary ?? null}
-              />
-            </div>
+                      <div className="md:grid md:grid-cols-12 md:items-center md:gap-6 xl:block">
+                        <div className="md:col-span-6 xl:col-span-12">
+                          {interestEvidence.status === "COMPLETE" && displayedRiasec.length === 6 && displayedRiasec.every(point => Number.isFinite(point.value)) ? <RiasecRadarChart data={displayedRiasec} /> : <HollandInterestSummary evidence={interestEvidence} />}
+                        </div>
 
-            {recommendationMode === "ai" && (
-              <div className="mb-6">
-                {/* AI Phân tích kỹ năng & điểm mạnh/yếu (chỉ gọi khi mở chế độ AI) */}
-                <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
-              </div>
-            )}
-
-            {/* 1. Hồ sơ RIASEC & Phễu Ngành đề xuất 2 tầng */}
-            <div className="mb-8 grid min-w-0 gap-6 xl:grid-cols-12 xl:gap-8">
-              {/* Left Column: Single Unified Profile Card */}
-              <div className="min-w-0 xl:col-span-4">
-                <Card className="rounded-2xl p-4 sm:rounded-3xl sm:p-6 xl:sticky xl:top-6">
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold uppercase tracking-wider text-sky-700">
-                        Hồ sơ Định hướng
-                      </p>
-                      <h2 className="mt-1 break-words text-lg font-bold text-slate-900 sm:text-xl xl:text-2xl">
-                        {archetypeTitle}
-                      </h2>
-                    </div>
-                    <Badge tone="indigo" className="shrink-0 whitespace-nowrap">{hollandCodeBadge}</Badge>
-                  </div>
-
-                  <div className="md:grid md:grid-cols-12 md:items-center md:gap-6 xl:block">
-                    <div className="md:col-span-6 xl:col-span-12">
-                      {interestEvidence.status === "COMPLETE" && displayedRiasec.length === 6 && displayedRiasec.every(point => Number.isFinite(point.value)) ? <RiasecRadarChart data={displayedRiasec} /> : <HollandInterestSummary evidence={interestEvidence} />}
-                    </div>
-
-                    <div className="md:col-span-6 xl:col-span-12">
-                      <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-2.5">
-                        {top3Dimensions.map((item) => (
-                          <div
-                            className="min-w-0 rounded-xl border border-slate-200/80 bg-white/70 p-2 text-center sm:p-3"
-                            key={item.key}
-                          >
-                            <p className="text-base font-bold text-sky-600 sm:text-lg">
-                              {item.key}
-                            </p>
-                            <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
-                              {item.label}
-                            </p>
-                            <p className="mt-1 text-xs font-bold tabular-nums text-slate-900 sm:text-sm">
-                              {item.value}%
-                            </p>
+                        <div className="md:col-span-6 xl:col-span-12">
+                          <div className="mt-3 grid grid-cols-3 gap-2 sm:gap-2.5">
+                            {top3Dimensions.map((item) => (
+                              <div
+                                className="min-w-0 rounded-xl border border-slate-200/80 bg-white/70 p-2 text-center sm:p-3"
+                                key={item.key}
+                              >
+                                <p className="text-base font-bold text-sky-600 sm:text-lg">
+                                  {item.key}
+                                </p>
+                                <p className="truncate text-[11px] font-medium text-slate-500 sm:text-xs">
+                                  {item.label}
+                                </p>
+                                <p className="mt-1 text-xs font-bold tabular-nums text-slate-900 sm:text-sm">
+                                  {item.value}%
+                                </p>
+                              </div>
+                            ))}
                           </div>
-                        ))}
-                      </div>
 
-                      <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200/80 bg-white/70 px-3.5 py-3 sm:px-4">
-                        <div className="flex min-w-0 items-center gap-2">
-                          <GraduationCap size={18} className="shrink-0 text-sky-600" />
-                          <span className="min-w-0 break-words text-xs font-bold text-slate-800">
-                            {formatBlockWithSubjects(bestBlockStats.block, { short: true })}
-                            {bestBlockStats.rawSum ? ` · ${bestBlockStats.rawSum}đ` : ""}
-                          </span>
+                          <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-slate-200/80 bg-white/70 px-3.5 py-3 sm:px-4">
+                            <div className="flex min-w-0 items-center gap-2">
+                              <GraduationCap size={18} className="shrink-0 text-sky-600" />
+                              <span className="min-w-0 break-words text-xs font-bold text-slate-800">
+                                {formatBlockWithSubjects(bestBlockStats.block, { short: true })}
+                                {bestBlockStats.rawSum ? ` · ${bestBlockStats.rawSum}đ` : ""}
+                              </span>
+                            </div>
+                            <span className="break-words text-xs font-semibold tabular-nums text-sky-700">
+                              Z-Score {bestBlockStats.zScore} · {bestBlockStats.percentile}
+                            </span>
+                          </div>
+                          {bestBlockStats.failingSubjects.length > 0 && (
+                            <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                              Cảnh báo điểm liệt: {bestBlockStats.failingSubjects.join(", ")}
+                            </div>
+                          )}
                         </div>
-                        <span className="break-words text-xs font-semibold tabular-nums text-sky-700">
-                          Z-Score {bestBlockStats.zScore} · {bestBlockStats.percentile}
-                        </span>
                       </div>
-                      {bestBlockStats.failingSubjects.length > 0 && (
-                        <div className="mt-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
-                          Cảnh báo điểm liệt: {bestBlockStats.failingSubjects.join(", ")}
-                        </div>
-                      )}
-                    </div>
+                    </Card>
                   </div>
-                </Card>
-              </div>
 
-              {/* Right Column: 2-Tier Recommendation Funnel */}
-              <div className="min-w-0 xl:col-span-8">
-                {evaluateError && (
-                  <div
-                    role="alert"
-                    className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
-                  >
-                    <span>{evaluateError}</span>
-                    <button
-                      type="button"
-                      onClick={() => setReloadNonce((n) => n + 1)}
-                      className="rounded-xl border border-rose-300 bg-white px-3.5 py-1.5 text-xs font-extrabold text-rose-700 transition hover:bg-rose-100"
-                    >
-                      Thử tải lại
-                    </button>
-                  </div>
-                )}
-                <TwoTierFunnelRecommendation
-                  funnelData={activeFunnel}
-                  isLoading={isEvaluating && (!activeFunnel.tier1_fields || activeFunnel.tier1_fields.length === 0)}
-                  activeGradeLevel={profileGradeLevel}
-                  activeGender={profileGender}
-                  weightsApplied={data?.weights_applied}
-                />
-              </div>
-            </div>
-
-            {/* CTA mở chế độ Đề xuất ngành có AI khi đang ở chế độ Thuật toán */}
-            {recommendationMode === "algorithm" && (
-              <div className="mb-6 rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50/90 via-sky-50/80 to-white/90 p-5 shadow-[0_12px_35px_rgba(79,70,229,0.08)] sm:rounded-3xl sm:p-6">
-                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 space-y-1.5">
-                    <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white/80 px-2.5 py-0.5 text-[11px] font-extrabold text-indigo-700">
-                      <Sparkles size={12} />
-                      Tùy chọn nâng cao · Phân tích AI
-                    </div>
-                    <h3 className="text-base font-extrabold text-slate-900 sm:text-lg">
-                      Muốn AI phân tích chuyên sâu hơn để tăng độ chính xác?
-                    </h3>
-                    <p className="max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
-                      Kết quả phía trên được tính tức thời 100% bằng thuật toán (không mất thời gian chờ AI). Nếu bạn muốn AI đối chiếu sâu với nguyện vọng cá nhân và phân tích điểm mạnh/yếu kỹ năng, hãy chuyển sang chế độ <strong>Đề xuất ngành có AI</strong>.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    icon={skillLoading ? undefined : Sparkles}
-                    onClick={handleOpenAiMode}
-                    disabled={skillLoading}
-                    className="shrink-0 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-extrabold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-80 sm:text-sm"
-                  >
-                    {skillLoading ? (
-                      <span className="inline-flex items-center gap-2">
-                        <Loader2 size={15} className="animate-spin" />
-                        AI đang phân tích...
-                      </span>
-                    ) : (
-                      "Mở đề xuất ngành có AI"
+                  {/* Right Column: 2-Tier Recommendation Funnel */}
+                  <div className="min-w-0 xl:col-span-8">
+                    {evaluateError && (
+                      <div
+                        role="alert"
+                        className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+                      >
+                        <span>{evaluateError}</span>
+                        <button
+                          type="button"
+                          onClick={() => setReloadNonce((n) => n + 1)}
+                          className="rounded-xl border border-rose-300 bg-white px-3.5 py-1.5 text-xs font-extrabold text-rose-700 transition hover:bg-rose-100"
+                        >
+                          Thử tải lại
+                        </button>
+                      </div>
                     )}
-                  </Button>
+                    <TwoTierFunnelRecommendation
+                      funnelData={activeFunnel}
+                      isLoading={isEvaluating && (!activeFunnel.tier1_fields || activeFunnel.tier1_fields.length === 0)}
+                      activeGradeLevel={profileGradeLevel}
+                      activeGender={profileGender}
+                      weightsApplied={data?.weights_applied}
+                    />
+                  </div>
                 </div>
+
+                {/* 2. Phân tích kỹ năng theo hồ sơ (nằm ngay dưới Phễu đề xuất 2 tầng, tự cache theo profile_hash) */}
+                <div className="mb-8">
+                  <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
+                </div>
+              </>
+            ) : (
+              /* Tab 2: Phân tích nguyện vọng nghề mơ ước với AI */
+              <div className="mb-8">
+                <AspirationAlignmentCard
+                  analysis={data?.aspirationAnalysis ?? null}
+                  aiAnalysis={aspirationAiAnalysis}
+                  aiLoading={aspirationAiLoading}
+                  aiError={aspirationAiError}
+                  currentAspiration={effectiveAssessment.aspiration}
+                  onUpdateAspiration={handleUpdateAspiration}
+                  isAnalyzing={isAnalyzingAspiration}
+                  readOnly={activeAttemptIndex > 0}
+                />
               </div>
             )}
           </>

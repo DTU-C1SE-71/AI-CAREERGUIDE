@@ -148,6 +148,15 @@
   5. **AI Coaching có ngữ cảnh Nguyện vọng (`major_insight/service.py`):** Truyền `dream_job` và `score_strategy` vào cả phần tóm tắt tất định lẫn prompt LLM của `/student-skills` (đã sanitize PII, vẫn giữ nguyên khóa cache SHA-256 theo hồ sơ).
   6. **Kiểm thử hồi quy:** Bổ sung test case tại `backend/tests/test_aspiration_matching.py`.
 
+### 3.3. Tái cấu trúc `/dashboard` thành 2 Tab đồng bộ Sky + Slate & Endpoint `POST /major-insights/aspiration-ai`
+- **Vấn đề đã khắc phục:**
+  1. Trước đây `/student-skills` chỉ đọc `payload.riasec_scores` (rỗng khi frontend gửi `riasec_answers`) nên AI hiểu nhầm là thiếu dữ liệu Holland dù đã trả lời đủ 30 câu. Đã khắc phục bằng `_format_riasec_summary_from_payload` tính trực tiếp từ `build_interest_evidence(...)` và nâng policy cache lên `evidence-skills-v4` (tự động làm mới các bản ghi cũ lỗi v3, giữ nguyên Smart DB Cache 0 token cho hồ sơ không đổi).
+  2. Giao diện cũ trộn màu `indigo` với palette `Sky + Slate`, lặp lại bảng thanh Holland trong thẻ Nguyện vọng, và đặt Nguyện vọng án ngữ phía trên Phễu đề xuất ngành.
+- **Thay đổi đã thực hiện (`Dashboard.tsx`, `AspirationAlignmentCard.tsx`, `SkillAnalysisCard.tsx`, `Badge.tsx`, `major_insight/service.py`, `major_insight/router.py`, `schemas/insight.py`):**
+  1. **Tab 1 — `Đề xuất theo hồ sơ` (Mặc định):** Hiển thị Hồ sơ Định hướng (Radar + Top Holland + Khối thi) & Phễu 2 tầng ở trên, kèm Phân tích kỹ năng theo hồ sơ (`SkillAnalysisCard`, lưới 2 cột gọn mặc định hiện 2 mục + nút xem thêm) ngay phía dưới; đợi `/recommender/evaluate` xong mới gọi `/student-skills` (có Smart DB Cache `profile_hash`).
+  2. **Tab 2 — `Nguyện vọng với AI`:** Tách riêng đánh giá nghề mơ ước qua endpoint mới `POST /api/v1/major-insights/aspiration-ai` (Smart DB Cache trong `student_skill_insights` dưới `major_code="ASPIRATION_AI"`, tuân thủ cảnh báo PA 3 `STRONG_VETO`, chỉ chọn `better_majors` từ mã ngành thật trong danh mục, có nút **Đổi nghề mơ ước** trực tiếp), bỏ phần lặp thanh Holland và rút gọn thông số thẻ ngành.
+  3. **Đồng bộ hệ màu:** Thay toàn bộ lớp `indigo` trên Dashboard và các thẻ phân tích bằng hệ `Sky (#0284c7 / #0ea5e9) + Slate`.
+
 ---
 
 ## 4. Danh mục Đầy đủ Tính năng của Hệ thống
@@ -164,9 +173,9 @@
 3. **Trắc nghiệm Hướng nghiệp 4 bước (`/assessment`):**
    - Bộ **38 câu hỏi 100% trải nghiệm học đường THPT** (30 câu RIASEC + 8 câu Tư duy), nhập điểm học bạ/thi thử và Nguyện vọng.
    - Chế độ xem `Thẻ`, `Danh sách`, `Radar`; nút **Quay lại** về cổng chọn làm bài mới / xem lại; lưu đầy đủ lên PostgreSQL và hydrate lại khi đăng nhập lại.
-4. **Khám phá Ngành (`/dashboard` — 2 chế độ tách biệt):**
-   - **Chế độ `Thuật toán đề xuất` (mặc định · Tức thì · 0 AI):** Thẻ Đối chiếu Nguyện vọng (kèm cảnh báo xung đột sở thích, điểm/môn thiếu, ngành liên quan vừa sức), Biểu đồ Radar RIASEC, Top 3 nhóm sở thích, Khối thi tốt nhất (Z-Score), Phễu 2 tầng (Lĩnh vực $\rightarrow$ Ngành) với Sub-facet Veto Gate & HA-GAE v3.1.
-   - **Chế độ `Đề xuất ngành có AI` (On-Demand + Smart Cache):** Chỉ gọi AI khi người dùng bấm mở, bổ sung **"Góc nhìn Cố vấn AI về Nguyện vọng & Hồ sơ của bạn"** + phân tích điểm mạnh/yếu & kỹ năng, hiển thị rõ trạng thái **`AI đang phân tích...`** kèm spinner, tự lưu CSDL và gắn nhãn **`Đã tải từ lịch sử CSDL · 0 token`** khi mở lại cùng hồ sơ.
+4. **Khám phá Ngành (`/dashboard` — 2 tab đồng bộ Sky + Slate):**
+   - **Tab `Đề xuất theo hồ sơ` (mặc định · Hồ sơ & Kỹ năng):** Biểu đồ Radar RIASEC, Top 3 nhóm sở thích, Khối thi tốt nhất (Z-Score), Phễu 2 tầng (Lĩnh vực $\rightarrow$ Ngành) với Sub-facet Veto Gate & HA-GAE v3.1 ở phía trên, kèm Phân tích kỹ năng theo hồ sơ (`SkillAnalysisCard`, lưới 2 cột + Smart DB Cache `evidence-skills-v4`, tự tính điểm Holland từ `riasec_answers`) ngay phía dưới.
+   - **Tab `Nguyện vọng với AI` (Đánh giá nghề mơ ước):** Kết nối endpoint `POST /api/v1/major-insights/aspiration-ai` (Smart DB Cache theo `profile_hash`, giữ nguyên ràng buộc Sub-facet Veto PA 3) giúp AI phân tích lý do hợp/chưa hợp và gợi ý tối đa 3 ngành từ danh mục thật phù hợp hơn với hồ sơ; hỗ trợ **Đổi nghề mơ ước** trực tiếp.
    - Tiện ích: **Lịch sử các lần làm bài**, **Làm lại**, **Xuất báo cáo PDF**.
 5. **Danh mục 435 Ngành đào tạo (`/majors` & `/majors/:code`):**
    - Tra cứu toàn bộ 435 ngành chuẩn Bộ GD&ĐT theo mã ngành, tên ngành, bộ lọc lĩnh vực; trang chi tiết gồm nội dung đào tạo, khối xét tuyển, cơ hội nghề nghiệp và giải thích phù hợp.

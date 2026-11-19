@@ -2,14 +2,15 @@ import type { ReactNode } from "react"
 
 export function Badge({
   children,
-  tone = "indigo",
+  tone = "sky",
   className = "",
 }: {
   children: ReactNode
-  tone?: "indigo" | "emerald" | "amber" | "slate" | "rose"
+  tone?: "sky" | "indigo" | "emerald" | "amber" | "slate" | "rose"
   className?: string
 }) {
   const tones = {
+    sky: "bg-sky-50/90 text-sky-700 ring-sky-200/85",
     indigo: "bg-sky-50/90 text-sky-700 ring-sky-200/85",
     emerald: "bg-emerald-50/90 text-emerald-700 ring-emerald-200/85",
     amber: "bg-amber-50/90 text-amber-800 ring-amber-200/85",

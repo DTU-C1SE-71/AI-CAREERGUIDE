@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -5,6 +7,8 @@ from app.core.database import get_db
 from app.core.dependencies import get_optional_current_user, require_admin_actor, oauth2_scheme_optional
 from app.models.identity import User
 from app.schemas.insight import (
+    AspirationAIAnalysisRequest,
+    AspirationAIAnalysisResponse,
     MajorInsightResponse,
     StudentSkillAnalysisRequest,
     StudentSkillAnalysisResponse,
@@ -72,6 +76,17 @@ async def delete_major_insight(
     }
 
 
+def _with_user_demographics(payload, current_user: Optional[User]):
+    eff_gender = current_user.gender if current_user else payload.gender
+    eff_grade_level = current_user.grade_level if current_user else payload.grade_level
+    return payload.model_copy(
+        update={
+            "gender": eff_gender,
+            "grade_level": eff_grade_level,
+        }
+    )
+
+
 @router.post(
     "/student-skills",
     response_model=StudentSkillAnalysisResponse,
@@ -88,15 +103,30 @@ async def analyze_student_skills(
     - Kỹ năng cần bổ sung + việc cần làm cụ thể để cải thiện.
     Kết quả được cache theo hồ sơ năng lực để không gọi AI lặp lại.
     """
-    eff_gender = current_user.gender if current_user else payload.gender
-    eff_grade_level = current_user.grade_level if current_user else payload.grade_level
-    resolved_payload = payload.model_copy(
-        update={
-            "gender": eff_gender,
-            "grade_level": eff_grade_level,
-        }
-    )
+    resolved_payload = _with_user_demographics(payload, current_user)
     return await service.analyze_student_skills(
+        db,
+        resolved_payload,
+        user_id=current_user.id if current_user else None,
+    )
+
+
+@router.post(
+    "/aspiration-ai",
+    response_model=AspirationAIAnalysisResponse,
+    summary="AI đánh giá mức độ phù hợp của nghề mơ ước theo hồ sơ & gợi ý ngành phù hợp hơn",
+)
+async def analyze_aspiration_ai(
+    payload: AspirationAIAnalysisRequest,
+    current_user: User = Depends(get_optional_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Phân tích nghề nghiệp mơ ước với sở thích Holland RIASEC, điểm học lực và Sub-facet Veto.
+    Lưu cache thông minh theo profile_hash (0 token cho các lần truy cập sau).
+    """
+    resolved_payload = _with_user_demographics(payload, current_user)
+    return await service.analyze_aspiration_with_ai(
         db,
         resolved_payload,
         user_id=current_user.id if current_user else None,

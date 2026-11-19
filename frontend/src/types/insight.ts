@@ -46,3 +46,24 @@ export interface StudentSkillAnalysis {
   cached: boolean
   insight_id?: string | null
 }
+
+export interface AspirationMajorSuggestion {
+  major_code: string
+  major_name: string
+  reason: string
+  match_score?: number | null
+}
+
+export interface AspirationAIAnalysis {
+  profile_hash: string
+  dream_job: string
+  fit_level: "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN"
+  fit_label: string
+  summary: string
+  reasons_fit: InsightPoint[]
+  reasons_gap: InsightPoint[]
+  better_majors: AspirationMajorSuggestion[]
+  is_ai_generated: boolean
+  cached: boolean
+  insight_id?: string | null
+}

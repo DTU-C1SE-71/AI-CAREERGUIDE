@@ -1,4 +1,6 @@
 import {
+  ChevronDown,
+  ChevronUp,
   CircleAlert,
   CircleCheck,
   Lightbulb,
@@ -6,6 +8,7 @@ import {
   Sparkles,
   Target,
 } from "lucide-react"
+import { useState } from "react"
 import type { StudentSkillAnalysis } from "../../types/insight"
 
 const PRIORITY_STYLE: Record<string, string> = {
@@ -49,29 +52,33 @@ export function SkillAnalysisCard({
   data: StudentSkillAnalysis | null
   loading?: boolean
 }) {
+  const [showAllGaps, setShowAllGaps] = useState(false)
   if (!loading && !data) return null
+
+  const allGaps = data?.skill_gaps ?? []
+  const visibleGaps = showAllGaps ? allGaps : allGaps.slice(0, 2)
 
   return (
     <div className="glass-card min-w-0 overflow-hidden rounded-2xl p-4 sm:rounded-3xl sm:p-6">
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
           <Sparkles size={16} className="text-sky-600" />
-          <span>Gợi ý tìm hiểu kỹ năng theo hồ sơ</span>
+          <span>Phân tích kỹ năng theo hồ sơ</span>
         </div>
         {loading ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-bold text-indigo-700">
-            <Loader2 size={13} className="animate-spin text-indigo-600" />
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700">
+            <Loader2 size={13} className="animate-spin text-sky-600" />
             AI đang phân tích...
           </span>
         ) : data?.cached ? (
           <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
             <CircleCheck size={12} />
-            Đã tải từ lịch sử CSDL · 0 token
+            Đã tải từ CSDL · 0 token
           </span>
         ) : data?.is_ai_generated ? (
-          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-bold text-indigo-700">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-sky-50 px-3 py-1 text-[11px] font-bold text-sky-700">
             <Sparkles size={12} />
-            AI vừa phân tích &amp; đã lưu lịch sử
+            AI vừa phân tích &amp; đã lưu
           </span>
         ) : null}
       </div>
@@ -131,16 +138,35 @@ export function SkillAnalysisCard({
             </div>
           </div>
 
-          {data.skill_gaps && data.skill_gaps.length > 0 && (
-            <div className="mt-6 border-t border-slate-100 pt-5">
-              <p className="mb-3 flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-sky-700">
-                <Target size={14} /> Kỹ năng cần bổ sung (Action Items)
-              </p>
-              <div className="space-y-2.5">
-                {data.skill_gaps.map((gap) => (
+          {allGaps.length > 0 && (
+            <div className="mt-5 border-t border-slate-100 pt-4">
+              <div className="mb-3 flex items-center justify-between gap-2">
+                <p className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-sky-700">
+                  <Target size={14} /> Kỹ năng cần bổ sung ({allGaps.length})
+                </p>
+                {allGaps.length > 2 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowAllGaps((prev) => !prev)}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-2.5 py-1 text-xs font-semibold text-sky-700 transition hover:border-sky-300 hover:bg-sky-50"
+                  >
+                    {showAllGaps ? (
+                      <>
+                        Thu gọn <ChevronUp size={13} />
+                      </>
+                    ) : (
+                      <>
+                        Xem thêm {allGaps.length - 2} kỹ năng <ChevronDown size={13} />
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+                {visibleGaps.map((gap) => (
                   <div
                     key={gap.skill}
-                    className="rounded-xl border border-slate-200/80 bg-white/75 p-3.5"
+                    className="rounded-xl border border-slate-200/80 bg-white/80 p-3.5"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-sm font-bold text-slate-800">
@@ -161,13 +187,13 @@ export function SkillAnalysisCard({
                     )}
                     {gap.how_to_improve && gap.how_to_improve.length > 0 && (
                       <ul className="mt-2 space-y-1 border-t border-slate-100 pt-2">
-                        {gap.how_to_improve.map((step) => (
+                        {gap.how_to_improve.slice(0, 2).map((step) => (
                           <li
                             key={step}
-                            className="flex items-start gap-2 text-xs text-slate-700"
+                            className="flex items-start gap-1.5 text-xs text-slate-700"
                           >
                             <Lightbulb
-                              size={13}
+                              size={12}
                               className="mt-0.5 shrink-0 text-sky-500"
                             />
                             <span>{step}</span>
@@ -184,16 +210,16 @@ export function SkillAnalysisCard({
       ) : loading ? (
         <div
           role="status"
-          className="flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-indigo-100 bg-indigo-50/50 px-4 py-8 text-center"
+          className="flex flex-col items-center justify-center gap-2.5 rounded-2xl border border-sky-200/80 bg-sky-50/50 px-4 py-8 text-center"
         >
-          <span className="grid size-10 place-items-center rounded-2xl bg-indigo-600 text-white shadow-sm">
+          <span className="grid size-10 place-items-center rounded-2xl bg-sky-600 text-white shadow-sm">
             <Loader2 size={20} className="animate-spin" />
           </span>
-          <p className="text-sm font-extrabold text-indigo-950">
+          <p className="text-sm font-extrabold text-slate-900">
             AI đang phân tích hồ sơ &amp; kỹ năng của bạn...
           </p>
           <p className="max-w-md text-xs leading-relaxed text-slate-600">
-            Quá trình này thường mất 5–15 giây ở lần đầu. Sau khi hoàn tất, kết quả sẽ được lưu vào lịch sử CSDL để những lần sau tải ngay lập tức.
+            Kết quả được lưu cache theo hồ sơ để những lần truy cập sau mở ngay lập tức.
           </p>
         </div>
       ) : (
