@@ -25,13 +25,18 @@ export function expireSession(token: string | null, message: string) {
 }
 
 /** Chỉ dùng HTTP thật; không lưu phản hồi quản trị hoặc dữ liệu người khác vào bộ nhớ bền. */
-export async function apiFetch(path: string, init: RequestInit = {}, timeoutMs = 20000): Promise<Response> {
+export async function apiFetch(path: string, init: RequestInit = {}, timeoutMs = 45000): Promise<Response> {
   const token = currentToken()
   const controller = new AbortController()
+  let timedOut = false
   const cancel = () => controller.abort()
+  const onTimeout = () => {
+    timedOut = true
+    controller.abort()
+  }
   init.signal?.addEventListener("abort", cancel, { once: true })
   if (init.signal?.aborted) controller.abort()
-  const timer = window.setTimeout(cancel, timeoutMs)
+  const timer = window.setTimeout(onTimeout, timeoutMs)
   const headers = new Headers(init.headers)
   if (token) headers.set("Authorization", `Bearer ${token}`)
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
@@ -50,6 +55,9 @@ export async function apiFetch(path: string, init: RequestInit = {}, timeoutMs =
     }
     return new Response([204, 205, 304].includes(response.status) ? null : body, { status: response.status, statusText: response.statusText, headers: response.headers })
   } catch (error) {
+    if (timedOut) {
+      throw new ApiError("Máy chủ phản hồi chậm (có thể đang khởi động lại). Vui lòng thử lại sau vài giây.", 504, "TIMEOUT")
+    }
     if (error instanceof DOMException && error.name === "AbortError") throw error
     if (error instanceof ApiError) throw error
     throw new ApiError("Không kết nối được máy chủ. Kiểm tra mạng và thử lại.")
