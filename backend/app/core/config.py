@@ -52,6 +52,7 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = ""
     SMTP_FROM_NAME: str = "AI CareerGuide"
     SMTP_USE_TLS: bool = True
+    BREVO_API_KEY: str = ""
     RESEND_API_KEY: str = ""
     OTP_EXPIRE_MINUTES: int = 10
     OTP_RESEND_COOLDOWN_SECONDS: int = 60

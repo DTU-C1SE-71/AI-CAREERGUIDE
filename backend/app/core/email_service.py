@@ -1,10 +1,9 @@
 """Email delivery service for registration and password reset OTP codes.
 
-Supports:
-1. Standard SMTP with STARTTLS (port 587) or SSL (port 465) via asyncio.to_thread
-   (e.g. Gmail App Password — sends to any recipient email without custom domain).
-2. Resend HTTP API (great when a verified custom domain is configured).
-3. Automatic fallback between configured providers + clear diagnostics.
+Supports (over HTTPS port 443 — works on Render Free where SMTP ports 25/465/587 are blocked):
+1. Brevo HTTP API (free 300 emails/day, sends to ANY email using a single verified Gmail sender, no custom domain needed).
+2. Standard SMTP with fast 6s timeout (for local dev, VPS, or paid cloud instances).
+3. Resend HTTP API (for verified custom domains or sandbox self-testing).
 4. Development console fallback when ENVIRONMENT is not production.
 """
 from __future__ import annotations
@@ -75,6 +74,10 @@ def _build_otp_content(otp_code: str, purpose: OTPPurpose, expire_minutes: int) 
     return subject, plain_text, html
 
 
+def _has_brevo_config() -> bool:
+    return bool(settings.BREVO_API_KEY.strip())
+
+
 def _has_smtp_config() -> bool:
     return bool(
         settings.SMTP_HOST.strip()
@@ -92,6 +95,38 @@ def _is_consumer_sender(email: str) -> bool:
     return any(lowered.endswith(domain) for domain in _CONSUMER_MAIL_DOMAINS)
 
 
+async def _send_via_brevo(to_email: str, subject: str, plain_text: str, html: str) -> None:
+    sender_email = (settings.SMTP_FROM_EMAIL or settings.SMTP_USER).strip()
+    if not sender_email:
+        raise RuntimeError("BREVO requires SMTP_FROM_EMAIL (verified sender email).")
+    sender_name = (settings.SMTP_FROM_NAME or "AI CareerGuide").strip()
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        resp = await client.post(
+            "https://api.brevo.com/v3/smtp/email",
+            headers={
+                "api-key": settings.BREVO_API_KEY.strip(),
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+            },
+            json={
+                "sender": {"name": sender_name, "email": sender_email},
+                "to": [{"email": to_email}],
+                "subject": subject,
+                "textContent": plain_text,
+                "htmlContent": html,
+            },
+        )
+        if resp.status_code >= 400:
+            detail = ""
+            try:
+                body = resp.json()
+                detail = str(body.get("message") or body.get("code") or "")[:200]
+            except Exception:
+                detail = resp.text[:200]
+            raise RuntimeError(f"Brevo HTTP {resp.status_code}: {detail}")
+
+
 def _send_via_smtp_sync(to_email: str, subject: str, plain_text: str, html: str) -> None:
     sender_email = (settings.SMTP_FROM_EMAIL or settings.SMTP_USER).strip()
     sender_header = f"{settings.SMTP_FROM_NAME} <{sender_email}>" if settings.SMTP_FROM_NAME else sender_email
@@ -103,12 +138,13 @@ def _send_via_smtp_sync(to_email: str, subject: str, plain_text: str, html: str)
     msg.set_content(plain_text)
     msg.add_alternative(html, subtype="html")
 
+    # Fast 6s timeout so blocked SMTP ports (e.g. Render Free) fail quickly instead of hanging 40s+.
     if settings.SMTP_PORT == 465:
-        with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
+        with smtplib.SMTP_SSL(settings.SMTP_HOST, settings.SMTP_PORT, timeout=6) as server:
             server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
             server.send_message(msg)
     else:
-        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=20) as server:
+        with smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=6) as server:
             server.ehlo()
             if settings.SMTP_USE_TLS:
                 server.starttls()
@@ -119,12 +155,10 @@ def _send_via_smtp_sync(to_email: str, subject: str, plain_text: str, html: str)
 
 async def _send_via_resend(to_email: str, subject: str, plain_text: str, html: str) -> None:
     raw_from = (settings.SMTP_FROM_EMAIL or "").strip()
-    # Resend never allows sending from unverified consumer domains like @gmail.com;
-    # fall back to onboarding@resend.dev if user left a Gmail address in SMTP_FROM_EMAIL.
     sender_email = "onboarding@resend.dev" if (not raw_from or _is_consumer_sender(raw_from)) else raw_from
     sender_header = f"{settings.SMTP_FROM_NAME} <{sender_email}>" if settings.SMTP_FROM_NAME else sender_email
 
-    async with httpx.AsyncClient(timeout=20.0) as client:
+    async with httpx.AsyncClient(timeout=15.0) as client:
         resp = await client.post(
             "https://api.resend.com/emails",
             headers={
@@ -150,42 +184,57 @@ async def _send_via_resend(to_email: str, subject: str, plain_text: str, html: s
 
 
 async def send_otp_email(to_email: str, otp_code: str, purpose: OTPPurpose) -> str:
-    """Send a 6-digit OTP email. Returns delivery channel ('smtp' | 'resend' | 'dev_log')."""
+    """Send a 6-digit OTP email. Returns delivery channel ('brevo' | 'smtp' | 'resend' | 'dev_log')."""
     subject, plain_text, html = _build_otp_content(otp_code, purpose, settings.OTP_EXPIRE_MINUTES)
-    has_smtp = _has_smtp_config()
-    has_resend = _has_resend_config()
 
-    # Prefer SMTP first when SMTP is configured (works for any recipient email via Gmail App Password);
-    # otherwise try Resend first, and automatically fall back between providers if both are set.
     provider_order: list[str] = []
-    if has_smtp:
+    if _has_brevo_config():
+        provider_order.append("brevo")
+    if _has_smtp_config():
         provider_order.append("smtp")
-    if has_resend:
+    if _has_resend_config():
         provider_order.append("resend")
 
-    last_error_reason = ""
+    errors: list[str] = []
     for provider in provider_order:
-        if provider == "smtp":
+        if provider == "brevo":
+            try:
+                await _send_via_brevo(to_email, subject, plain_text, html)
+                return "brevo"
+            except Exception as exc:
+                reason = f"Brevo: {str(exc)[:200]}"
+                errors.append(reason)
+                logger.error("Failed to deliver OTP via %s", reason)
+        elif provider == "smtp":
             try:
                 await asyncio.to_thread(_send_via_smtp_sync, to_email, subject, plain_text, html)
                 return "smtp"
             except Exception as exc:
-                last_error_reason = f"SMTP ({type(exc).__name__}): {str(exc)[:180]}"
-                logger.error("Failed to deliver OTP via %s", last_error_reason)
+                reason = f"SMTP ({type(exc).__name__}): {str(exc)[:180]}"
+                errors.append(reason)
+                logger.error("Failed to deliver OTP via %s", reason)
         elif provider == "resend":
             try:
                 await _send_via_resend(to_email, subject, plain_text, html)
                 return "resend"
             except Exception as exc:
-                last_error_reason = str(exc)[:220]
-                logger.error("Failed to deliver OTP via Resend: %s", last_error_reason)
+                reason = f"Resend: {str(exc)[:200]}"
+                errors.append(reason)
+                logger.error("Failed to deliver OTP via %s", reason)
 
     if provider_order:
-        if "only send testing emails" in last_error_reason.lower() or "domain is not verified" in last_error_reason.lower():
+        joined = " | ".join(errors).lower()
+        if "only send testing emails" in joined or "domain is not verified" in joined:
             raise HTTPException(
                 503,
-                "Tài khoản Resend ở chế độ dùng thử chỉ gửi được tới email chủ tài khoản Resend (chưa xác minh tên miền). "
-                "Quản trị viên cần cấu hình Gmail SMTP hoặc xác minh tên miền trên Resend.",
+                "Render gói Free chặn cổng SMTP (587) và Resend dùng thử chỉ gửi được cho email chủ tài khoản. "
+                "Vui lòng cấu hình BREVO_API_KEY (miễn phí 300 email/ngày qua HTTPS 443) trên Render.",
+            )
+        if "timeout" in joined or "timed out" in joined or "network is unreachable" in joined:
+            raise HTTPException(
+                503,
+                "Máy chủ Render gói Free chặn kết nối cổng SMTP (587/465). "
+                "Vui lòng thêm biến BREVO_API_KEY (gửi qua HTTPS 443, miễn phí 300 email/ngày) trên Render.",
             )
         raise HTTPException(
             503,
@@ -193,10 +242,10 @@ async def send_otp_email(to_email: str, otp_code: str, purpose: OTPPurpose) -> s
         )
 
     if settings.ENVIRONMENT.lower() in {"production", "prod"}:
-        logger.error("Email provider not configured in production (set SMTP_* or RESEND_API_KEY).")
+        logger.error("Email provider not configured in production (set BREVO_API_KEY, SMTP_* or RESEND_API_KEY).")
         raise HTTPException(
             503,
-            "Dịch vụ gửi email xác nhận chưa được cấu hình trên máy chủ. Vui lòng cấu hình SMTP hoặc RESEND_API_KEY.",
+            "Dịch vụ gửi email xác nhận chưa được cấu hình trên máy chủ. Vui lòng cấu hình BREVO_API_KEY hoặc SMTP.",
         )
 
     logger.warning("[DEV OTP] purpose=%s to=%s code=%s", purpose, to_email, otp_code)

@@ -69,9 +69,9 @@
     - Lưu mã bằng **HMAC-SHA256** (dùng `SECRET_KEY`) vào bảng `email_verification_codes` (migration `20261119_005_email_otp`); mật khẩu chờ kích hoạt đăng ký được băm **Argon2id** ngay lập tức (không bao giờ lưu plaintext OTP hay plaintext password).
     - Hiệu lực **10 phút**, tối đa **5 lần nhập sai** (tự hủy mã), **cooldown 60 giây** (`HTTP 429`) chống spam.
     - Quên mật khẩu phản hồi trung tính (anti-enumeration), cập nhật mật khẩu mới bằng Argon2id và vô hiệu hóa mã OTP ngay sau khi dùng.
-  - **Dịch vụ gửi Email đa kênh + Tự động fallback (`email_service.py`):**
-    - Ưu tiên **SMTP** (ví dụ Gmail App Password qua `smtplib` chạy trong `asyncio.to_thread` để không block event loop — gửi được tới mọi email học sinh mà không cần mua domain riêng).
-    - Hỗ trợ **Resend HTTP API** (`httpx.AsyncClient`), tự động fallback giữa SMTP $\leftrightarrow$ Resend nếu cấu hình cả hai, tự tránh lỗi gửi từ `@gmail.com` qua Resend, và trả thông báo rõ ràng nếu Resend ở chế độ dùng thử (chưa verify domain).
+  - **Dịch vụ gửi Email đa kênh qua HTTPS 443 + Fallback (`email_service.py`):**
+    - **Lưu ý hạ tầng Render Free:** Render gói Free chặn kết nối ra ngoài ở các cổng SMTP (`25`, `465`, `587`) khiến `smtplib` bị treo timeout.
+    - **Giải pháp:** Tích hợp **Brevo HTTP API v3** (`BREVO_API_KEY`, gửi qua HTTPS cổng `443`, miễn phí 300 email/ngày, gửi được tới mọi email học sinh chỉ cần xác minh 1 Gmail như `aicareerguide67@gmail.com` mà không cần mua tên miền); đặt timeout SMTP nhanh (`6s`) cho môi trường local/VPS và giữ fallback Resend HTTP API.
 - **Tệp liên quan:**
   - `backend/app/core/email_service.py`, `backend/app/core/config.py`
   - `backend/app/models/identity.py`, `backend/app/db/migrations.py`
