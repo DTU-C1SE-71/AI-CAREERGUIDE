@@ -155,8 +155,8 @@
 ### 4.1. Cổng Học sinh (Student Portal)
 1. **Xác thực & Bảo mật Tài khoản (`/login`, `/login/callback`):**
    - Đăng nhập Email/Mật khẩu (Argon2id + JWT HS256) và Đăng nhập Google OAuth 2.0 (xác minh chữ ký RS256 từ Google JWKS).
-   - **Chính sách mật khẩu mạnh 5 tiêu chí** (tối thiểu 8 ký tự, chữ hoa, chữ thường, số, ký tự đặc biệt) kèm checklist realtime & nút hiện/ẩn mật khẩu.
-   - **Đăng ký thường xác nhận qua Email OTP 6 chữ số** (HMAC-SHA256, hiệu lực 10 phút, tối đa 5 lần thử, cooldown 60s, không lưu plaintext password/OTP).
+   - **Chính sách mật khẩu mạnh 5 tiêu chí** (tối thiểu 8 ký tự, chữ hoa, chữ thường, số, ký tự đặc biệt) kèm checklist chip gọn realtime đồng bộ bảng màu Sky + Slate & nút hiện/ẩn mật khẩu.
+   - **Đăng ký thường xác nhận qua Email OTP 6 chữ số** (HMAC-SHA256, hiệu lực 10 phút, tối đa 5 lần thử, cooldown 60s, không lưu plaintext password/OTP; giao diện OTP tinh gọn không lặp thông báo, ẩn đăng nhập Google khi đang nhập mã).
    - **Quên mật khẩu & Đặt lại mật khẩu qua Email OTP** (phản hồi trung tính chống dò email).
    - Ghi nhận đồng ý xử lý dữ liệu cá nhân theo **Luật Bảo vệ Dữ liệu Cá nhân 91/2025/QH15** (`user_consents`).
 2. **Hồ sơ Cá nhân (Profile Modal):**

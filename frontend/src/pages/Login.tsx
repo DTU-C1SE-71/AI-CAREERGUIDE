@@ -10,13 +10,11 @@ import {
   Eye,
   EyeOff,
   GraduationCap,
-  KeyRound,
   LoaderCircle,
   LockKeyhole,
   Mail,
   RotateCcw,
   School,
-  ShieldCheck,
   User as UserIcon,
 } from "lucide-react"
 import { type FormEvent, useEffect, useMemo, useState } from "react"
@@ -26,6 +24,7 @@ import { useAuth } from "../context/AuthContext"
 import { authPost } from "../services/api"
 import type { UserRole } from "../types/user"
 import {
+  type PasswordRuleResult,
   checkPasswordPolicy,
   getFirstPasswordError,
   isStrongPassword,
@@ -59,40 +58,46 @@ interface MessageApiResponse {
 
 type AuthMode = "login" | "register" | "forgot"
 
+const SHORT_RULE_LABELS: Record<PasswordRuleResult["id"], string> = {
+  minLength: "8+ ký tự",
+  hasUppercase: "Chữ hoa",
+  hasLowercase: "Chữ thường",
+  hasDigit: "Chữ số",
+  hasSpecial: "Ký tự đặc biệt",
+}
+
 function PasswordStrengthChecklist({ password }: { password: string }) {
   const rules = useMemo(() => checkPasswordPolicy(password), [password])
   const passedCount = rules.filter((r) => r.passed).length
   const allPassed = passedCount === rules.length
 
   return (
-    <div className="mt-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3">
+    <div className="mt-2 rounded-2xl border border-slate-200/80 bg-slate-50/70 px-3 py-2.5">
       <div className="mb-2 flex items-center justify-between text-[11px] font-bold">
-        <span className="text-slate-600">Yêu cầu mật khẩu an toàn</span>
-        <span className={allPassed ? "text-emerald-600" : "text-slate-500"}>
-          {passedCount}/{rules.length} tiêu chí
+        <span className="text-slate-600">Độ mạnh mật khẩu</span>
+        <span className={allPassed ? "text-sky-700" : "text-slate-500"}>
+          {passedCount}/{rules.length}
         </span>
       </div>
-      <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+      <div className="flex flex-wrap gap-1.5">
         {rules.map((rule) => (
-          <li
+          <span
             key={rule.id}
-            className={`flex items-center gap-1.5 text-[11px] font-semibold transition-colors ${
-              rule.passed ? "text-emerald-700" : "text-slate-500"
+            className={`inline-flex items-center gap-1 rounded-lg border px-2 py-0.5 text-[11px] font-semibold transition-colors ${
+              rule.passed
+                ? "border-sky-200 bg-sky-50 text-sky-700"
+                : "border-slate-200/80 bg-white text-slate-500"
             }`}
           >
-            <span
-              className={`grid size-4 shrink-0 place-items-center rounded-full ${
-                rule.passed
-                  ? "bg-emerald-100 text-emerald-700"
-                  : "bg-slate-200/80 text-slate-400"
-              }`}
-            >
-              <Check size={10} strokeWidth={3} />
-            </span>
-            <span>{rule.label}</span>
-          </li>
+            <Check
+              size={10}
+              strokeWidth={3}
+              className={rule.passed ? "text-sky-600" : "text-slate-300"}
+            />
+            <span>{SHORT_RULE_LABELS[rule.id]}</span>
+          </span>
         ))}
-      </ul>
+      </div>
     </div>
   )
 }
@@ -193,7 +198,7 @@ function GoogleSignInButton({
         </svg>
       )}
       <span>
-        {googleBusy ? "Đang kết nối Google..." : "Tiếp tục với tài khoản Google"}
+        {googleBusy ? "Đang kết nối Google..." : "Tiếp tục với Google"}
       </span>
     </button>
   )
@@ -304,13 +309,13 @@ export function Login() {
           role: "STUDENT",
         })
         setResendCooldown(res.cooldown_seconds || 60)
-        setSuccessMsg(res.message || "Đã gửi lại mã xác nhận 6 chữ số tới email của bạn.")
+        setSuccessMsg("Đã gửi lại mã mới.")
       } else if (isForgot) {
         const res = await authPost<OTPActionApiResponse>("/identity/forgot-password", {
           email: trimmedEmail,
         })
         setResendCooldown(res.cooldown_seconds || 60)
-        setSuccessMsg(res.message || "Đã gửi lại mã đặt lại mật khẩu tới email của bạn.")
+        setSuccessMsg("Đã gửi lại mã mới.")
       }
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : "Không thể gửi lại mã xác nhận.")
@@ -343,7 +348,6 @@ export function Login() {
           setPassword("")
           setConfirmPassword("")
           setResendCooldown(res.cooldown_seconds || 60)
-          setSuccessMsg(res.message)
         } catch (err: unknown) {
           setErrorMsg(err instanceof Error ? err.message : "Không thể gửi yêu cầu đặt lại mật khẩu.")
         } finally {
@@ -431,7 +435,6 @@ export function Login() {
           setRegisterStep("otp")
           setOtpCode("")
           setResendCooldown(res.cooldown_seconds || 60)
-          setSuccessMsg(res.message)
         } catch (err: unknown) {
           setErrorMsg(err instanceof Error ? err.message : "Không thể gửi mã xác nhận đăng ký.")
         } finally {
@@ -536,19 +539,18 @@ export function Login() {
 
           <div className="my-auto py-8">
             <h1 className="text-3xl font-black leading-tight tracking-tight text-slate-900 xl:text-4xl">
-              Mọi lựa chọn tốt đều bắt đầu bằng câu hỏi đúng.
+              Mọi lựa chọn tốt bắt đầu từ câu hỏi đúng.
             </h1>
 
             <p className="mt-4 text-sm leading-relaxed text-slate-600">
-              Khám phá sở thích cá nhân, đối chiếu năng lực học tập và nhận đề
-              xuất ngành học với tỷ lệ tương thích minh bạch.
+              Khám phá sở thích, đối chiếu học lực và chọn ngành minh bạch.
             </p>
 
             <div className="mt-8 space-y-3 pt-2">
               {[
-                "Trắc nghiệm Holland RIASEC 30 câu hỏi",
-                "Chuẩn hóa Z-Score với 435 ngành học",
-                "Giải thích AI minh bạch kèm lộ trình 4 tuần",
+                "Trắc nghiệm Holland 30 câu",
+                "Chuẩn hóa Z-Score 435 ngành",
+                "Cố vấn AI & lộ trình 4 tuần",
               ].map((point) => (
                 <div
                   key={point}
@@ -564,7 +566,7 @@ export function Login() {
           </div>
 
           <div className="border-t border-slate-200/70 pt-4 text-xs font-medium text-slate-500">
-            Hệ thống tư vấn tuyển sinh & hướng nghiệp thông minh
+            AI CareerGuide · Hướng nghiệp thông minh
           </div>
         </div>
 
@@ -602,7 +604,7 @@ export function Login() {
                       : "text-slate-500 hover:text-slate-800"
                   }`}
                 >
-                  Đăng ký tài khoản
+                  Đăng ký
                 </button>
               </div>
             ) : (
@@ -612,7 +614,7 @@ export function Login() {
                 className="mb-5 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 hover:text-sky-700"
               >
                 <ArrowLeft size={14} />
-                Quay lại đăng nhập
+                Quay lại
               </button>
             )}
 
@@ -622,23 +624,39 @@ export function Login() {
                 {isForgot
                   ? forgotStep === "email"
                     ? "Quên mật khẩu"
-                    : "Đặt lại mật khẩu mới"
+                    : "Đặt mật khẩu mới"
                   : isRegister
                     ? registerStep === "otp"
-                      ? "Xác nhận Email đăng ký"
-                      : "Tạo tài khoản mới"
-                    : "Chào mừng trở lại"}
+                      ? "Xác nhận Email"
+                      : "Tạo tài khoản"
+                    : "Đăng nhập"}
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-slate-500">
                 {isForgot
                   ? forgotStep === "email"
-                    ? "Nhập email đã đăng ký để nhận mã xác nhận 6 chữ số."
-                    : `Nhập mã 6 chữ số đã gửi tới ${email.trim()} và tạo mật khẩu mới.`
+                    ? "Nhập email để nhận mã xác nhận."
+                    : (
+                        <>
+                          Nhập mã 6 số đã gửi tới{" "}
+                          <span className="font-semibold text-slate-700">
+                            {email.trim()}
+                          </span>
+                          .
+                        </>
+                      )
                   : isRegister
                     ? registerStep === "otp"
-                      ? `Nhập mã xác nhận 6 chữ số đã gửi tới ${email.trim()} để kích hoạt tài khoản.`
-                      : "Bắt đầu hành trình định hướng ngành học cá nhân hóa."
-                    : "Đăng nhập để tiếp tục lộ trình và tra cứu đề xuất ngành học."}
+                      ? (
+                          <>
+                            Nhập mã 6 số đã gửi tới{" "}
+                            <span className="font-semibold text-slate-700">
+                              {email.trim()}
+                            </span>
+                            .
+                          </>
+                        )
+                      : "Điền thông tin cơ bản để bắt đầu."
+                    : "Tiếp tục hành trình hướng nghiệp của bạn."}
               </p>
             </div>
 
@@ -660,11 +678,11 @@ export function Login() {
             {successMsg && (
               <div
                 role="status"
-                className="mt-5 flex items-start gap-2.5 rounded-2xl border border-emerald-200 bg-emerald-50/90 p-3.5 text-xs sm:text-sm font-medium text-emerald-800 backdrop-blur-sm"
+                className="mt-4 flex items-start gap-2.5 rounded-2xl border border-sky-200 bg-sky-50/90 px-3.5 py-2.5 text-xs sm:text-sm font-medium text-sky-900 backdrop-blur-sm"
               >
                 <CheckCircle2
-                  size={18}
-                  className="mt-0.5 shrink-0 text-emerald-600"
+                  size={17}
+                  className="mt-0.5 shrink-0 text-sky-600"
                 />
                 <span>{successMsg}</span>
               </div>
@@ -696,7 +714,7 @@ export function Login() {
                           <input
                             required
                             type="text"
-                            placeholder="Nhập họ và tên đầy đủ của bạn"
+                            placeholder="Nguyễn Văn A"
                             value={fullName}
                             onChange={(e) => setFullName(e.target.value)}
                             className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
@@ -729,15 +747,9 @@ export function Login() {
 
                       {/* Grade Level Selection */}
                       <div className="block">
-                        <div className="mb-1.5 flex items-center justify-between">
-                          <span className="text-xs font-bold text-slate-700">
-                            Hiện đang học lớp mấy{" "}
-                            <span className="text-rose-500">*</span>
-                          </span>
-                          <span className="text-xs text-slate-500">
-                            Cá nhân hóa đề xuất AI
-                          </span>
-                        </div>
+                        <span className="mb-1.5 block text-xs font-bold text-slate-700">
+                          Khối lớp <span className="text-rose-500">*</span>
+                        </span>
                         <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                           {(
                             [
@@ -773,7 +785,7 @@ export function Login() {
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <label className="block">
                           <span className="mb-1.5 block text-xs font-bold text-slate-700">
-                            Lớp học (tùy chọn)
+                            Lớp
                           </span>
                           <div className="relative">
                             <GraduationCap
@@ -782,7 +794,7 @@ export function Login() {
                             />
                             <input
                               type="text"
-                              placeholder="Ví dụ: 12A1"
+                              placeholder="12A1 · tùy chọn"
                               value={schoolClass}
                               onChange={(e) => setSchoolClass(e.target.value)}
                               className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
@@ -792,7 +804,7 @@ export function Login() {
 
                         <label className="block">
                           <span className="mb-1.5 block text-xs font-bold text-slate-700">
-                            Trường THPT (tùy chọn)
+                            Trường THPT
                           </span>
                           <div className="relative">
                             <School
@@ -801,7 +813,7 @@ export function Login() {
                             />
                             <input
                               type="text"
-                              placeholder="Ví dụ: THPT Lê Hồng Phong"
+                              placeholder="Tên trường · tùy chọn"
                               value={schoolName}
                               onChange={(e) => setSchoolName(e.target.value)}
                               className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
@@ -815,47 +827,11 @@ export function Login() {
                   {/* Register Step 2 OR Forgot Step 2: 6-digit OTP Input */}
                   {((isRegister && registerStep === "otp") ||
                     (isForgot && forgotStep === "reset")) && (
-                    <div className="space-y-3 rounded-2xl border border-sky-200/80 bg-sky-50/50 p-4">
-                      <div className="flex items-center gap-2 text-xs font-bold text-sky-800">
-                        <ShieldCheck size={16} className="shrink-0 text-sky-600" />
-                        <span>Mã xác nhận 6 chữ số đã gửi tới {email.trim()}</span>
-                      </div>
-                      <label className="block">
-                        <span className="mb-1.5 block text-xs font-bold text-slate-700">
-                          Nhập mã OTP <span className="text-rose-500">*</span>
+                    <div className="space-y-3 rounded-2xl border border-slate-200/90 bg-slate-50/70 p-4">
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-bold text-slate-700">
+                          Mã OTP (6 chữ số) <span className="text-rose-500">*</span>
                         </span>
-                        <div className="relative">
-                          <KeyRound
-                            size={18}
-                            className="absolute left-4 top-3.5 text-slate-400"
-                          />
-                          <input
-                            required
-                            type="text"
-                            inputMode="numeric"
-                            autoComplete="one-time-code"
-                            maxLength={6}
-                            placeholder="000000"
-                            value={otpCode}
-                            onChange={(e) =>
-                              setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
-                            }
-                            className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-center text-lg font-black tracking-[0.35em] text-slate-900 outline-none transition-all placeholder:tracking-[0.25em] placeholder:text-slate-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
-                          />
-                        </div>
-                      </label>
-                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-                        <button
-                          type="button"
-                          onClick={handleResendOtp}
-                          disabled={resendCooldown > 0 || loading}
-                          className="inline-flex items-center gap-1.5 font-bold text-sky-700 transition hover:text-sky-800 disabled:cursor-not-allowed disabled:text-slate-400"
-                        >
-                          <RotateCcw size={13} />
-                          {resendCooldown > 0
-                            ? `Gửi lại mã sau ${resendCooldown}s`
-                            : "Gửi lại mã xác nhận"}
-                        </button>
                         <button
                           type="button"
                           onClick={() => {
@@ -864,10 +840,41 @@ export function Login() {
                             setErrorMsg(null)
                             setSuccessMsg(null)
                           }}
-                          className="font-semibold text-slate-500 transition hover:text-slate-800"
+                          className="font-semibold text-sky-600 transition hover:text-sky-700 hover:underline"
                         >
-                          Đổi email / Quay lại
+                          Đổi email
                         </button>
+                      </div>
+                      <input
+                        required
+                        autoFocus
+                        spellCheck={false}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="one-time-code"
+                        maxLength={6}
+                        placeholder="••••••"
+                        value={otpCode}
+                        onChange={(e) =>
+                          setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                        }
+                        className="h-13 w-full rounded-2xl border border-slate-200 bg-white px-4 text-center font-mono text-2xl font-black tracking-[0.45em] text-slate-900 outline-none transition-all placeholder:tracking-[0.35em] placeholder:text-slate-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                      />
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={handleResendOtp}
+                          disabled={resendCooldown > 0 || loading}
+                          className="inline-flex items-center gap-1.5 font-bold text-sky-600 transition hover:text-sky-700 disabled:cursor-not-allowed disabled:text-slate-400"
+                        >
+                          <RotateCcw size={13} />
+                          {resendCooldown > 0
+                            ? `Gửi lại sau ${resendCooldown}s`
+                            : "Gửi lại mã"}
+                        </button>
+                        <span className="text-[11px] font-medium text-slate-400">
+                          Kiểm tra cả mục Spam
+                        </span>
                       </div>
                     </div>
                   )}
@@ -878,7 +885,7 @@ export function Login() {
                     (isForgot && forgotStep === "email")) && (
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-bold text-slate-700">
-                        Địa chỉ Email <span className="text-rose-500">*</span>
+                        Email <span className="text-rose-500">*</span>
                       </span>
                       <div className="relative">
                         <Mail
@@ -956,7 +963,7 @@ export function Login() {
                     (isForgot && forgotStep === "reset")) && (
                     <label className="block">
                       <span className="mb-1.5 block text-xs font-bold text-slate-700">
-                        Xác nhận mật khẩu <span className="text-rose-500">*</span>
+                        Nhập lại mật khẩu <span className="text-rose-500">*</span>
                       </span>
                       <div className="relative">
                         <LockKeyhole
@@ -966,7 +973,7 @@ export function Login() {
                         <input
                           required
                           type={showConfirmPassword ? "text" : "password"}
-                          placeholder="Nhập lại mật khẩu giống phía trên"
+                          placeholder="Nhập lại mật khẩu"
                           value={confirmPassword}
                           onChange={(e) => setConfirmPassword(e.target.value)}
                           className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-11 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
@@ -1010,23 +1017,23 @@ export function Login() {
                     ? "Đang xử lý..."
                     : isForgot
                       ? forgotStep === "email"
-                        ? "Gửi mã xác nhận đặt lại mật khẩu"
-                        : "Xác nhận & Đặt lại mật khẩu"
+                        ? "Gửi mã xác nhận"
+                        : "Cập nhật mật khẩu"
                       : isRegister
                         ? registerStep === "form"
-                          ? "Gửi mã xác nhận qua Email"
+                          ? "Nhận mã xác nhận"
                           : "Xác nhận & Tạo tài khoản"
-                        : "Đăng nhập ngay"}
+                        : "Đăng nhập"}
                 </Button>
               </div>
             </form>
 
-            {!isForgot && (
+            {!isForgot && !(isRegister && registerStep === "otp") && (
               <>
                 {/* Quick divider */}
-                <div className="my-6 flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                <div className="my-5 flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
                   <span className="h-px flex-1 bg-slate-200/90" />
-                  <span>Hoặc tiếp tục với</span>
+                  <span>Hoặc</span>
                   <span className="h-px flex-1 bg-slate-200/90" />
                 </div>
 
