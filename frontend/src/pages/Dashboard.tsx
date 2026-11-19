@@ -1,5 +1,6 @@
 import { completeTranscriptBlocks } from "../utils/assessmentEvidence"
 import {
+  ArrowLeft,
   ArrowRight,
   CheckCircle2,
   ClipboardCheck,
@@ -12,6 +13,7 @@ import {
   RotateCcw,
   Sparkles,
   Trash2,
+  Zap,
 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { Link, useNavigate } from "react-router"
@@ -162,6 +164,8 @@ export function Dashboard() {
   const [evaluateError, setEvaluateError] = useState<string | null>(null)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false)
+  const [recommendationMode, setRecommendationMode] = useState<"algorithm" | "ai">("algorithm")
+  const [aiAnalysisTriggered, setAiAnalysisTriggered] = useState(false)
   const [skillAnalysis, setSkillAnalysis] =
     useState<StudentSkillAnalysis | null>(null)
   const [skillLoading, setSkillLoading] = useState(false)
@@ -239,17 +243,23 @@ export function Dashboard() {
     reloadNonce,
   ])
 
-  // Agent "Phân tích kỹ năng": ưu/nhược điểm học tập + kỹ năng cần bổ sung
-  // (cache theo hồ sơ năng lực ở backend nên chỉ tốn AI lần đầu).
+  // Reset kết quả AI khi chuyển sang lần làm khác hoặc hồ sơ thay đổi.
   useEffect(() => {
-    if (!hasCompletedAssessment) {
-      setSkillAnalysis(null)
-      setSkillLoading(false)
+    setSkillAnalysis(null)
+    setSkillLoading(false)
+  }, [effectiveAssessment, activeHistoryId])
+
+  // Agent "Phân tích kỹ năng": chỉ gọi AI khi người dùng chủ động mở chế độ "Đề xuất có AI"
+  // để chế độ "Thuật toán đề xuất" hiển thị tức thì, không tốn thời gian chờ AI.
+  useEffect(() => {
+    if (!hasCompletedAssessment || recommendationMode !== "ai" || !aiAnalysisTriggered) {
+      return
+    }
+    if (skillAnalysis) {
       return
     }
 
     let mounted = true
-    setSkillAnalysis(null)
     const skillPayload = buildEvaluateProfilePayload(effectiveAssessment)
 
     setSkillLoading(true)
@@ -274,9 +284,23 @@ export function Dashboard() {
     }
   }, [
     hasCompletedAssessment,
+    recommendationMode,
+    aiAnalysisTriggered,
+    skillAnalysis,
     effectiveAssessment,
     data?.majors,
   ])
+
+  const handleOpenAiMode = () => {
+    setRecommendationMode("ai")
+    setAiAnalysisTriggered(true)
+    reportTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
+  const handleOpenAlgorithmMode = () => {
+    setRecommendationMode("algorithm")
+    reportTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
 
   const handleUpdateAspiration = async (nextAspiration: CareerAspirationInput) => {
     if (activeAttemptIndex > 0) throw new Error("Không sửa bản xem lại")
@@ -572,6 +596,101 @@ export function Dashboard() {
               </div>
             )}
 
+            {/* Bộ chuyển chế độ: Thuật toán đề xuất (tức thì) vs Đề xuất ngành có AI (phân tích sâu) */}
+            <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-white/80 bg-white/60 p-2 shadow-[0_10px_35px_rgba(14,165,233,0.08)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-2.5">
+              <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto">
+                <button
+                  type="button"
+                  onClick={handleOpenAlgorithmMode}
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition sm:rounded-2xl sm:text-sm ${
+                    recommendationMode === "algorithm"
+                      ? "bg-sky-600 text-white shadow-md shadow-sky-500/20"
+                      : "text-slate-600 hover:bg-white hover:text-sky-700"
+                  }`}
+                >
+                  <Zap size={15} className="shrink-0" />
+                  <span>Thuật toán đề xuất</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      recommendationMode === "algorithm"
+                        ? "bg-white/20 text-white"
+                        : "bg-sky-100 text-sky-700"
+                    }`}
+                  >
+                    Tức thì · Không AI
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleOpenAiMode}
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition sm:rounded-2xl sm:text-sm ${
+                    recommendationMode === "ai"
+                      ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
+                      : "text-slate-600 hover:bg-white hover:text-indigo-700"
+                  }`}
+                >
+                  <Sparkles size={15} className="shrink-0" />
+                  <span>Đề xuất ngành có AI</span>
+                  <span
+                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                      recommendationMode === "ai"
+                        ? "bg-white/20 text-white"
+                        : "bg-indigo-100 text-indigo-700"
+                    }`}
+                  >
+                    Phân tích sâu
+                  </span>
+                </button>
+              </div>
+
+              <p className="px-2 text-[11px] font-medium text-slate-500 sm:text-right sm:text-xs">
+                {recommendationMode === "algorithm"
+                  ? "Tính toán 100% bằng thuật toán 3 trụ cột (RIASEC · Học lực · Tự khai), hiển thị ngay lập tức."
+                  : "Kết hợp thuật toán với AI đối chiếu nguyện vọng & phân tích điểm mạnh/yếu chuyên sâu."}
+              </p>
+            </div>
+
+            {recommendationMode === "ai" && (
+              <div className="mb-6 space-y-6">
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-indigo-200/80 bg-indigo-50/70 px-4 py-3 text-xs text-indigo-900 sm:rounded-3xl sm:px-5 sm:py-3.5 sm:text-sm">
+                  <div className="flex items-center gap-2.5">
+                    <span className="grid size-8 shrink-0 place-items-center rounded-xl bg-indigo-600 text-white">
+                      <Sparkles size={16} />
+                    </span>
+                    <div>
+                      <p className="font-extrabold text-indigo-950">
+                        Chế độ Đề xuất ngành có AI phân tích chuyên sâu
+                      </p>
+                      <p className="text-xs font-medium text-indigo-700">
+                        AI đối chiếu nguyện vọng nghề nghiệp, đánh giá điểm mạnh/yếu kỹ năng dựa trên kết quả thuật toán.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleOpenAlgorithmMode}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-white px-3.5 py-2 text-xs font-extrabold text-indigo-700 transition hover:bg-indigo-100"
+                  >
+                    <ArrowLeft size={14} />
+                    Quay lại Thuật toán
+                  </button>
+                </div>
+
+                {/* AI Đối chiếu nguyện vọng */}
+                <AspirationAlignmentCard
+                  analysis={data?.aspirationAnalysis ?? null}
+                  currentAspiration={effectiveAssessment.aspiration}
+                  onUpdateAspiration={handleUpdateAspiration}
+                  isAnalyzing={isAnalyzingAspiration}
+                  readOnly={activeAttemptIndex > 0}
+                />
+
+                {/* AI Phân tích kỹ năng & điểm mạnh/yếu (chỉ gọi khi mở chế độ AI) */}
+                <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
+              </div>
+            )}
+
             {/* 1. Hồ sơ RIASEC & Phễu Ngành đề xuất 2 tầng */}
             <div className="mb-8 grid min-w-0 gap-6 xl:grid-cols-12 xl:gap-8">
               {/* Left Column: Single Unified Profile Card */}
@@ -663,19 +782,33 @@ export function Dashboard() {
               </div>
             </div>
 
-            {/* 2. AI Đối chiếu nguyện vọng */}
-            <AspirationAlignmentCard
-              analysis={data?.aspirationAnalysis ?? null}
-              currentAspiration={effectiveAssessment.aspiration}
-              onUpdateAspiration={handleUpdateAspiration}
-              isAnalyzing={isAnalyzingAspiration}
-              readOnly={activeAttemptIndex > 0}
-            />
-
-            {/* 3. Phân tích kỹ năng của bạn */}
-            <div className="mt-6 mb-6">
-              <SkillAnalysisCard data={skillAnalysis} loading={skillLoading} />
-            </div>
+            {/* CTA mở chế độ Đề xuất ngành có AI khi đang ở chế độ Thuật toán */}
+            {recommendationMode === "algorithm" && (
+              <div className="mb-6 rounded-2xl border border-indigo-200/80 bg-gradient-to-r from-indigo-50/90 via-sky-50/80 to-white/90 p-5 shadow-[0_12px_35px_rgba(79,70,229,0.08)] sm:rounded-3xl sm:p-6">
+                <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0 space-y-1.5">
+                    <div className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-white/80 px-2.5 py-0.5 text-[11px] font-extrabold text-indigo-700">
+                      <Sparkles size={12} />
+                      Tùy chọn nâng cao · Phân tích AI
+                    </div>
+                    <h3 className="text-base font-extrabold text-slate-900 sm:text-lg">
+                      Muốn AI phân tích chuyên sâu hơn để tăng độ chính xác?
+                    </h3>
+                    <p className="max-w-2xl text-xs leading-relaxed text-slate-600 sm:text-sm">
+                      Kết quả phía trên được tính tức thời 100% bằng thuật toán (không mất thời gian chờ AI). Nếu bạn muốn AI đối chiếu sâu với nguyện vọng cá nhân và phân tích điểm mạnh/yếu kỹ năng, hãy chuyển sang chế độ <strong>Đề xuất ngành có AI</strong>.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    icon={Sparkles}
+                    onClick={handleOpenAiMode}
+                    className="shrink-0 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-extrabold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 sm:text-sm"
+                  >
+                    Mở đề xuất ngành có AI
+                  </Button>
+                </div>
+              </div>
+            )}
           </>
         )}
 
