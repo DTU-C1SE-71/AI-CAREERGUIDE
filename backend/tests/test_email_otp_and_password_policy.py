@@ -314,3 +314,37 @@ async def test_email_service_fails_closed_in_production_without_provider(monkeyp
     with pytest.raises(HTTPException) as exc:
         await send_otp_email("user@example.com", "123456", "REGISTER")
     assert exc.value.status_code == 503
+
+
+@pytest.mark.asyncio
+async def test_email_service_falls_back_from_smtp_to_resend_and_surfaces_resend_sandbox_error(monkeypatch):
+    from fastapi import HTTPException
+    from app.core import email_service
+
+    monkeypatch.setattr(settings, "ENVIRONMENT", "production")
+    monkeypatch.setattr(settings, "SMTP_HOST", "smtp.gmail.com")
+    monkeypatch.setattr(settings, "SMTP_USER", "sender@gmail.com")
+    monkeypatch.setattr(settings, "SMTP_PASSWORD", "app-password")
+    monkeypatch.setattr(settings, "RESEND_API_KEY", "re_test_key")
+
+    def failing_smtp(*args, **kwargs):
+        raise RuntimeError("SMTP blocked")
+
+    async def ok_resend(*args, **kwargs):
+        return None
+
+    monkeypatch.setattr(email_service, "_send_via_smtp_sync", failing_smtp)
+    monkeypatch.setattr(email_service, "_send_via_resend", ok_resend)
+    channel = await email_service.send_otp_email("user@example.com", "123456", "REGISTER")
+    assert channel == "resend"
+
+    # When only Resend is configured and Resend rejects unverified domain / testing restriction:
+    monkeypatch.setattr(settings, "SMTP_HOST", "")
+    async def sandbox_resend(*args, **kwargs):
+        raise RuntimeError("Resend HTTP 403: You can only send testing emails to your own email address.")
+
+    monkeypatch.setattr(email_service, "_send_via_resend", sandbox_resend)
+    with pytest.raises(HTTPException) as exc:
+        await email_service.send_otp_email("other@example.com", "123456", "REGISTER")
+    assert exc.value.status_code == 503
+    assert "Resend" in exc.value.detail

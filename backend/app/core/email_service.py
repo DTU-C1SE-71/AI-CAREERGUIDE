@@ -1,9 +1,11 @@
 """Email delivery service for registration and password reset OTP codes.
 
 Supports:
-1. Resend HTTP API (recommended on Render Free where outbound SMTP ports may be blocked).
-2. Standard SMTP with STARTTLS (port 587) or SSL (port 465) via asyncio.to_thread.
-3. Development console fallback when ENVIRONMENT is not production.
+1. Standard SMTP with STARTTLS (port 587) or SSL (port 465) via asyncio.to_thread
+   (e.g. Gmail App Password — sends to any recipient email without custom domain).
+2. Resend HTTP API (great when a verified custom domain is configured).
+3. Automatic fallback between configured providers + clear diagnostics.
+4. Development console fallback when ENVIRONMENT is not production.
 """
 from __future__ import annotations
 
@@ -21,6 +23,15 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 OTPPurpose = Literal["REGISTER", "RESET_PASSWORD"]
+
+_CONSUMER_MAIL_DOMAINS = (
+    "@gmail.com",
+    "@googlemail.com",
+    "@yahoo.com",
+    "@outlook.com",
+    "@hotmail.com",
+    "@icloud.com",
+)
 
 
 def _build_otp_content(otp_code: str, purpose: OTPPurpose, expire_minutes: int) -> tuple[str, str, str]:
@@ -64,6 +75,23 @@ def _build_otp_content(otp_code: str, purpose: OTPPurpose, expire_minutes: int) 
     return subject, plain_text, html
 
 
+def _has_smtp_config() -> bool:
+    return bool(
+        settings.SMTP_HOST.strip()
+        and settings.SMTP_USER.strip()
+        and settings.SMTP_PASSWORD.strip()
+    )
+
+
+def _has_resend_config() -> bool:
+    return bool(settings.RESEND_API_KEY.strip())
+
+
+def _is_consumer_sender(email: str) -> bool:
+    lowered = email.strip().lower()
+    return any(lowered.endswith(domain) for domain in _CONSUMER_MAIL_DOMAINS)
+
+
 def _send_via_smtp_sync(to_email: str, subject: str, plain_text: str, html: str) -> None:
     sender_email = (settings.SMTP_FROM_EMAIL or settings.SMTP_USER).strip()
     sender_header = f"{settings.SMTP_FROM_NAME} <{sender_email}>" if settings.SMTP_FROM_NAME else sender_email
@@ -90,14 +118,17 @@ def _send_via_smtp_sync(to_email: str, subject: str, plain_text: str, html: str)
 
 
 async def _send_via_resend(to_email: str, subject: str, plain_text: str, html: str) -> None:
-    sender_email = (settings.SMTP_FROM_EMAIL or "onboarding@resend.dev").strip()
+    raw_from = (settings.SMTP_FROM_EMAIL or "").strip()
+    # Resend never allows sending from unverified consumer domains like @gmail.com;
+    # fall back to onboarding@resend.dev if user left a Gmail address in SMTP_FROM_EMAIL.
+    sender_email = "onboarding@resend.dev" if (not raw_from or _is_consumer_sender(raw_from)) else raw_from
     sender_header = f"{settings.SMTP_FROM_NAME} <{sender_email}>" if settings.SMTP_FROM_NAME else sender_email
 
     async with httpx.AsyncClient(timeout=20.0) as client:
         resp = await client.post(
             "https://api.resend.com/emails",
             headers={
-                "Authorization": f"Bearer {settings.RESEND_API_KEY}",
+                "Authorization": f"Bearer {settings.RESEND_API_KEY.strip()}",
                 "Content-Type": "application/json",
             },
             json={
@@ -109,40 +140,63 @@ async def _send_via_resend(to_email: str, subject: str, plain_text: str, html: s
             },
         )
         if resp.status_code >= 400:
-            raise RuntimeError(f"Resend API failed with HTTP {resp.status_code}")
+            detail = ""
+            try:
+                body = resp.json()
+                detail = str(body.get("message") or body.get("name") or "")[:200]
+            except Exception:
+                detail = resp.text[:200]
+            raise RuntimeError(f"Resend HTTP {resp.status_code}: {detail}")
 
 
 async def send_otp_email(to_email: str, otp_code: str, purpose: OTPPurpose) -> str:
-    """Send a 6-digit OTP email. Returns delivery channel ('resend' | 'smtp' | 'dev_log')."""
+    """Send a 6-digit OTP email. Returns delivery channel ('smtp' | 'resend' | 'dev_log')."""
     subject, plain_text, html = _build_otp_content(otp_code, purpose, settings.OTP_EXPIRE_MINUTES)
+    has_smtp = _has_smtp_config()
+    has_resend = _has_resend_config()
 
-    if settings.RESEND_API_KEY.strip():
-        try:
-            await _send_via_resend(to_email, subject, plain_text, html)
-            return "resend"
-        except Exception as exc:
-            logger.error("Failed to deliver OTP via Resend (%s)", type(exc).__name__)
+    # Prefer SMTP first when SMTP is configured (works for any recipient email via Gmail App Password);
+    # otherwise try Resend first, and automatically fall back between providers if both are set.
+    provider_order: list[str] = []
+    if has_smtp:
+        provider_order.append("smtp")
+    if has_resend:
+        provider_order.append("resend")
+
+    last_error_reason = ""
+    for provider in provider_order:
+        if provider == "smtp":
+            try:
+                await asyncio.to_thread(_send_via_smtp_sync, to_email, subject, plain_text, html)
+                return "smtp"
+            except Exception as exc:
+                last_error_reason = f"SMTP ({type(exc).__name__}): {str(exc)[:180]}"
+                logger.error("Failed to deliver OTP via %s", last_error_reason)
+        elif provider == "resend":
+            try:
+                await _send_via_resend(to_email, subject, plain_text, html)
+                return "resend"
+            except Exception as exc:
+                last_error_reason = str(exc)[:220]
+                logger.error("Failed to deliver OTP via Resend: %s", last_error_reason)
+
+    if provider_order:
+        if "only send testing emails" in last_error_reason.lower() or "domain is not verified" in last_error_reason.lower():
             raise HTTPException(
                 503,
-                "Không thể gửi email xác nhận lúc này. Vui lòng thử lại sau ít phút.",
-            ) from None
-
-    if settings.SMTP_HOST.strip() and settings.SMTP_USER.strip() and settings.SMTP_PASSWORD.strip():
-        try:
-            await asyncio.to_thread(_send_via_smtp_sync, to_email, subject, plain_text, html)
-            return "smtp"
-        except Exception as exc:
-            logger.error("Failed to deliver OTP via SMTP (%s)", type(exc).__name__)
-            raise HTTPException(
-                503,
-                "Không thể gửi email xác nhận qua máy chủ SMTP. Vui lòng kiểm tra cấu hình hoặc thử lại sau.",
-            ) from None
-
-    if settings.ENVIRONMENT.lower() in {"production", "prod"}:
-        logger.error("Email provider not configured in production (set RESEND_API_KEY or SMTP_*).")
+                "Tài khoản Resend ở chế độ dùng thử chỉ gửi được tới email chủ tài khoản Resend (chưa xác minh tên miền). "
+                "Quản trị viên cần cấu hình Gmail SMTP hoặc xác minh tên miền trên Resend.",
+            )
         raise HTTPException(
             503,
-            "Dịch vụ gửi email xác nhận chưa được cấu hình trên máy chủ. Vui lòng cấu hình RESEND_API_KEY hoặc SMTP.",
+            "Không thể gửi email xác nhận lúc này. Vui lòng thử lại sau ít phút.",
+        )
+
+    if settings.ENVIRONMENT.lower() in {"production", "prod"}:
+        logger.error("Email provider not configured in production (set SMTP_* or RESEND_API_KEY).")
+        raise HTTPException(
+            503,
+            "Dịch vụ gửi email xác nhận chưa được cấu hình trên máy chủ. Vui lòng cấu hình SMTP hoặc RESEND_API_KEY.",
         )
 
     logger.warning("[DEV OTP] purpose=%s to=%s code=%s", purpose, to_email, otp_code)
