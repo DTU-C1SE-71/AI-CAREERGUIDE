@@ -26,6 +26,10 @@ services:
         value: https://ai-careerguide-ten.vercel.app
       - key: DATABASE_URL
         sync: false
+      - key: MAIL_WEBHOOK_URL
+        sync: false
+      - key: MAIL_WEBHOOK_SECRET
+        sync: false
       - key: BREVO_API_KEY
         sync: false
       - key: RESEND_API_KEY

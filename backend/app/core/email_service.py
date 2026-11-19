@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import smtplib
 from email.message import EmailMessage
 from typing import Literal
@@ -75,7 +76,7 @@ def _build_otp_content(otp_code: str, purpose: OTPPurpose, expire_minutes: int) 
 
 
 def _has_webhook_config() -> bool:
-    return bool(settings.MAIL_WEBHOOK_URL.strip())
+    return bool("".join(settings.MAIL_WEBHOOK_URL.split()))
 
 
 def _has_brevo_config() -> bool:
@@ -99,13 +100,25 @@ def _is_consumer_sender(email: str) -> bool:
     return any(lowered.endswith(domain) for domain in _CONSUMER_MAIL_DOMAINS)
 
 
+def _extract_html_summary(raw_text: str) -> str:
+    title_match = re.search(r"<title[^>]*>(.*?)</title>", raw_text, re.IGNORECASE | re.DOTALL)
+    if title_match:
+        title = re.sub(r"\s+", " ", title_match.group(1)).strip()
+        if title:
+            return title[:160]
+    stripped = re.sub(r"<[^>]+>", " ", raw_text)
+    return re.sub(r"\s+", " ", stripped).strip()[:160]
+
+
 async def _send_via_webhook(to_email: str, subject: str, plain_text: str, html: str) -> None:
     """Send email via HTTPS webhook (e.g. Google Apps Script MailApp Web App)."""
-    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+    webhook_url = "".join(settings.MAIL_WEBHOOK_URL.split())
+    secret = settings.MAIL_WEBHOOK_SECRET.strip()
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
         resp = await client.post(
-            settings.MAIL_WEBHOOK_URL.strip(),
+            webhook_url,
             json={
-                "secret": settings.MAIL_WEBHOOK_SECRET.strip(),
+                "secret": secret,
                 "to": to_email,
                 "subject": subject,
                 "text": plain_text,
@@ -113,14 +126,54 @@ async def _send_via_webhook(to_email: str, subject: str, plain_text: str, html: 
                 "fromName": (settings.SMTP_FROM_NAME or "AI CareerGuide").strip(),
             },
         )
+        if resp.status_code in (301, 302, 303, 307, 308):
+            location = resp.headers.get("location", "")
+            loc_lower = location.lower()
+            if "accounts.google.com" in loc_lower or "servicelogin" in loc_lower:
+                raise RuntimeError(
+                    "Google Apps Script đang để quyền 'Chỉ mình tôi'. Hãy vào script.google.com -> Triển khai -> Quản lý nội dung triển khai -> Sửa -> chọn 'Ai có quyền truy cập: Bất kỳ ai (Anyone)' rồi bấm Triển khai."
+                )
+            if not location:
+                raise RuntimeError(f"Webhook HTTP {resp.status_code} thiếu Location chuyển hướng.")
+            resp = await client.get(location, follow_redirects=True)
+
+        raw_text = resp.text or ""
+        text_lower = raw_text.lower()
+        final_url_lower = str(resp.url).lower()
+
+        if "accounts.google.com" in final_url_lower or "sign in - google accounts" in text_lower or resp.status_code in (401, 403):
+            raise RuntimeError(
+                "Google Apps Script chưa mở quyền 'Bất kỳ ai (Anyone)' hoặc chưa hoàn tất Ủy quyền truy cập (Advanced -> Go to ... unsafe -> Allow)."
+            )
+        if "script function not found: dopost" in text_lower:
+            raise RuntimeError(
+                "Google Apps Script chưa lưu hàm doPost. Hãy bấm Ctrl+S (Lưu) trên script.google.com rồi tạo Triển khai mới."
+            )
+        if "authorization is required" in text_lower or "you do not have permission" in text_lower:
+            raise RuntimeError(
+                "Google Apps Script chưa được cấp quyền gửi Gmail. Hãy vào script.google.com bấm Chạy (Run) hoặc Triển khai mới -> Ủy quyền truy cập -> Advanced -> Go to ... (unsafe) -> Allow."
+            )
         if resp.status_code >= 400:
-            raise RuntimeError(f"Webhook HTTP {resp.status_code}: {resp.text[:200]}")
+            clean_err = _extract_html_summary(raw_text) or f"HTTP {resp.status_code}"
+            raise RuntimeError(f"Webhook HTTP {resp.status_code}: {clean_err}")
+
         try:
             body = resp.json()
-            if isinstance(body, dict) and body.get("ok") is False:
-                raise RuntimeError(f"Webhook rejected: {str(body.get('error') or 'unknown')[:200]}")
-        except ValueError:
-            pass
+        except ValueError as exc:
+            if "<html" in text_lower or "<!doctype html" in text_lower:
+                title = _extract_html_summary(raw_text) or "HTML"
+                raise RuntimeError(
+                    f"Google Apps Script trả về trang HTML thay vì JSON ({title}). Hãy kiểm tra quyền 'Bất kỳ ai' và URL kết thúc bằng /exec."
+                ) from exc
+            return
+
+        if isinstance(body, dict) and body.get("ok") is False:
+            err_detail = str(body.get("error") or "unknown")[:200]
+            if "unauthorized" in err_detail.lower():
+                raise RuntimeError(
+                    "MAIL_WEBHOOK_SECRET trên Render không khớp với biến SECRET trong Google Apps Script."
+                )
+            raise RuntimeError(f"Google Apps Script báo lỗi: {err_detail}")
 
 
 async def _send_via_brevo(to_email: str, subject: str, plain_text: str, html: str) -> None:
@@ -232,7 +285,7 @@ async def send_otp_email(to_email: str, otp_code: str, purpose: OTPPurpose) -> s
                 await _send_via_webhook(to_email, subject, plain_text, html)
                 return "webhook"
             except Exception as exc:
-                reason = f"Webhook: {str(exc)[:200]}"
+                reason = f"Webhook: {str(exc)[:260]}"
                 errors.append(reason)
                 logger.error("Failed to deliver OTP via %s", reason)
         elif provider == "brevo":
@@ -274,9 +327,10 @@ async def send_otp_email(to_email: str, otp_code: str, purpose: OTPPurpose) -> s
                 "Máy chủ Render gói Free chặn kết nối cổng SMTP (587/465). "
                 "Vui lòng thêm biến BREVO_API_KEY (gửi qua HTTPS 443, miễn phí 300 email/ngày) trên Render.",
             )
+        primary_err = errors[0] if errors else "Không rõ nguyên nhân"
         raise HTTPException(
             503,
-            "Không thể gửi email xác nhận lúc này. Vui lòng thử lại sau ít phút.",
+            f"Không thể gửi email xác nhận lúc này ({primary_err}).",
         )
 
     if settings.ENVIRONMENT.lower() in {"production", "prod"}:
