@@ -100,7 +100,45 @@ def forbidden_request(message: str) -> bool:
     text = fold(message)
     # Controls refusal UX only. Security does not depend on detecting these strings:
     # rendering cannot read secrets, execute tools or display user/model instructions.
-    return bool(re.search(r"(reveal|print|show|ignore|disclose|hien|tiet lo|in ra|bo qua|dua|cho xem).{0,65}(system prompt|developer|api.?key|khoa api|mat khau|secret|huong dan he thong|cau hinh noi bo|ho so.{0,20}(nguoi khac|ban khac))", text))
+    # 1. Explicit reveal/bypass verbs targeting prompts, secrets, internal architecture or other users.
+    if re.search(
+        r"(reveal|print|show|dump|leak|expose|list|ignore|bypass|override|disclose|extract|"
+        r"hien|tiet lo|in ra|bo qua|quen di|dua|cho xem|xem|lay|liet ke|cung cap|mo ta|giai thich)"
+        r".{0,70}"
+        r"(system prompt|developer prompt|developer message|developer instruction|"
+        r"api.?key|khoa api|khoa bao mat|secret.?key|access.?token|refresh.?token|jwt|bearer token|"
+        r"mat khau (?:admin|he thong|db|database|csdl|server|nguoi khac|user)|"
+        r"huong dan he thong|quy tac noi bo|cau hinh noi bo|cau hinh server|bien moi truong|\b\.env\b|"
+        r"database schema|db schema|schema csdl|cau truc (?:co so du lieu|csdl|database|db)|"
+        r"ten bang|cac bang|danh sach bang|ten truong|ten cot|"
+        r"api endpoint|cac endpoint|danh sach endpoint|route backend|"
+        r"source code|ma nguon|code backend|code frontend|"
+        r"lo hong (?:he thong|bao mat)|co che (?:kiem duyet|bao mat)|"
+        r"(?:ho so|du lieu|lich su|thong tin|tai khoan|diem so).{0,35}(?:nguoi khac|nguoi dung khac|ban khac|user khac|hoc sinh khac|tai khoan khac|tat ca nguoi dung))",
+        text,
+    ):
+        return True
+    # 2. Direct prompt-injection / rule-override / fake-admin escalation.
+    if re.search(
+        r"(bo qua (?:moi |tat ca )?(?:quy tac|gioi han|chi thi|lenh)|"
+        r"ignore (?:all |any )?(?:previous |prior )?(?:rules|instructions|prompts|boundaries)|"
+        r"prompt injection|jailbreak|"
+        r"(?:toi la|minh la|gia danh|voi tu cach|i am|act as).{0,30}(?:admin|quan tri vien|developer|dev|chu he thong).{0,45}"
+        r"(?:cho xem|cung cap|tiet lo|lay|bo qua|truy cap|in ra|show|reveal|give|dump))",
+        text,
+    ):
+        return True
+    # 3. Direct questions about this system's internal DB/code/secrets/vulnerabilities even without an explicit verb.
+    if re.search(
+        r"\b(system prompt|developer prompt|database schema|db schema|cau truc co so du lieu|cau truc csdl|"
+        r"ten bang trong (?:db|csdl|database|he thong)|api endpoint(?:s)? cua he thong|"
+        r"ma nguon cua he thong|source code cua he thong|cau hinh server|"
+        r"lo hong (?:bao mat|he thong)|co che kiem duyet|co che bao mat phia sau|"
+        r"khoa api|api key|secret key|jwt secret)\b",
+        text,
+    ):
+        return True
+    return False
 
 
 def in_scope(message: str, codes: list[str], history=None) -> bool:

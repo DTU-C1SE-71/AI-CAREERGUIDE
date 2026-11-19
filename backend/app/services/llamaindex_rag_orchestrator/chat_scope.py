@@ -77,6 +77,23 @@ _FOLLOWUP = re.compile(
     r"why|more|tell me more|how long)(?: a| nhe| duoc khong)?[?!. ]*"
 )
 _GREETING = re.compile(r"(?:xin chao|chao(?: ban)?|hello|hi|alo|cam on|thank you)[!?. ]*")
+_SYSTEM_HELP = re.compile(
+    r"\b(cach (?:su dung|dung|xai|thao tac|lam bai|xem|tra cuu|xuat|cap nhat|doi|dang nhap|dang ky)|"
+    r"huong dan (?:su dung|dung|thao tac|lam bai|dang nhap|dang ky)|"
+    r"(?:su dung|dung|xai) (?:he thong|web|trang web|ung dung|app|ai careerguide|careerguide)(?: nay)? (?:nhu the nao|the nao|ra sao|sao)|"
+    r"(?:he thong|web|trang web|ung dung|ai careerguide) nay (?:dung|lam|hoat dong|co nhung tinh nang|co chuc nang)|"
+    r"tinh nang (?:cua he thong|tren giao dien|cua web|chinh)|"
+    r"(?:nam |o )dau tren (?:giao dien|menu|web|he thong)|"
+    r"(?:bam|nhan|chon|vao) (?:nut|muc|tab|menu) nao|"
+    r"de xuat nganh co ai|thuat toan de xuat|kham pha nganh|danh muc nganh|435 nganh|"
+    r"lo trinh 4 tuan|xuat pdf|tai pdf|xem lai cau hoi|xem lich su|lich su lam bai|"
+    r"cap nhat (?:ho so|khoi lop|gioi tinh|diem)|doi (?:khoi lop|gioi tinh)|"
+    r"dang nhap google|khong dang nhap duoc|quen mat khau|tao tai khoan|how to use)\b"
+)
+
+
+def _has_system_help_topic(message: str) -> bool:
+    return bool(_SYSTEM_HELP.search(_fold(message)))
 
 
 def _has_academic_topic(message: str) -> bool:
@@ -121,13 +138,35 @@ def _unrelated_request(text: str) -> bool:
 def _has_topic(message: str) -> bool:
     # Preserve the accented profession word; folded 'nghe' also means 'listen'.
     return bool(_TOPIC.search(_fold(message)) or _has_academic_topic(message)
+                or _has_system_help_topic(message)
                 or re.search(r"\bnghề\b", message.casefold()))
+
+
+def is_system_help_question(message: str, history=None) -> bool:
+    """Detect user-support / UI how-to questions about AI CareerGuide."""
+    text = _fold(message)
+    if _unrelated_request(text):
+        return False
+    if _has_system_help_topic(message):
+        return True
+    if _FOLLOWUP.fullmatch(text):
+        for entry in reversed((history or [])[-12:]):
+            if entry.role != "user":
+                continue
+            previous = _fold(entry.content)
+            if _unrelated_request(previous):
+                break
+            if _has_system_help_topic(entry.content):
+                return True
+            if not _FOLLOWUP.fullmatch(previous):
+                break
+    return False
 
 
 def is_academic_question(message: str, history=None) -> bool:
     """Use tutoring context for subjects, while preserving career personalization."""
     text = _fold(message)
-    if (_unrelated_request(text) or _CAREER_CONTEXT.search(text)
+    if (_unrelated_request(text) or _has_system_help_topic(message) or _CAREER_CONTEXT.search(text)
             or re.search(r"\b(?:nghề|lương)\b", message.casefold())):
         return False
     if _has_academic_topic(message):
@@ -174,5 +213,5 @@ def classify_chat_message(message: str, history=None) -> ScopeDecision:
 
 def local_scope_reply(decision: ScopeDecision) -> str:
     if decision == "greeting":
-        return "Chào bạn! Mình hỗ trợ hướng nghiệp, học tập, tìm hiểu nghề nghiệp và mục tiêu tương lai. Bạn muốn tìm hiểu vấn đề nào?"
-    return "Mình chưa hiểu rõ câu hỏi. Bạn hãy viết rõ hơn điều muốn hỏi về học tập, chọn ngành, nghề nghiệp hoặc mục tiêu tương lai để mình hỗ trợ đúng nhé."
+        return "Chào bạn! Mình hỗ trợ hướng nghiệp, học tập, tìm hiểu nghề nghiệp và hướng dẫn sử dụng các tính năng trên AI CareerGuide. Bạn muốn tìm hiểu vấn đề nào?"
+    return "Mình chưa hiểu rõ câu hỏi. Bạn hãy viết rõ hơn điều muốn hỏi về học tập, chọn ngành, nghề nghiệp hoặc cách sử dụng hệ thống AI CareerGuide để mình hỗ trợ đúng nhé."

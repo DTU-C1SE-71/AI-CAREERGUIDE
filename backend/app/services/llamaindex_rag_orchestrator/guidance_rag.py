@@ -391,7 +391,13 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
     )
     from app.services.llamaindex_rag_orchestrator.counselor_connection import verify_receipt
     from app.services.llamaindex_rag_orchestrator.chat_scope import (
-        classify_chat_message, local_scope_reply, is_academic_question,
+        classify_chat_message, local_scope_reply, is_academic_question, is_system_help_question,
+    )
+    from app.services.llamaindex_rag_orchestrator.system_help import (
+        SECURITY_REFUSAL,
+        SECURITY_BOUNDARIES_PROMPT,
+        SYSTEM_HELP_PROMPT,
+        build_static_system_help_reply,
     )
     from app.services.ai_config.service import resolve_snapshot
     from app.services.ai_config import adapter
@@ -401,11 +407,13 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
         raise HTTPException(401, "Đăng nhập để xem bản đánh giá đã lưu.")
 
     connected = await verify_receipt(db, payload.connection_revision)
-    scope = "redirect" if forbidden_request(payload.message) else classify_chat_message(payload.message, payload.history)
-    if scope != "allow":
+    if forbidden_request(payload.message):
         return AIChatResponse(
-            reply=REDIRECT if scope == "redirect" else local_scope_reply(scope),
-            suggested_followups=["Tìm hiểu ngành An toàn thông tin", "Cần bổ sung gì vào hồ sơ hướng nghiệp?"],
+            reply=SECURITY_REFUSAL,
+            suggested_followups=[
+                "Cách làm bài trắc nghiệm hướng nghiệp?",
+                "Chế độ Đề xuất ngành có AI dùng để làm gì?",
+            ],
             is_fallback=False,
             is_ai_generated=False,
             response_source="verified_guidance",
@@ -413,8 +421,24 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
             connection_revision=payload.connection_revision if connected else None,
         )
 
-    academic = is_academic_question(payload.message, payload.history)
-    if academic:
+    scope = classify_chat_message(payload.message, payload.history)
+    if scope != "allow":
+        return AIChatResponse(
+            reply=REDIRECT if scope == "redirect" else local_scope_reply(scope),
+            suggested_followups=["Tìm hiểu ngành An toàn thông tin", "Cách sử dụng hệ thống AI CareerGuide?"],
+            is_fallback=False,
+            is_ai_generated=False,
+            response_source="verified_guidance",
+            connection_available=connected,
+            connection_revision=payload.connection_revision if connected else None,
+        )
+
+    system_help = is_system_help_question(payload.message, payload.history)
+    academic = (not system_help) and is_academic_question(payload.message, payload.history)
+    if system_help:
+        static_reply, followups = build_static_system_help_reply(payload.message)
+        context = None
+    elif academic:
         # Tutoring does not require a catalog match or a private student profile.
         static_reply = "Đây là câu hỏi học tập phù hợp. Hiện chưa nhận được lời giải từ AI; bạn có thể kiểm tra kết nối rồi gửi lại câu hỏi."
         context = payload.major_code
@@ -431,7 +455,7 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
             system_instruction = (
                 "Bạn là Cố vấn AI Hướng nghiệp thông minh, thân thiện và tận tâm của hệ thống AI CareerGuide.\n"
                 "Nhiệm vụ: Tư vấn, giải đáp câu hỏi của học sinh/sinh viên về định hướng nghề nghiệp, các ngành học, "
-                "mức độ phù hợp với sở thích/năng lực, học tập, và mục tiêu tương lai.\n\n"
+                "mức độ phù hợp với sở thích/năng lực, học tập, cách sử dụng hệ thống và mục tiêu tương lai.\n\n"
                 "Quy tắc phản hồi:\n"
                 "1. Trả lời bằng tiếng Việt tự nhiên, nhiệt tình, súc tích, mạch lạc, giọng điệu khuyến khích và truyền cảm hứng.\n"
                 "2. Sử dụng thông tin từ [DỮ LIỆU THAM CHIẾU HỆ THỐNG] dưới đây làm căn cứ chuẩn xác "
@@ -439,10 +463,13 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
                 "Tuyệt đối KHÔNG tự bịa đặt thông tin tuyển sinh sai lệch.\n"
                 "3. Trả lời trực tiếp vào trọng tâm câu hỏi của người dùng (ví dụ: giải thích ngắn gọn bản chất ngành nghề, so sánh các ngành liên quan, hoặc hướng dẫn lộ trình), "
                 "tránh lặp lại nguyên văn tiêu đề kỹ thuật hay khuôn mẫu khô cứng của hệ thống.\n"
-                "4. Định dạng Markdown rõ ràng (dùng gạch đầu dòng, in đậm tên ngành hoặc từ khóa quan trọng) để học sinh dễ đọc."
+                "4. Định dạng Markdown rõ ràng (dùng gạch đầu dòng, in đậm tên ngành hoặc từ khóa quan trọng) để học sinh dễ đọc.\n\n"
+                f"{SECURITY_BOUNDARIES_PROMPT}"
             )
 
-            if academic:
+            if system_help:
+                system_instruction = SYSTEM_HELP_PROMPT
+            elif academic:
                 system_instruction = (
                     "Bạn là trợ giảng học tập trong AI CareerGuide, hỗ trợ kiến thức phổ thông và lập trình.\n"
                     "Trả lời trực tiếp câu hỏi hiện tại bằng tiếng Việt, rõ ràng, ngắn gọn và đúng trình độ câu hỏi.\n"
@@ -451,7 +478,8 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
                     "Với lập trình, cung cấp mã đúng ngôn ngữ yêu cầu và giải thích ngắn; nếu thiếu dữ kiện, nêu giả định hoặc hỏi lại cụ thể.\n"
                     "Không chuyển câu hỏi học tập sang tư vấn chọn ngành, không yêu cầu chọn ngành và không lặp lại "
                     "các lần từ chối nhầm trước đó. Không suy ra năng lực hay mức phù hợp nghề từ một câu hỏi kiến thức.\n"
-                    "Không bịa dữ kiện thời sự, nguồn tài liệu hoặc thông tin chưa được cung cấp."
+                    "Không bịa dữ kiện thời sự, nguồn tài liệu hoặc thông tin chưa được cung cấp.\n\n"
+                    f"{SECURITY_BOUNDARIES_PROMPT}"
                 )
             else:
                 system_instruction += f"\n\n[DỮ LIỆU THAM CHIẾU HỆ THỐNG]:\n{static_reply}"

@@ -70,6 +70,7 @@ Bạn có thể hỏi về yêu cầu của ngành, dữ liệu còn thiếu ho�
 ]
 
 const quickPrompts = [
+  "Cách sử dụng các tính năng trên AI CareerGuide?",
   "Hồ sơ của mình còn thiếu dữ liệu gì để đối chiếu ngành học?",
   "Mình muốn tìm hiểu ngành Khoa học máy tính",
   "Những kỹ năng nào cần tìm hiểu khi chọn nghề?",
