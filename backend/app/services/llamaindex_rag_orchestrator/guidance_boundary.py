@@ -128,13 +128,17 @@ def forbidden_request(message: str) -> bool:
         text,
     ):
         return True
-    # 3. Direct questions about this system's internal DB/code/secrets/vulnerabilities even without an explicit verb.
+    # 3. Direct or indirect probing of this system's internal DB/code/server/secrets/vulnerabilities.
     if re.search(
         r"\b(system prompt|developer prompt|database schema|db schema|cau truc co so du lieu|cau truc csdl|"
         r"ten bang trong (?:db|csdl|database|he thong)|api endpoint(?:s)? cua he thong|"
-        r"ma nguon cua he thong|source code cua he thong|cau hinh server|"
+        r"ma nguon cua (?:he thong|web|trang)|source code cua (?:he thong|web|trang)|cau hinh server|"
         r"lo hong (?:bao mat|he thong)|co che kiem duyet|co che bao mat phia sau|"
-        r"khoa api|api key|secret key|jwt secret)\b",
+        r"khoa api|api key|secret key|jwt secret)\b|"
+        r"(?:web|trang web|trang|he thong|app|ung dung)(?: nay)?\s+(?:dung|su dung|chay|viet bang|deploy|host).{0,25}"
+        r"(?:database|csdl|co so du lieu|server|backend|source code|ma nguon|api key|secret)|"
+        r"(?:database|csdl|co so du lieu|backend|server|schema|ma nguon|source code|api endpoint).{0,25}"
+        r"(?:cua (?:web|trang|he thong|app)|nay la gi|gom nhung gi)",
         text,
     ):
         return True

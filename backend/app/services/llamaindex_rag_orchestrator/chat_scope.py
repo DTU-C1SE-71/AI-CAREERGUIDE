@@ -77,23 +77,58 @@ _FOLLOWUP = re.compile(
     r"why|more|tell me more|how long)(?: a| nhe| duoc khong)?[?!. ]*"
 )
 _GREETING = re.compile(r"(?:xin chao|chao(?: ban)?|hello|hi|alo|cam on|thank you)[!?. ]*")
-_SYSTEM_HELP = re.compile(
-    r"\b((?:cach|huong dan|chi (?:minh|em|toi|cach)).{0,20}(?:su dung|dung|xai|thao tac|lam bai|xem|tra cuu|xuat|cap nhat|doi|dang nhap|dang ky)|"
-    r"(?:su dung|dung|xai|thao tac).{0,18}(?:he thong|web|trang web|ung dung|app|ai careerguide|careerguide|giao dien)|"
-    r"(?:he thong|web|trang web|ung dung|app|ai careerguide|careerguide).{0,25}(?:su dung|dung|xai|hoat dong|tinh nang|chuc nang|lam gi|de lam gi)|"
-    r"tinh nang (?:cua he thong|tren giao dien|cua web|chinh)|"
-    r"(?:nam |o )dau tren (?:giao dien|menu|web|he thong)|"
-    r"(?:bam|nhan|chon|vao) (?:nut|muc|tab|menu) nao|"
-    r"de xuat nganh co ai|thuat toan de xuat|kham pha nganh|danh muc nganh|435 nganh|"
-    r"lo trinh 4 tuan|xuat pdf|tai pdf|xem lai cau hoi|xem lich su|lich su lam bai|"
-    r"cap nhat (?:ho so|khoi lop|gioi tinh|diem)|doi (?:khoi lop|gioi tinh)|"
-    r"dang nhap google|khong dang nhap duoc|quen mat khau|tao tai khoan|"
-    r"huong dan su dung|tro giup su dung|how to use|user guide)\b"
+# Compositional detector for AI CareerGuide UI / usage / troubleshooting questions.
+_PLATFORM_ENTITY = re.compile(
+    r"\b(ai careerguide|careerguide|web nay|trang web nay|trang nay|website nay|app nay|ung dung nay|"
+    r"nen tang nay|he thong nay|trang web|website|giao dien|tro ly ai|co van ai|chatbot)\b|"
+    r"\bhe thong\b(?!\s+(?:thong tin|mang|dien|nhung|dieu khien|phap luat|y te|giao duc|tai chinh|ke toan|van tai|nong nghiep|sinh thai|tuan hoan|than kinh|mien dich))"
+)
+_ASSISTANT_IDENTITY = re.compile(
+    r"\b(ban la ai|bot la ai|ban lam duoc gi|ban giup duoc gi|ban ho tro(?: duoc)? gi|"
+    r"co the giup gi|ho tro nhung gi|co nhung tinh nang gi|co chuc nang gi|o day co gi)\b"
+)
+_APP_FEATURE = re.compile(
+    r"\b(ho so|profile|tai khoan|thong tin ca nhan|trac nghiem|bai test|bai danh gia|cau hoi|ket qua|"
+    r"lich su|pdf|bao cao|lo trinh|4 tuan|kham pha nganh|danh muc nganh|435 nganh|de xuat|"
+    r"thuat toan de xuat|phan tich ai|phan tich ky nang|nguyen vong|khoi lop|gioi tinh|"
+    r"dang nhap|dang ky|dang xuat|google|mat khau|tinh nang|chuc nang|menu|thanh ben|"
+    r"nut bam|nut|tab|man hinh|bieu do|radar|diem so|diem hoc ba|diem mon|nhap diem|sua diem|cap nhat diem|hoc ba|tong quan)\b"
+)
+_HELP_CUE = re.compile(
+    r"\b(cach|lam sao|lam the nao|nhu the nao|the nao|ra sao|huong dan|chi (?:minh|em|toi|giup|dum|cach)|"
+    r"o dau|vao dau|bam (?:vao )?dau|nam o dau|muc nao|nut nao|tab nao|cho nao|"
+    r"kiem tra|xem|xem lai|tra cuu|tim|nhap|sua|chinh sua|cap nhat|doi|thay doi|xoa|luu|xuat|tai|mo|bat dau|lam lai|"
+    r"su dung|dung|xai|thao tac|hoat dong|tro giup|giup do|"
+    r"la gi|de lam gi|dung de lam gi|co tac dung gi|khac nhau|khac gi|"
+    r"khong thay|khong hien|khong mo duoc|khong luu duoc|khong dang nhap duoc|khong bam duoc|"
+    r"bi loi|tai sao khong|sao khong|sao lai khong|load lau|"
+    r"how to|how do i|where is|where can i|what is this|user guide)\b"
+)
+_EXPLICIT_SYSTEM_HELP = re.compile(
+    r"\b(de xuat nganh co ai|thuat toan de xuat|kham pha nganh|danh muc nganh|435 nganh|"
+    r"lo trinh 4 tuan|xuat pdf|tai pdf|xem lai cau hoi|lich su lam bai|huong dan su dung|"
+    r"tro giup su dung|dang nhap google|quen mat khau|doi mat khau|how to use|user guide)\b"
+)
+_PERSONAL_EVIDENCE_CAREER = re.compile(
+    r"\b(thieu du lieu gi|bo sung (?:gi|bang chung)|doi chieu nganh|phu hop (?:voi )?(?:so thich|nganh)|"
+    r"nen hoc nganh nao|nen chon nganh nao|nganh nao phu hop|chon khoi|ra truong lam gi|"
+    r"muc luong|luong bao nhieu|xin viec|thuc tap|cv)\b"
 )
 
 
 def _has_system_help_topic(message: str) -> bool:
-    return bool(_SYSTEM_HELP.search(_fold(message)))
+    text = _fold(message)
+    if _PERSONAL_EVIDENCE_CAREER.search(text):
+        return False
+    if _PROGRAMMING_LANGUAGE.search(text) and not _PLATFORM_ENTITY.search(text):
+        return False
+    if _EXPLICIT_SYSTEM_HELP.search(text) or _ASSISTANT_IDENTITY.search(text):
+        return True
+    if _PLATFORM_ENTITY.search(text):
+        return True
+    if _APP_FEATURE.search(text) and _HELP_CUE.search(text):
+        return True
+    return False
 
 
 def _has_academic_topic(message: str) -> bool:

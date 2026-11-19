@@ -68,6 +68,27 @@ def build_static_system_help_reply(message: str) -> tuple[str, list[str]]:
     """Deterministic step-by-step UI guide when the LLM is offline or unavailable."""
     text = _fold(message)
 
+    if re.search(r"\b(la gi|ban la ai|ban lam duoc gi|ban giup duoc gi|de lam gi|co nhung tinh nang gi|co chuc nang gi|o day co gi)\b", text) and not re.search(r"\b(ho so|trac nghiem|danh muc|lo trinh|pdf|de xuat nganh co ai)\b", text):
+        return (
+            "**AI CareerGuide** là nền tảng hỗ trợ định hướng ngành học và nghề nghiệp cho học sinh THPT Việt Nam với các tính năng chính trên giao diện:\n"
+            "- **Trắc nghiệm:** Làm bài đánh giá 4 bước (Sở thích RIASEC, Tư duy, Điểm số, Nguyện vọng).\n"
+            "- **Khám phá ngành:** Nhận ngay danh sách ngành phù hợp theo **Thuật toán đề xuất** (tức thì) hoặc mở **Đề xuất ngành có AI** để phân tích sâu điểm mạnh/yếu.\n"
+            "- **Danh mục ngành & Lộ trình 4 tuần:** Tra cứu toàn bộ 435 ngành đào tạo chuẩn Bộ GD&ĐT và xem kế hoạch trải nghiệm theo tuần.\n"
+            "- **Trợ lý AI:** Giải đáp chọn ngành, kiến thức học tập và hướng dẫn thao tác trên hệ thống.\n\n"
+            "Bạn đang muốn bắt đầu từ tính năng nào?",
+            ["Cách làm bài trắc nghiệm hướng nghiệp?", "Cách kiểm tra hồ sơ cá nhân?", "Chế độ Đề xuất ngành có AI dùng để làm gì?"],
+        )
+
+    if re.search(r"\b(khong thay|khong hien|khong luu duoc|khong dang nhap duoc|bi loi|load lau|tai sao khong|sao khong)\b", text):
+        return (
+            "Nếu bạn gặp trục trặc khi thao tác trên **AI CareerGuide**, hãy thử kiểm tra nhanh các bước sau:\n"
+            "- **Chưa thấy đề xuất ngành:** Vào mục **Trắc nghiệm**, hoàn thành đủ các bước và bấm nút **Hoàn tất** ở bước 4 để lưu kết quả.\n"
+            "- **Đề xuất ngành có AI tải lâu lần đầu:** Chế độ AI cần 5–15 giây cho lần phân tích đầu tiên; sau khi xong hệ thống sẽ lưu lịch sử để lần sau tải ngay lập tức.\n"
+            "- **Lỗi đăng nhập / tải dữ liệu:** Tải lại trang (`F5`), kiểm tra kết nối mạng hoặc thử đăng nhập lại bằng Email/Mật khẩu.\n\n"
+            "Bạn đang gặp vấn đề ở màn hình nào để mình hướng dẫn chi tiết hơn?",
+            ["Cách kiểm tra hồ sơ cá nhân?", "Cách làm bài trắc nghiệm hướng nghiệp?"],
+        )
+
     if re.search(r"\b(trac nghiem|bai test|lam bai|30 cau|38 cau|xem lai cau hoi|lam lai)\b", text):
         return (
             "Để làm hoặc xem lại bài đánh giá trên **AI CareerGuide**, bạn thao tác theo các bước sau:\n"
@@ -78,14 +99,14 @@ def build_static_system_help_reply(message: str) -> tuple[str, list[str]]:
             ["Xem kết quả đề xuất ngành ở đâu?", "Chế độ Đề xuất ngành có AI dùng để làm gì?"],
         )
 
-    if re.search(r"\b(de xuat nganh co ai|thuat toan de xuat|kham pha nganh|xuat pdf|lich su)\b", text):
+    if re.search(r"\b(de xuat nganh co ai|thuat toan de xuat|kham pha nganh|xuat pdf|tai pdf|lich su)\b", text):
         return (
             "Để xem kết quả đề xuất ngành và phân tích AI trên **AI CareerGuide**:\n"
             "- **Bước 1:** Chọn mục **Khám phá ngành** trên thanh menu bên trái.\n"
             "- **Bước 2:** Mặc định hệ thống mở **Thuật toán đề xuất** (hiển thị tức thì biểu đồ Radar RIASEC và danh sách ngành phù hợp).\n"
             "- **Bước 3:** Nếu muốn AI phân tích sâu về điểm mạnh/yếu và đối chiếu nguyện vọng, bấm tab **Đề xuất ngành có AI** (hoặc nút **Mở đề xuất ngành có AI** ở cuối trang).\n"
             "- Ở góc trên bên phải có các nút **Lịch sử**, **Làm lại** và **Xuất PDF** để xem lại hoặc tải báo cáo.",
-            ["Làm sao tra cứu 435 ngành đào tạo?", "Cách cập nhật khối lớp và giới tính?"],
+            ["Làm sao tra cứu 435 ngành đào tạo?", "Cách kiểm tra hồ sơ cá nhân?"],
         )
 
     if re.search(r"\b(danh muc nganh|435 nganh|tra cuu nganh|tim nganh|loc linh vuc)\b", text):
@@ -105,12 +126,13 @@ def build_static_system_help_reply(message: str) -> tuple[str, list[str]]:
             ["Cách làm bài trắc nghiệm hướng nghiệp?", "Cách xuất kết quả ra PDF?"],
         )
 
-    if re.search(r"\b(dang nhap|dang ky|dang xuat|google|tai khoan|ho so ca nhan|khoi lop|gioi tinh|cap nhat)\b", text):
+    if re.search(r"\b(ho so|profile|dang nhap|dang ky|dang xuat|google|tai khoan|khoi lop|gioi tinh|cap nhat|diem so|hoc ba)\b", text):
         return (
-            "Để quản lý tài khoản và hồ sơ cá nhân trên **AI CareerGuide**:\n"
-            "- **Đăng nhập / Đăng ký:** Mở trang **Đăng nhập**, nhập Email & Mật khẩu hoặc chọn **Tiếp tục với tài khoản Google**.\n"
-            "- **Cập nhật Khối lớp / Giới tính:** Sau khi đăng nhập, bấm vào tên/ảnh đại diện ở **góc dưới bên trái** thanh menu để chỉnh sửa **Khối lớp (10/11/12)** và **Giới tính** rồi lưu lại.\n"
-            "- Khi bạn thay đổi điểm số, khối lớp hoặc giới tính, mục **Khám phá ngành** sẽ tự tính lại đề xuất cho phù hợp.",
+            "Để kiểm tra và cập nhật **hồ sơ cá nhân & tài khoản** trên **AI CareerGuide**:\n"
+            "- **Kiểm tra / sửa thông tin cá nhân (Khối lớp, Giới tính, Tên):** Bấm vào tên/avatar của bạn ở **góc dưới bên trái** thanh menu, chỉnh sửa rồi bấm lưu.\n"
+            "- **Kiểm tra hồ sơ định hướng & điểm số:** Vào mục **Khám phá ngành** để xem biểu đồ Radar RIASEC, tổ hợp điểm tốt nhất và bấm **Lịch sử** (góc trên bên phải) để xem các lần làm trước.\n"
+            "- **Kiểm tra lại câu trả lời & điểm đã nhập:** Vào mục **Trắc nghiệm** để xem hoặc cập nhật lại điểm số và nguyện vọng.\n"
+            "- **Đăng nhập / Đăng ký:** Mở trang **Đăng nhập**, nhập Email & Mật khẩu hoặc chọn **Tiếp tục với tài khoản Google**.",
             ["Cách làm bài trắc nghiệm hướng nghiệp?", "Chế độ Đề xuất ngành có AI dùng để làm gì?"],
         )
 
@@ -120,5 +142,5 @@ def build_static_system_help_reply(message: str) -> tuple[str, list[str]]:
         "- **Bước 2:** Vào **Khám phá ngành** để xem ngay **Thuật toán đề xuất**, hoặc bấm **Đề xuất ngành có AI** khi muốn phân tích sâu hơn.\n"
         "- **Bước 3:** Vào **Danh mục ngành** để tra cứu 435 ngành hoặc **Lộ trình 4 tuần** để xem kế hoạch học tập.\n\n"
         "Bạn đang ở màn hình nào hoặc cần hướng dẫn cụ thể thao tác nào trên giao diện?",
-        ["Cách làm bài trắc nghiệm hướng nghiệp?", "Chế độ Đề xuất ngành có AI dùng để làm gì?", "Cách tra cứu 435 ngành?"],
+        ["Cách làm bài trắc nghiệm hướng nghiệp?", "Cách kiểm tra hồ sơ cá nhân?", "Chế độ Đề xuất ngành có AI dùng để làm gì?"],
     )
