@@ -2,23 +2,34 @@ import { useGoogleLogin } from "@react-oauth/google"
 import { AnimatePresence, motion } from "framer-motion"
 import {
   AlertCircle,
+  ArrowLeft,
   ArrowRight,
   BrainCircuit,
   Check,
   CheckCircle2,
+  Eye,
+  EyeOff,
   GraduationCap,
+  KeyRound,
   LoaderCircle,
   LockKeyhole,
   Mail,
+  RotateCcw,
   School,
+  ShieldCheck,
   User as UserIcon,
 } from "lucide-react"
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useMemo, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router"
 import { Button } from "../components/common/Button"
 import { useAuth } from "../context/AuthContext"
 import { authPost } from "../services/api"
 import type { UserRole } from "../types/user"
+import {
+  checkPasswordPolicy,
+  getFirstPasswordError,
+  isStrongPassword,
+} from "../utils/passwordPolicy"
 
 const DEFAULT_GOOGLE_CLIENT_ID =
   "1095956825384-f8n2bj0ott0u1sokbegksf7n32tlpn51.apps.googleusercontent.com"
@@ -33,6 +44,57 @@ interface LoginApiResponse {
     full_name: string
     role: "STUDENT" | "ADMIN"
   }
+}
+
+interface OTPActionApiResponse {
+  message: string
+  email: string
+  expires_in_minutes: number
+  cooldown_seconds: number
+}
+
+interface MessageApiResponse {
+  message: string
+}
+
+type AuthMode = "login" | "register" | "forgot"
+
+function PasswordStrengthChecklist({ password }: { password: string }) {
+  const rules = useMemo(() => checkPasswordPolicy(password), [password])
+  const passedCount = rules.filter((r) => r.passed).length
+  const allPassed = passedCount === rules.length
+
+  return (
+    <div className="mt-2.5 rounded-2xl border border-slate-200/80 bg-slate-50/80 p-3">
+      <div className="mb-2 flex items-center justify-between text-[11px] font-bold">
+        <span className="text-slate-600">Yêu cầu mật khẩu an toàn</span>
+        <span className={allPassed ? "text-emerald-600" : "text-slate-500"}>
+          {passedCount}/{rules.length} tiêu chí
+        </span>
+      </div>
+      <ul className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+        {rules.map((rule) => (
+          <li
+            key={rule.id}
+            className={`flex items-center gap-1.5 text-[11px] font-semibold transition-colors ${
+              rule.passed ? "text-emerald-700" : "text-slate-500"
+            }`}
+          >
+            <span
+              className={`grid size-4 shrink-0 place-items-center rounded-full ${
+                rule.passed
+                  ? "bg-emerald-100 text-emerald-700"
+                  : "bg-slate-200/80 text-slate-400"
+              }`}
+            >
+              <Check size={10} strokeWidth={3} />
+            </span>
+            <span>{rule.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
 }
 
 function redirectToGoogleOAuth() {
@@ -139,9 +201,12 @@ function GoogleSignInButton({
 
 export function Login() {
   const [searchParams] = useSearchParams()
-  const [isRegister, setIsRegister] = useState(
-    () => searchParams.get("tab") === "register",
+  const [mode, setMode] = useState<AuthMode>(() =>
+    searchParams.get("tab") === "register" ? "register" : "login",
   )
+  const [registerStep, setRegisterStep] = useState<"form" | "otp">("form")
+  const [forgotStep, setForgotStep] = useState<"email" | "reset">("email")
+
   const [fullName, setFullName] = useState("")
   const [gender, setGender] = useState<string>("Nam")
   const [gradeLevel, setGradeLevel] = useState<string>("Lớp 12")
@@ -149,11 +214,38 @@ export function Login() {
   const [schoolName, setSchoolName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
+  const [otpCode, setOtpCode] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  const [resendCooldown, setResendCooldown] = useState(0)
+
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
   const { login, sessionError } = useAuth()
   const navigate = useNavigate()
+
+  const isRegister = mode === "register"
+  const isForgot = mode === "forgot"
+
+  useEffect(() => {
+    if (resendCooldown <= 0) return
+    const timer = window.setInterval(() => {
+      setResendCooldown((prev) => (prev <= 1 ? 0 : prev - 1))
+    }, 1000)
+    return () => window.clearInterval(timer)
+  }, [resendCooldown])
+
+  const switchMode = (nextMode: AuthMode) => {
+    setMode(nextMode)
+    setRegisterStep("form")
+    setForgotStep("email")
+    setOtpCode("")
+    setConfirmPassword("")
+    setErrorMsg(null)
+    setSuccessMsg(null)
+  }
 
   const applyLoginResponse = (data: LoginApiResponse) => {
     const rawRole = (
@@ -193,40 +285,15 @@ export function Login() {
     }, 450)
   }
 
-  const submit = async (event: FormEvent) => {
-    event.preventDefault()
+  const handleResendOtp = async () => {
+    if (resendCooldown > 0 || loading) return
     setErrorMsg(null)
     setSuccessMsg(null)
-
     const trimmedEmail = email.trim()
-    if (!trimmedEmail || !password) {
-      setErrorMsg("Vui lòng nhập đầy đủ địa chỉ email và mật khẩu.")
-      return
-    }
-
-    if (isRegister) {
-      if (fullName.trim().length < 2) {
-        setErrorMsg("Vui lòng nhập họ và tên tối thiểu 2 ký tự.")
-        return
-      }
-      if (!gender || !gender.trim()) {
-        setErrorMsg("Vui lòng chọn giới tính.")
-        return
-      }
-      if (!gradeLevel || !gradeLevel.trim()) {
-        setErrorMsg("Vui lòng chọn khối lớp bạn đang học hoặc đã tốt nghiệp.")
-        return
-      }
-      if (password.length < 8) {
-        setErrorMsg("Mật khẩu cần tối thiểu 8 ký tự theo chuẩn bảo mật.")
-        return
-      }
-    }
-
     setLoading(true)
     try {
       if (isRegister) {
-        await authPost("/identity/register", {
+        const res = await authPost<OTPActionApiResponse>("/identity/register/request-otp", {
           email: trimmedEmail,
           password,
           full_name: fullName.trim(),
@@ -236,8 +303,175 @@ export function Login() {
           school_name: schoolName.trim() || undefined,
           role: "STUDENT",
         })
+        setResendCooldown(res.cooldown_seconds || 60)
+        setSuccessMsg(res.message || "Đã gửi lại mã xác nhận 6 chữ số tới email của bạn.")
+      } else if (isForgot) {
+        const res = await authPost<OTPActionApiResponse>("/identity/forgot-password", {
+          email: trimmedEmail,
+        })
+        setResendCooldown(res.cooldown_seconds || 60)
+        setSuccessMsg(res.message || "Đã gửi lại mã đặt lại mật khẩu tới email của bạn.")
+      }
+    } catch (err: unknown) {
+      setErrorMsg(err instanceof Error ? err.message : "Không thể gửi lại mã xác nhận.")
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const submit = async (event: FormEvent) => {
+    event.preventDefault()
+    setErrorMsg(null)
+    setSuccessMsg(null)
+
+    const trimmedEmail = email.trim()
+
+    // 1. Luồng Quên mật khẩu (2 bước: Email -> OTP + Mật khẩu mới)
+    if (isForgot) {
+      if (!trimmedEmail) {
+        setErrorMsg("Vui lòng nhập địa chỉ email đã đăng ký.")
+        return
+      }
+      if (forgotStep === "email") {
+        setLoading(true)
+        try {
+          const res = await authPost<OTPActionApiResponse>("/identity/forgot-password", {
+            email: trimmedEmail,
+          })
+          setForgotStep("reset")
+          setOtpCode("")
+          setPassword("")
+          setConfirmPassword("")
+          setResendCooldown(res.cooldown_seconds || 60)
+          setSuccessMsg(res.message)
+        } catch (err: unknown) {
+          setErrorMsg(err instanceof Error ? err.message : "Không thể gửi yêu cầu đặt lại mật khẩu.")
+        } finally {
+          setLoading(false)
+        }
+        return
       }
 
+      if (!/^[0-9]{6}$/.test(otpCode.trim())) {
+        setErrorMsg("Vui lòng nhập đủ mã xác nhận gồm 6 chữ số từ email.")
+        return
+      }
+      const pwError = getFirstPasswordError(password)
+      if (pwError) {
+        setErrorMsg(pwError)
+        return
+      }
+      if (password !== confirmPassword) {
+        setErrorMsg("Mật khẩu xác nhận không khớp.")
+        return
+      }
+
+      setLoading(true)
+      try {
+        const res = await authPost<MessageApiResponse>("/identity/reset-password", {
+          email: trimmedEmail,
+          otp_code: otpCode.trim(),
+          new_password: password,
+        })
+        setMode("login")
+        setForgotStep("email")
+        setOtpCode("")
+        setPassword("")
+        setConfirmPassword("")
+        setSuccessMsg(res.message || "Đặt lại mật khẩu thành công! Bạn có thể đăng nhập ngay.")
+      } catch (err: unknown) {
+        setErrorMsg(err instanceof Error ? err.message : "Không thể đặt lại mật khẩu. Vui lòng kiểm tra mã OTP.")
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    // 2. Luồng Đăng ký thường kèm mã xác nhận Email OTP (2 bước)
+    if (isRegister) {
+      if (registerStep === "form") {
+        if (!trimmedEmail || !password) {
+          setErrorMsg("Vui lòng nhập đầy đủ địa chỉ email và mật khẩu.")
+          return
+        }
+        if (fullName.trim().length < 2) {
+          setErrorMsg("Vui lòng nhập họ và tên tối thiểu 2 ký tự.")
+          return
+        }
+        if (!gender || !gender.trim()) {
+          setErrorMsg("Vui lòng chọn giới tính.")
+          return
+        }
+        if (!gradeLevel || !gradeLevel.trim()) {
+          setErrorMsg("Vui lòng chọn khối lớp bạn đang học hoặc đã tốt nghiệp.")
+          return
+        }
+        const pwError = getFirstPasswordError(password)
+        if (pwError) {
+          setErrorMsg(pwError)
+          return
+        }
+        if (password !== confirmPassword) {
+          setErrorMsg("Mật khẩu xác nhận không khớp.")
+          return
+        }
+
+        setLoading(true)
+        try {
+          const res = await authPost<OTPActionApiResponse>("/identity/register/request-otp", {
+            email: trimmedEmail,
+            password,
+            full_name: fullName.trim(),
+            gender,
+            grade_level: gradeLevel,
+            school_class: schoolClass.trim() || undefined,
+            school_name: schoolName.trim() || undefined,
+            role: "STUDENT",
+          })
+          setRegisterStep("otp")
+          setOtpCode("")
+          setResendCooldown(res.cooldown_seconds || 60)
+          setSuccessMsg(res.message)
+        } catch (err: unknown) {
+          setErrorMsg(err instanceof Error ? err.message : "Không thể gửi mã xác nhận đăng ký.")
+        } finally {
+          setLoading(false)
+        }
+        return
+      }
+
+      if (!/^[0-9]{6}$/.test(otpCode.trim())) {
+        setErrorMsg("Vui lòng nhập đủ mã xác nhận gồm 6 chữ số đã gửi về email.")
+        return
+      }
+
+      setLoading(true)
+      try {
+        const data = await authPost<LoginApiResponse>("/identity/register/verify-otp", {
+          email: trimmedEmail,
+          otp_code: otpCode.trim(),
+        })
+        if (data && data.access_token) {
+          applyLoginResponse(data)
+        } else {
+          setErrorMsg("Không thể kích hoạt tài khoản. Vui lòng thử lại.")
+        }
+      } catch (err: unknown) {
+        setErrorMsg(err instanceof Error ? err.message : "Mã xác nhận không đúng hoặc đã hết hạn.")
+      } finally {
+        setLoading(false)
+      }
+      return
+    }
+
+    // 3. Luồng Đăng nhập thông thường
+    if (!trimmedEmail || !password) {
+      setErrorMsg("Vui lòng nhập đầy đủ địa chỉ email và mật khẩu.")
+      return
+    }
+
+    setLoading(true)
+    try {
       const data = await authPost<LoginApiResponse>("/identity/login", {
         email: trimmedEmail,
         password,
@@ -345,49 +579,66 @@ export function Login() {
               <span className="text-lg">AI CareerGuide</span>
             </div>
 
-            {/* Login vs Register Switcher */}
-            <div className="mb-6 flex min-h-11 rounded-2xl border border-slate-200/90 bg-slate-100/80 p-1">
+            {/* Login vs Register Switcher (hidden during Forgot Password mode) */}
+            {!isForgot ? (
+              <div className="mb-6 flex min-h-11 rounded-2xl border border-slate-200/90 bg-slate-100/80 p-1">
+                <button
+                  type="button"
+                  onClick={() => switchMode("login")}
+                  className={`flex-1 rounded-xl py-2.5 text-xs sm:text-sm font-bold transition-all duration-200 ${
+                    mode === "login"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Đăng nhập
+                </button>
+                <button
+                  type="button"
+                  onClick={() => switchMode("register")}
+                  className={`flex-1 rounded-xl py-2.5 text-xs sm:text-sm font-bold transition-all duration-200 ${
+                    mode === "register"
+                      ? "bg-white text-slate-900 shadow-xs"
+                      : "text-slate-500 hover:text-slate-800"
+                  }`}
+                >
+                  Đăng ký tài khoản
+                </button>
+              </div>
+            ) : (
               <button
                 type="button"
-                onClick={() => {
-                  setIsRegister(false)
-                  setErrorMsg(null)
-                  setSuccessMsg(null)
-                }}
-                className={`flex-1 rounded-xl py-2.5 text-xs sm:text-sm font-bold transition-all duration-200 ${
-                  !isRegister
-                    ? "bg-white text-slate-900 shadow-xs"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
+                onClick={() => switchMode("login")}
+                className="mb-5 inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-bold text-slate-600 transition hover:bg-slate-50 hover:text-sky-700"
               >
-                Đăng nhập
+                <ArrowLeft size={14} />
+                Quay lại đăng nhập
               </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIsRegister(true)
-                  setErrorMsg(null)
-                  setSuccessMsg(null)
-                }}
-                className={`flex-1 rounded-xl py-2.5 text-xs sm:text-sm font-bold transition-all duration-200 ${
-                  isRegister
-                    ? "bg-white text-slate-900 shadow-xs"
-                    : "text-slate-500 hover:text-slate-800"
-                }`}
-              >
-                Đăng ký tài khoản
-              </button>
-            </div>
+            )}
 
             {/* Header Title */}
             <div>
               <h2 className="text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-                {isRegister ? "Tạo tài khoản mới" : "Chào mừng trở lại"}
+                {isForgot
+                  ? forgotStep === "email"
+                    ? "Quên mật khẩu"
+                    : "Đặt lại mật khẩu mới"
+                  : isRegister
+                    ? registerStep === "otp"
+                      ? "Xác nhận Email đăng ký"
+                      : "Tạo tài khoản mới"
+                    : "Chào mừng trở lại"}
               </h2>
               <p className="mt-1.5 text-xs sm:text-sm text-slate-500">
-                {isRegister
-                  ? "Bắt đầu hành trình định hướng ngành học cá nhân hóa."
-                  : "Đăng nhập để tiếp tục lộ trình và tra cứu đề xuất ngành học."}
+                {isForgot
+                  ? forgotStep === "email"
+                    ? "Nhập email đã đăng ký để nhận mã xác nhận 6 chữ số."
+                    : `Nhập mã 6 chữ số đã gửi tới ${email.trim()} và tạo mật khẩu mới.`
+                  : isRegister
+                    ? registerStep === "otp"
+                      ? `Nhập mã xác nhận 6 chữ số đã gửi tới ${email.trim()} để kích hoạt tài khoản.`
+                      : "Bắt đầu hành trình định hướng ngành học cá nhân hóa."
+                    : "Đăng nhập để tiếp tục lộ trình và tra cứu đề xuất ngành học."}
               </p>
             </div>
 
@@ -423,14 +674,14 @@ export function Login() {
             <form className="mt-6 space-y-4" onSubmit={submit}>
               <AnimatePresence mode="wait">
                 <motion.div
-                  key={isRegister ? "register-form" : "login-form"}
+                  key={`${mode}-${isRegister ? registerStep : forgotStep}`}
                   initial={{ opacity: 0, y: 6 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -6 }}
                   transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
                   className="space-y-4"
                 >
-                  {isRegister && (
+                  {isRegister && registerStep === "form" && (
                     <>
                       {/* Full Name */}
                       <label className="block">
@@ -561,49 +812,181 @@ export function Login() {
                     </>
                   )}
 
-                  {/* Email Field */}
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-bold text-slate-700">
-                      Địa chỉ Email <span className="text-rose-500">*</span>
-                    </span>
-                    <div className="relative">
-                      <Mail
-                        size={18}
-                        className="absolute left-4 top-3.5 text-slate-400"
-                      />
-                      <input
-                        required
-                        type="email"
-                        placeholder="tenban@example.com"
-                        value={email}
-                        onChange={(e) => setEmail(e.target.value)}
-                        className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
-                      />
+                  {/* Register Step 2 OR Forgot Step 2: 6-digit OTP Input */}
+                  {((isRegister && registerStep === "otp") ||
+                    (isForgot && forgotStep === "reset")) && (
+                    <div className="space-y-3 rounded-2xl border border-sky-200/80 bg-sky-50/50 p-4">
+                      <div className="flex items-center gap-2 text-xs font-bold text-sky-800">
+                        <ShieldCheck size={16} className="shrink-0 text-sky-600" />
+                        <span>Mã xác nhận 6 chữ số đã gửi tới {email.trim()}</span>
+                      </div>
+                      <label className="block">
+                        <span className="mb-1.5 block text-xs font-bold text-slate-700">
+                          Nhập mã OTP <span className="text-rose-500">*</span>
+                        </span>
+                        <div className="relative">
+                          <KeyRound
+                            size={18}
+                            className="absolute left-4 top-3.5 text-slate-400"
+                          />
+                          <input
+                            required
+                            type="text"
+                            inputMode="numeric"
+                            autoComplete="one-time-code"
+                            maxLength={6}
+                            placeholder="000000"
+                            value={otpCode}
+                            onChange={(e) =>
+                              setOtpCode(e.target.value.replace(/\D/g, "").slice(0, 6))
+                            }
+                            className="h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-center text-lg font-black tracking-[0.35em] text-slate-900 outline-none transition-all placeholder:tracking-[0.25em] placeholder:text-slate-300 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                          />
+                        </div>
+                      </label>
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                        <button
+                          type="button"
+                          onClick={handleResendOtp}
+                          disabled={resendCooldown > 0 || loading}
+                          className="inline-flex items-center gap-1.5 font-bold text-sky-700 transition hover:text-sky-800 disabled:cursor-not-allowed disabled:text-slate-400"
+                        >
+                          <RotateCcw size={13} />
+                          {resendCooldown > 0
+                            ? `Gửi lại mã sau ${resendCooldown}s`
+                            : "Gửi lại mã xác nhận"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            if (isRegister) setRegisterStep("form")
+                            if (isForgot) setForgotStep("email")
+                            setErrorMsg(null)
+                            setSuccessMsg(null)
+                          }}
+                          className="font-semibold text-slate-500 transition hover:text-slate-800"
+                        >
+                          Đổi email / Quay lại
+                        </button>
+                      </div>
                     </div>
-                  </label>
+                  )}
 
-                  {/* Password Field */}
-                  <label className="block">
-                    <span className="mb-1.5 block text-xs font-bold text-slate-700">
-                      Mật khẩu <span className="text-rose-500">*</span>
-                    </span>
-                    <div className="relative">
-                      <LockKeyhole
-                        size={18}
-                        className="absolute left-4 top-3.5 text-slate-400"
-                      />
-                      <input
-                        required
-                        type="password"
-                        placeholder={
-                          isRegister ? "Tối thiểu 8 ký tự" : "Nhập mật khẩu"
-                        }
-                        value={password}
-                        onChange={(e) => setPassword(e.target.value)}
-                        className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
-                      />
+                  {/* Email Field (Login, Register step 1, Forgot step 1) */}
+                  {(mode === "login" ||
+                    (isRegister && registerStep === "form") ||
+                    (isForgot && forgotStep === "email")) && (
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-bold text-slate-700">
+                        Địa chỉ Email <span className="text-rose-500">*</span>
+                      </span>
+                      <div className="relative">
+                        <Mail
+                          size={18}
+                          className="absolute left-4 top-3.5 text-slate-400"
+                        />
+                        <input
+                          required
+                          type="email"
+                          placeholder="tenban@example.com"
+                          value={email}
+                          onChange={(e) => setEmail(e.target.value)}
+                          className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                        />
+                      </div>
+                    </label>
+                  )}
+
+                  {/* Password Field (Login, Register step 1, Forgot step 2) */}
+                  {(mode === "login" ||
+                    (isRegister && registerStep === "form") ||
+                    (isForgot && forgotStep === "reset")) && (
+                    <div className="block">
+                      <div className="mb-1.5 flex items-center justify-between gap-2">
+                        <span className="text-xs font-bold text-slate-700">
+                          {isForgot ? "Mật khẩu mới" : "Mật khẩu"}{" "}
+                          <span className="text-rose-500">*</span>
+                        </span>
+                        {mode === "login" && (
+                          <button
+                            type="button"
+                            onClick={() => switchMode("forgot")}
+                            className="text-xs font-bold text-sky-600 transition hover:text-sky-700 hover:underline"
+                          >
+                            Quên mật khẩu?
+                          </button>
+                        )}
+                      </div>
+                      <div className="relative">
+                        <LockKeyhole
+                          size={18}
+                          className="absolute left-4 top-3.5 text-slate-400"
+                        />
+                        <input
+                          required
+                          type={showPassword ? "text" : "password"}
+                          placeholder={
+                            mode === "login"
+                              ? "Nhập mật khẩu"
+                              : "Tối thiểu 8 ký tự, chữ hoa, số, ký tự đặc biệt"
+                          }
+                          value={password}
+                          onChange={(e) => setPassword(e.target.value)}
+                          className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-11 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword((v) => !v)}
+                          aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
+                          className="absolute right-3.5 top-3 text-slate-400 transition hover:text-slate-700"
+                        >
+                          {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+
+                      {/* Realtime Password Strength Checklist for Register & Reset Password */}
+                      {(isRegister || isForgot) && (
+                        <PasswordStrengthChecklist password={password} />
+                      )}
                     </div>
-                  </label>
+                  )}
+
+                  {/* Confirm Password Field (Register step 1 & Forgot step 2) */}
+                  {((isRegister && registerStep === "form") ||
+                    (isForgot && forgotStep === "reset")) && (
+                    <label className="block">
+                      <span className="mb-1.5 block text-xs font-bold text-slate-700">
+                        Xác nhận mật khẩu <span className="text-rose-500">*</span>
+                      </span>
+                      <div className="relative">
+                        <LockKeyhole
+                          size={18}
+                          className="absolute left-4 top-3.5 text-slate-400"
+                        />
+                        <input
+                          required
+                          type={showConfirmPassword ? "text" : "password"}
+                          placeholder="Nhập lại mật khẩu giống phía trên"
+                          value={confirmPassword}
+                          onChange={(e) => setConfirmPassword(e.target.value)}
+                          className="h-11 sm:h-12 w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-11 text-sm text-slate-900 outline-none transition-all placeholder:text-slate-400 focus:border-sky-500 focus:ring-4 focus:ring-sky-500/15"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowConfirmPassword((v) => !v)}
+                          aria-label={showConfirmPassword ? "Ẩn mật khẩu xác nhận" : "Hiện mật khẩu xác nhận"}
+                          className="absolute right-3.5 top-3 text-slate-400 transition hover:text-slate-700"
+                        >
+                          {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                        </button>
+                      </div>
+                      {confirmPassword && confirmPassword !== password && (
+                        <p className="mt-1.5 text-xs font-semibold text-rose-600">
+                          Mật khẩu xác nhận chưa khớp.
+                        </p>
+                      )}
+                    </label>
+                  )}
                 </motion.div>
               </AnimatePresence>
 
@@ -615,30 +998,46 @@ export function Login() {
                   className="w-full min-h-12"
                   icon={ArrowRight}
                   loading={loading}
-                  disabled={loading}
+                  disabled={
+                    loading ||
+                    (((isRegister && registerStep === "form") ||
+                      (isForgot && forgotStep === "reset")) &&
+                      password.length > 0 &&
+                      !isStrongPassword(password))
+                  }
                 >
                   {loading
-                    ? "Đang xác thực thông tin..."
-                    : isRegister
-                      ? "Tạo tài khoản mới"
-                      : "Đăng nhập ngay"}
+                    ? "Đang xử lý..."
+                    : isForgot
+                      ? forgotStep === "email"
+                        ? "Gửi mã xác nhận đặt lại mật khẩu"
+                        : "Xác nhận & Đặt lại mật khẩu"
+                      : isRegister
+                        ? registerStep === "form"
+                          ? "Gửi mã xác nhận qua Email"
+                          : "Xác nhận & Tạo tài khoản"
+                        : "Đăng nhập ngay"}
                 </Button>
               </div>
             </form>
 
-            {/* Quick divider */}
-            <div className="my-6 flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
-              <span className="h-px flex-1 bg-slate-200/90" />
-              <span>Hoặc tiếp tục với</span>
-              <span className="h-px flex-1 bg-slate-200/90" />
-            </div>
+            {!isForgot && (
+              <>
+                {/* Quick divider */}
+                <div className="my-6 flex items-center gap-3 text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  <span className="h-px flex-1 bg-slate-200/90" />
+                  <span>Hoặc tiếp tục với</span>
+                  <span className="h-px flex-1 bg-slate-200/90" />
+                </div>
 
-            {/* Google OAuth Login */}
-            <GoogleSignInButton
-              onTokenSuccess={handleGoogleAccessToken}
-              onError={(msg) => setErrorMsg(msg)}
-              disabled={loading}
-            />
+                {/* Google OAuth Login */}
+                <GoogleSignInButton
+                  onTokenSuccess={handleGoogleAccessToken}
+                  onError={(msg) => setErrorMsg(msg)}
+                  disabled={loading}
+                />
+              </>
+            )}
           </div>
         </div>
       </div>

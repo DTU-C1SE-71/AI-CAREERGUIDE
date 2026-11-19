@@ -44,6 +44,19 @@ class Settings(BaseSettings):
     GOOGLE_CLIENT_SECRET: str = ""
     GOOGLE_REDIRECT_URI: str = "http://localhost:5173/login/callback"
 
+    # Email Delivery (SMTP or Resend API) & OTP Verification
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM_EMAIL: str = ""
+    SMTP_FROM_NAME: str = "AI CareerGuide"
+    SMTP_USE_TLS: bool = True
+    RESEND_API_KEY: str = ""
+    OTP_EXPIRE_MINUTES: int = 10
+    OTP_RESEND_COOLDOWN_SECONDS: int = 60
+    OTP_MAX_ATTEMPTS: int = 5
+
     # AI Assistant & LLM Services (Persona: Navi - AI CareerGuide)
     AI_ASSISTANT_NAME: str = "Navi"
     LLM_PROTOCOL: str = "openai_compatible"

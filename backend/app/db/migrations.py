@@ -3,7 +3,13 @@ from sqlalchemy import inspect, text
 from app.core.database import Base
 import app.models
 
-VERSIONS = ("20261116_001_base", "20261116_002_profile_columns", "20261116_003_ai_runtime", "20261117_004_major_explanation")
+VERSIONS = (
+    "20261116_001_base",
+    "20261116_002_profile_columns",
+    "20261116_003_ai_runtime",
+    "20261117_004_major_explanation",
+    "20261119_005_email_otp",
+)
 
 async def migrate(engine):
     async with engine.begin() as conn:
@@ -31,4 +37,8 @@ async def migrate(engine):
             from app.models.insight import MajorExplanationInsight
             await conn.run_sync(lambda c: Base.metadata.create_all(c, tables=[MajorExplanationInsight.__table__]))
             await conn.execute(text("INSERT INTO schema_migrations(version) VALUES (:v)"), {"v": VERSIONS[3]})
+        if VERSIONS[4] not in applied:
+            from app.models.identity import EmailVerificationCode
+            await conn.run_sync(lambda c: Base.metadata.create_all(c, tables=[EmailVerificationCode.__table__]))
+            await conn.execute(text("INSERT INTO schema_migrations(version) VALUES (:v)"), {"v": VERSIONS[4]})
         return list((await conn.execute(text("SELECT version FROM schema_migrations ORDER BY version"))).scalars())

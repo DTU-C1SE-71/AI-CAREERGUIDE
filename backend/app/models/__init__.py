@@ -12,7 +12,7 @@ Includes all entities across the 6 modular services:
 """
 
 from app.core.database import Base
-from app.models.identity import User, UserRole, UserConsent
+from app.models.identity import User, UserRole, UserConsent, EmailVerificationCode
 from app.models.taxonomy import (
     Major,
     SubjectBlock,
@@ -44,6 +44,7 @@ __all__ = [
     "User",
     "UserRole",
     "UserConsent",
+    "EmailVerificationCode",
     "Major",
     "SubjectBlock",
     "MajorSubjectBlock",

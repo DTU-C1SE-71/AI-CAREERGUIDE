@@ -15,6 +15,11 @@ from app.schemas.identity import (
     GoogleLoginRequest,
     GoogleOAuthCallbackRequest,
     UserProfileUpdateRequest,
+    RegisterOTPVerifyRequest,
+    ForgotPasswordRequest,
+    ResetPasswordRequest,
+    OTPActionResponse,
+    MessageResponse,
 )
 from app.services.identity import service
 
@@ -26,6 +31,30 @@ async def register(payload: UserRegisterRequest, db: AsyncSession = Depends(get_
     """Registers a new user account with Argon2id password hashing and logs Law 91/2025/QH15 consent."""
     user = await service.register_user(db, payload)
     return user
+
+
+@router.post("/register/request-otp", response_model=OTPActionResponse, status_code=status.HTTP_200_OK)
+async def register_request_otp(payload: UserRegisterRequest, db: AsyncSession = Depends(get_db)):
+    """Validates registration info (including strong password) and emails a 6-digit verification OTP."""
+    return await service.request_registration_otp(db, payload)
+
+
+@router.post("/register/verify-otp", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+async def register_verify_otp(payload: RegisterOTPVerifyRequest, db: AsyncSession = Depends(get_db)):
+    """Verifies the 6-digit registration OTP, creates the user account, and returns an auth token."""
+    return await service.verify_registration_otp(db, payload)
+
+
+@router.post("/forgot-password", response_model=OTPActionResponse, status_code=status.HTTP_200_OK)
+async def forgot_password(payload: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """Sends a 6-digit password reset OTP to the user's email if the account exists."""
+    return await service.request_password_reset_otp(db, payload)
+
+
+@router.post("/reset-password", response_model=MessageResponse, status_code=status.HTTP_200_OK)
+async def reset_password(payload: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
+    """Verifies the 6-digit reset OTP and updates the user's password with strong password policy."""
+    return await service.reset_password_with_otp(db, payload)
 
 
 @router.post("/login", response_model=TokenResponse)

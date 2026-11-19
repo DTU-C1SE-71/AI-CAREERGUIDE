@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 import enum
 from typing import List, Optional
-from sqlalchemy import String, Boolean, DateTime, Enum, ForeignKey, Text
+from sqlalchemy import String, Boolean, DateTime, Enum, ForeignKey, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -82,3 +82,29 @@ class UserConsent(Base):
 
     # Relationships
     user: Mapped["User"] = relationship("User", back_populates="consents")
+
+
+class EmailVerificationCode(Base):
+    """
+    Stores hashed 6-digit OTP codes for email verification on registration
+    and password reset. Never stores plaintext OTPs or plaintext passwords.
+    """
+    __tablename__ = "email_verification_codes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    email: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
+    purpose: Mapped[str] = mapped_column(
+        String(32), index=True, nullable=False, comment="REGISTER or RESET_PASSWORD"
+    )
+    code_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    pending_payload: Mapped[Optional[str]] = mapped_column(
+        Text, nullable=True, comment="JSON with Argon2id-hashed password and profile fields for REGISTER"
+    )
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
+    )

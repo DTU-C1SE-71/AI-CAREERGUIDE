@@ -24,7 +24,7 @@ from app.core.security import create_access_token, get_password_hash
 from app.main import app
 from app.models.identity import User, UserConsent, UserRole
 
-PASSWORD = "synthetic-password-for-tests-only"
+PASSWORD = "Synthetic-Password-123!"
 ADMIN_ID = uuid.UUID("00000000-0000-0000-0000-000000000099")
 STUDENT_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")
 OTHER_ID = uuid.UUID("00000000-0000-0000-0000-000000000003")

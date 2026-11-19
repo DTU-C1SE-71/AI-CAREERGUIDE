@@ -1,19 +1,44 @@
+import re
 import uuid
 from datetime import datetime
 from typing import Optional
-from pydantic import BaseModel, EmailStr, Field, ConfigDict, model_validator
+from pydantic import BaseModel, EmailStr, Field, ConfigDict, field_validator, model_validator
 from app.models.identity import UserRole
+
+_UPPER_RE = re.compile(r"[A-Z]")
+_LOWER_RE = re.compile(r"[a-z]")
+_DIGIT_RE = re.compile(r"[0-9]")
+_SPECIAL_RE = re.compile(r"[^A-Za-z0-9\s]")
+
+
+def validate_strong_password(value: str) -> str:
+    if len(value) < 8:
+        raise ValueError("Mật khẩu phải có tối thiểu 8 ký tự.")
+    if not _UPPER_RE.search(value):
+        raise ValueError("Mật khẩu phải có ít nhất 1 chữ cái in hoa (A-Z).")
+    if not _LOWER_RE.search(value):
+        raise ValueError("Mật khẩu phải có ít nhất 1 chữ cái thường (a-z).")
+    if not _DIGIT_RE.search(value):
+        raise ValueError("Mật khẩu phải có ít nhất 1 chữ số (0-9).")
+    if not _SPECIAL_RE.search(value):
+        raise ValueError("Mật khẩu phải có ít nhất 1 ký tự đặc biệt (ví dụ: !@#$%^&*).")
+    return value
 
 
 class UserRegisterRequest(BaseModel):
     email: EmailStr
-    password: str = Field(min_length=8, max_length=1024, description="Minimum 8 characters compliant with OWASP ASVS")
+    password: str = Field(min_length=8, max_length=1024, description="Minimum 8 chars with uppercase, lowercase, digit, special char")
     full_name: str = Field(min_length=2, max_length=255)
     role: UserRole = Field(default=UserRole.STUDENT)
     gender: str = Field(default="Khác", max_length=50, description="Giới tính: Nam, Nữ, Khác (bắt buộc)")
     grade_level: str = Field(default="Lớp 12", max_length=50, description="Hiện đang học lớp mấy: Lớp 10, Lớp 11, Lớp 12, Đã tốt nghiệp THPT (bắt buộc)")
     school_class: Optional[str] = Field(None, max_length=50)
     school_name: Optional[str] = Field(None, max_length=255)
+
+    @field_validator("password")
+    @classmethod
+    def check_password_strength(cls, v: str) -> str:
+        return validate_strong_password(v)
 
     @model_validator(mode="after")
     def validate_profile_fields(self):
@@ -102,3 +127,34 @@ class GoogleLoginRequest(BaseModel):
 class GoogleOAuthCallbackRequest(BaseModel):
     code: str = Field(min_length=1, max_length=4096)
     redirect_uri: Optional[str] = Field(None, max_length=2048)
+
+
+class RegisterOTPVerifyRequest(BaseModel):
+    email: EmailStr
+    otp_code: str = Field(pattern=r"^[0-9]{6}$", description="Mã xác nhận 6 chữ số")
+
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    otp_code: str = Field(pattern=r"^[0-9]{6}$", description="Mã xác nhận 6 chữ số")
+    new_password: str = Field(min_length=8, max_length=1024)
+
+    @field_validator("new_password")
+    @classmethod
+    def check_new_password_strength(cls, v: str) -> str:
+        return validate_strong_password(v)
+
+
+class OTPActionResponse(BaseModel):
+    message: str
+    email: EmailStr
+    expires_in_minutes: int
+    cooldown_seconds: int
+
+
+class MessageResponse(BaseModel):
+    message: str

@@ -4,7 +4,7 @@ services:
     env: python
     rootDir: backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: python scripts/init_db.py && uvicorn app.main:app --host 0.0.0.0 --port $PORT
     plan: free
     region: singapore
     envVars:
@@ -25,4 +25,16 @@ services:
       - key: CORS_ORIGINS
         value: https://ai-careerguide-ten.vercel.app
       - key: DATABASE_URL
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        value: "587"
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM_EMAIL
         sync: false
