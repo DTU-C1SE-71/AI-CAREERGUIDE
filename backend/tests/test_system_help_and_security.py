@@ -29,6 +29,9 @@ SECURITY_ATTACK_PROMPTS = [
 
 SYSTEM_HELP_PROMPTS = [
     "Cách sử dụng hệ thống AI CareerGuide như thế nào?",
+    "cách kiểm sử dụng web này",
+    "dùng web này như thế nào",
+    "web này để làm gì",
     "Cách làm bài trắc nghiệm hướng nghiệp ở đâu?",
     "Chế độ Đề xuất ngành có AI dùng để làm gì?",
     "Làm sao tra cứu 435 ngành đào tạo?",

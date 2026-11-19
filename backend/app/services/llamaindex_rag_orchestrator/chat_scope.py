@@ -78,17 +78,17 @@ _FOLLOWUP = re.compile(
 )
 _GREETING = re.compile(r"(?:xin chao|chao(?: ban)?|hello|hi|alo|cam on|thank you)[!?. ]*")
 _SYSTEM_HELP = re.compile(
-    r"\b(cach (?:su dung|dung|xai|thao tac|lam bai|xem|tra cuu|xuat|cap nhat|doi|dang nhap|dang ky)|"
-    r"huong dan (?:su dung|dung|thao tac|lam bai|dang nhap|dang ky)|"
-    r"(?:su dung|dung|xai) (?:he thong|web|trang web|ung dung|app|ai careerguide|careerguide)(?: nay)? (?:nhu the nao|the nao|ra sao|sao)|"
-    r"(?:he thong|web|trang web|ung dung|ai careerguide) nay (?:dung|lam|hoat dong|co nhung tinh nang|co chuc nang)|"
+    r"\b((?:cach|huong dan|chi (?:minh|em|toi|cach)).{0,20}(?:su dung|dung|xai|thao tac|lam bai|xem|tra cuu|xuat|cap nhat|doi|dang nhap|dang ky)|"
+    r"(?:su dung|dung|xai|thao tac).{0,18}(?:he thong|web|trang web|ung dung|app|ai careerguide|careerguide|giao dien)|"
+    r"(?:he thong|web|trang web|ung dung|app|ai careerguide|careerguide).{0,25}(?:su dung|dung|xai|hoat dong|tinh nang|chuc nang|lam gi|de lam gi)|"
     r"tinh nang (?:cua he thong|tren giao dien|cua web|chinh)|"
     r"(?:nam |o )dau tren (?:giao dien|menu|web|he thong)|"
     r"(?:bam|nhan|chon|vao) (?:nut|muc|tab|menu) nao|"
     r"de xuat nganh co ai|thuat toan de xuat|kham pha nganh|danh muc nganh|435 nganh|"
     r"lo trinh 4 tuan|xuat pdf|tai pdf|xem lai cau hoi|xem lich su|lich su lam bai|"
     r"cap nhat (?:ho so|khoi lop|gioi tinh|diem)|doi (?:khoi lop|gioi tinh)|"
-    r"dang nhap google|khong dang nhap duoc|quen mat khau|tao tai khoan|how to use)\b"
+    r"dang nhap google|khong dang nhap duoc|quen mat khau|tao tai khoan|"
+    r"huong dan su dung|tro giup su dung|how to use|user guide)\b"
 )
 
 
