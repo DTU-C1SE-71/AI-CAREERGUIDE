@@ -71,7 +71,7 @@
     - Quên mật khẩu phản hồi trung tính (anti-enumeration), cập nhật mật khẩu mới bằng Argon2id và vô hiệu hóa mã OTP ngay sau khi dùng.
   - **Dịch vụ gửi Email đa kênh qua HTTPS 443 + Fallback (`email_service.py`):**
     - **Lưu ý hạ tầng Render Free:** Render gói Free chặn kết nối ra ngoài ở các cổng SMTP (`25`, `465`, `587`) khiến `smtplib` bị treo timeout.
-    - **Giải pháp:** Tích hợp **Brevo HTTP API v3** (`BREVO_API_KEY`, gửi qua HTTPS cổng `443`, miễn phí 300 email/ngày, gửi được tới mọi email học sinh chỉ cần xác minh 1 Gmail như `aicareerguide67@gmail.com` mà không cần mua tên miền); đặt timeout SMTP nhanh (`6s`) cho môi trường local/VPS và giữ fallback Resend HTTP API.
+    - **Giải pháp:** Hỗ trợ **Google Apps Script HTTPS Webhook** (`MAIL_WEBHOOK_URL` + `MAIL_WEBHOOK_SECRET`, gửi qua HTTPS 443 bằng chính Gmail `MailApp.sendEmail`, miễn phí, không cần xác minh SĐT hay tên miền riêng) và **Brevo HTTP API v3** (`BREVO_API_KEY`); đặt timeout SMTP nhanh (`6s`) cho môi trường local/VPS và giữ fallback Resend HTTP API.
 - **Tệp liên quan:**
   - `backend/app/core/email_service.py`, `backend/app/core/config.py`
   - `backend/app/models/identity.py`, `backend/app/db/migrations.py`

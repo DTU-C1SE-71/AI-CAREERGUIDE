@@ -52,6 +52,8 @@ class Settings(BaseSettings):
     SMTP_FROM_EMAIL: str = ""
     SMTP_FROM_NAME: str = "AI CareerGuide"
     SMTP_USE_TLS: bool = True
+    MAIL_WEBHOOK_URL: str = ""
+    MAIL_WEBHOOK_SECRET: str = ""
     BREVO_API_KEY: str = ""
     RESEND_API_KEY: str = ""
     OTP_EXPIRE_MINUTES: int = 10

@@ -74,6 +74,10 @@ def _build_otp_content(otp_code: str, purpose: OTPPurpose, expire_minutes: int) 
     return subject, plain_text, html
 
 
+def _has_webhook_config() -> bool:
+    return bool(settings.MAIL_WEBHOOK_URL.strip())
+
+
 def _has_brevo_config() -> bool:
     return bool(settings.BREVO_API_KEY.strip())
 
@@ -93,6 +97,30 @@ def _has_resend_config() -> bool:
 def _is_consumer_sender(email: str) -> bool:
     lowered = email.strip().lower()
     return any(lowered.endswith(domain) for domain in _CONSUMER_MAIL_DOMAINS)
+
+
+async def _send_via_webhook(to_email: str, subject: str, plain_text: str, html: str) -> None:
+    """Send email via HTTPS webhook (e.g. Google Apps Script MailApp Web App)."""
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
+        resp = await client.post(
+            settings.MAIL_WEBHOOK_URL.strip(),
+            json={
+                "secret": settings.MAIL_WEBHOOK_SECRET.strip(),
+                "to": to_email,
+                "subject": subject,
+                "text": plain_text,
+                "html": html,
+                "fromName": (settings.SMTP_FROM_NAME or "AI CareerGuide").strip(),
+            },
+        )
+        if resp.status_code >= 400:
+            raise RuntimeError(f"Webhook HTTP {resp.status_code}: {resp.text[:200]}")
+        try:
+            body = resp.json()
+            if isinstance(body, dict) and body.get("ok") is False:
+                raise RuntimeError(f"Webhook rejected: {str(body.get('error') or 'unknown')[:200]}")
+        except ValueError:
+            pass
 
 
 async def _send_via_brevo(to_email: str, subject: str, plain_text: str, html: str) -> None:
@@ -188,6 +216,8 @@ async def send_otp_email(to_email: str, otp_code: str, purpose: OTPPurpose) -> s
     subject, plain_text, html = _build_otp_content(otp_code, purpose, settings.OTP_EXPIRE_MINUTES)
 
     provider_order: list[str] = []
+    if _has_webhook_config():
+        provider_order.append("webhook")
     if _has_brevo_config():
         provider_order.append("brevo")
     if _has_smtp_config():
@@ -197,7 +227,15 @@ async def send_otp_email(to_email: str, otp_code: str, purpose: OTPPurpose) -> s
 
     errors: list[str] = []
     for provider in provider_order:
-        if provider == "brevo":
+        if provider == "webhook":
+            try:
+                await _send_via_webhook(to_email, subject, plain_text, html)
+                return "webhook"
+            except Exception as exc:
+                reason = f"Webhook: {str(exc)[:200]}"
+                errors.append(reason)
+                logger.error("Failed to deliver OTP via %s", reason)
+        elif provider == "brevo":
             try:
                 await _send_via_brevo(to_email, subject, plain_text, html)
                 return "brevo"
