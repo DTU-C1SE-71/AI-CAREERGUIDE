@@ -169,6 +169,8 @@ export function Dashboard() {
   const [skillAnalysis, setSkillAnalysis] =
     useState<StudentSkillAnalysis | null>(null)
   const [skillLoading, setSkillLoading] = useState(false)
+  const skillCacheRef = useRef<Record<string, StudentSkillAnalysis>>({})
+  const inFlightAiFingerprintRef = useRef<string | null>(null)
   const aspirationRequest = useRef(0)
   const profileRef = useRef(effectiveAssessment)
   useEffect(() => { profileRef.current = effectiveAssessment }, [effectiveAssessment])
@@ -243,24 +245,60 @@ export function Dashboard() {
     reloadNonce,
   ])
 
-  // Reset kết quả AI khi chuyển sang lần làm khác hoặc hồ sơ thay đổi.
-  useEffect(() => {
-    setSkillAnalysis(null)
-    setSkillLoading(false)
-  }, [effectiveAssessment, activeHistoryId])
+  // Khóa vân tay theo toàn bộ yếu tố ảnh hưởng thuật toán đề xuất (điểm, lớp, giới tính, RIASEC, nhận thức, nguyện vọng, top ngành).
+  // Chỉ khi vân tay này đổi thì mới cho phép gọi lại AI; ngược lại luôn lấy từ cache/CSDL.
+  const topRecommendedMajorCode = data?.majors?.[0]?.code ?? ""
+  const aiProfileFingerprint = useMemo(
+    () =>
+      JSON.stringify({
+        answers: effectiveAssessment.answers || {},
+        cognitive: effectiveAssessment.cognitive || {},
+        scores: effectiveAssessment.scores || [],
+        aspiration: effectiveAssessment.aspiration || null,
+        grade: profileGradeLevel || "",
+        gender: profileGender || "",
+        topMajor: topRecommendedMajorCode,
+      }),
+    [
+      effectiveAssessment,
+      profileGradeLevel,
+      profileGender,
+      topRecommendedMajorCode,
+    ],
+  )
 
-  // Agent "Phân tích kỹ năng": chỉ gọi AI khi người dùng chủ động mở chế độ "Đề xuất có AI"
-  // để chế độ "Thuật toán đề xuất" hiển thị tức thì, không tốn thời gian chờ AI.
+  // Khi hồ sơ / điểm / lớp / giới tính thay đổi -> hiển thị cache tương ứng nếu đã có, chưa có thì chờ người dùng mở chế độ AI.
+  useEffect(() => {
+    const cached = skillCacheRef.current[aiProfileFingerprint] ?? null
+    setSkillAnalysis(cached)
+    if (cached) {
+      setSkillLoading(false)
+    }
+  }, [aiProfileFingerprint])
+
+  // Agent "Phân tích kỹ năng": chỉ gọi AI khi người dùng chủ động mở chế độ "Đề xuất ngành có AI"
+  // + chống bấm đúp (inFlightAiFingerprintRef) + chỉ gọi lại khi aiProfileFingerprint đổi.
   useEffect(() => {
     if (!hasCompletedAssessment || recommendationMode !== "ai" || !aiAnalysisTriggered) {
       return
     }
-    if (skillAnalysis) {
+    const cached = skillCacheRef.current[aiProfileFingerprint]
+    if (cached) {
+      setSkillAnalysis(cached)
+      setSkillLoading(false)
+      return
+    }
+    if (inFlightAiFingerprintRef.current === aiProfileFingerprint) {
       return
     }
 
     let mounted = true
-    const skillPayload = buildEvaluateProfilePayload(effectiveAssessment)
+    const fingerprintAtStart = aiProfileFingerprint
+    inFlightAiFingerprintRef.current = fingerprintAtStart
+    const skillPayload = buildEvaluateProfilePayload(effectiveAssessment, undefined, {
+      gender: profileGender,
+      grade_level: profileGradeLevel,
+    })
 
     setSkillLoading(true)
     apiRequest<StudentSkillAnalysis | null>(
@@ -268,14 +306,25 @@ export function Dashboard() {
       null,
       {
         method: "POST",
-        body: JSON.stringify({ ...skillPayload, major_code: data?.majors?.[0]?.code }),
+        body: JSON.stringify({
+          ...skillPayload,
+          major_code: topRecommendedMajorCode || undefined,
+        }),
       },
     )
       .then((res) => {
-        if (mounted && res) setSkillAnalysis(res)
+        if (res) {
+          skillCacheRef.current[fingerprintAtStart] = res
+          if (mounted && aiProfileFingerprint === fingerprintAtStart) {
+            setSkillAnalysis(res)
+          }
+        }
       })
       .catch(() => {})
       .finally(() => {
+        if (inFlightAiFingerprintRef.current === fingerprintAtStart) {
+          inFlightAiFingerprintRef.current = null
+        }
         if (mounted) setSkillLoading(false)
       })
 
@@ -286,12 +335,15 @@ export function Dashboard() {
     hasCompletedAssessment,
     recommendationMode,
     aiAnalysisTriggered,
-    skillAnalysis,
+    aiProfileFingerprint,
     effectiveAssessment,
-    data?.majors,
+    profileGender,
+    profileGradeLevel,
+    topRecommendedMajorCode,
   ])
 
   const handleOpenAiMode = () => {
+    if (skillLoading && recommendationMode === "ai") return
     setRecommendationMode("ai")
     setAiAnalysisTriggered(true)
     reportTopRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
@@ -624,7 +676,8 @@ export function Dashboard() {
                 <button
                   type="button"
                   onClick={handleOpenAiMode}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition sm:rounded-2xl sm:text-sm ${
+                  disabled={skillLoading && recommendationMode === "ai"}
+                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition disabled:cursor-wait disabled:opacity-75 sm:rounded-2xl sm:text-sm ${
                     recommendationMode === "ai"
                       ? "bg-indigo-600 text-white shadow-md shadow-indigo-500/20"
                       : "text-slate-600 hover:bg-white hover:text-indigo-700"
@@ -802,9 +855,10 @@ export function Dashboard() {
                     type="button"
                     icon={Sparkles}
                     onClick={handleOpenAiMode}
-                    className="shrink-0 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-extrabold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 sm:text-sm"
+                    disabled={skillLoading}
+                    className="shrink-0 rounded-2xl bg-indigo-600 px-5 py-3 text-xs font-extrabold text-white shadow-lg shadow-indigo-500/20 hover:bg-indigo-700 disabled:cursor-wait disabled:opacity-75 sm:text-sm"
                   >
-                    Mở đề xuất ngành có AI
+                    {skillLoading ? "Đang phân tích AI..." : "Mở đề xuất ngành có AI"}
                   </Button>
                 </div>
               </div>

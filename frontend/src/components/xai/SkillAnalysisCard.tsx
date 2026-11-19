@@ -53,17 +53,27 @@ export function SkillAnalysisCard({
 
   return (
     <div className="glass-card min-w-0 overflow-hidden rounded-2xl p-4 sm:rounded-3xl sm:p-6">
-      <div className="mb-4 flex items-center justify-between gap-2 border-b border-slate-100 pb-3">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3">
         <div className="flex items-center gap-2 text-sm font-bold text-slate-800">
           <Sparkles size={16} className="text-sky-600" />
           <span>Gợi ý tìm hiểu kỹ năng theo hồ sơ</span>
         </div>
-        {loading && (
+        {loading ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 px-3 py-1 text-xs font-semibold text-sky-700">
             <Loader2 size={13} className="animate-spin text-sky-600" />
-            Đang phân tích...
+            Đang phân tích bằng AI...
           </span>
-        )}
+        ) : data?.cached ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
+            <CircleCheck size={12} />
+            Đã tải từ lịch sử CSDL · 0 token
+          </span>
+        ) : data?.is_ai_generated ? (
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-[11px] font-bold text-indigo-700">
+            <Sparkles size={12} />
+            AI vừa phân tích &amp; đã lưu lịch sử
+          </span>
+        ) : null}
       </div>
 
       {data ? (

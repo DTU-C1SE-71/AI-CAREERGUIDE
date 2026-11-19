@@ -88,8 +88,16 @@ async def analyze_student_skills(
     - Kỹ năng cần bổ sung + việc cần làm cụ thể để cải thiện.
     Kết quả được cache theo hồ sơ năng lực để không gọi AI lặp lại.
     """
+    eff_gender = current_user.gender if current_user else payload.gender
+    eff_grade_level = current_user.grade_level if current_user else payload.grade_level
+    resolved_payload = payload.model_copy(
+        update={
+            "gender": eff_gender,
+            "grade_level": eff_grade_level,
+        }
+    )
     return await service.analyze_student_skills(
         db,
-        payload,
+        resolved_payload,
         user_id=current_user.id if current_user else None,
     )

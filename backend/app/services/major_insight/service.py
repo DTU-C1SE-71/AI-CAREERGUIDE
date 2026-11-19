@@ -4,10 +4,12 @@ Public output is deterministic. Cache keys bind active catalog content and the
 resolved actor-owned profile; no generative provider receives these profiles.
 """
 
+import asyncio
 import hashlib
 import json
 import logging
 import uuid
+import weakref
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -26,6 +28,19 @@ from app.schemas.insight import (
 )
 
 logger = logging.getLogger(__name__)
+
+# In-flight lock theo (profile_hash, major_code) để chống bấm đúp / gọi trùng LLM song song.
+_IN_FLIGHT_SKILL_LOCKS: "weakref.WeakValueDictionary[Tuple[str, str], asyncio.Lock]" = (
+    weakref.WeakValueDictionary()
+)
+
+
+def _get_skill_lock(cache_key: Tuple[str, str]) -> asyncio.Lock:
+    lock = _IN_FLIGHT_SKILL_LOCKS.get(cache_key)
+    if lock is None:
+        lock = asyncio.Lock()
+        _IN_FLIGHT_SKILL_LOCKS[cache_key] = lock
+    return lock
 
 RIASEC_LABELS: Dict[str, str] = {
     "R": "Thực tế (thích làm việc cụ thể, máy móc, công cụ)",
@@ -330,6 +345,8 @@ async def analyze_student_skills(
         raise HTTPException(401, "Đăng nhập để xem bản đánh giá đã lưu.")
     raw = payload.model_dump(exclude_unset=True)
     evidence = await resolve_assessment_evidence(db, user_id, raw)
+    eff_grade = (payload.grade_level or "").strip() or None
+    eff_gender = (payload.gender or "").strip() or None
     payload = payload.model_copy(update={
         "riasec_answers": evidence.get("riasec_answers") or {},
         "riasec_scores": evidence.get("riasec_scores") or {},
@@ -338,6 +355,8 @@ async def analyze_student_skills(
         "cognitive_answers": evidence.get("cognitive_preferences") or {},
         "aspiration": evidence.get("aspiration") or {},
         "score_context": evidence.get("score_context") or {},
+        "grade_level": eff_grade,
+        "gender": eff_gender,
     })
     major_code = (payload.major_code or "").strip()
     major_name = None
@@ -346,138 +365,150 @@ async def analyze_student_skills(
         ctx = await _load_major_context(db, major_code)
         major_name = ctx["name"]
     profile_hash = hashlib.sha256(json.dumps({
-        "owner": str(user_id or "guest"), "profile": _profile_hash(payload),
-        "catalog_context": ctx, "policy": "evidence-skills-v3",
+        "owner": str(user_id or "guest"),
+        "profile": _profile_hash(payload),
+        "grade_level": (eff_grade or "").lower(),
+        "gender": (eff_gender or "").lower(),
+        "catalog_context": ctx,
+        "policy": "evidence-skills-v3",
     }, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
 
-    if db is not None:
+    async with _get_skill_lock((profile_hash, major_code)):
+        if db is not None:
+            try:
+                stmt = select(StudentSkillInsight).where(
+                    StudentSkillInsight.profile_hash == profile_hash,
+                    StudentSkillInsight.major_code == major_code,
+                )
+                cached_entry = (await db.execute(stmt)).scalar_one_or_none()
+                if cached_entry and (cached_entry.is_ai_generated or cached_entry.model_name == "evidence-skills-v3"):
+                    return _to_skill_response(cached_entry, cached=True)
+            except Exception as exc:
+                logger.warning("[SkillAgent] Cache read failed: %s", exc)
+
+        summary, strengths, weaknesses, gaps = build_deterministic_skill_analysis(payload, major_name)
+        is_ai = False
+
+        if db is not None and major_name:
+            try:
+                from app.services.ai_config.service import resolve_snapshot
+                from app.services.ai_config import adapter
+                from app.core.config import settings
+
+                snapshot = await resolve_snapshot(db)
+                scores_text = ", ".join(f"{k}: {v}" for k, v in (payload.grades_by_subject or {}).items()) or "Chưa nhập điểm cụ thể"
+                riasec_text = ", ".join(f"{k}: {v}" for k, v in (payload.riasec_scores or {}).items()) or "Chưa có điểm sở thích"
+                context_bits = []
+                if eff_grade:
+                    context_bits.append(f"Khối lớp: {eff_grade}")
+                if eff_gender:
+                    context_bits.append(f"Giới tính: {eff_gender}")
+                context_line = f"- Bối cảnh học sinh: {', '.join(context_bits)}\n" if context_bits else ""
+
+                system_prompt = (
+                    "Bạn là Chuyên gia Cố vấn Kỹ năng & Lộ trình Học tập của hệ thống AI CareerGuide.\n"
+                    f"Nhiệm vụ: Phân tích kỹ năng và khoảng trống năng lực của học sinh đối với ngành **{major_name}**.\n"
+                    f"{context_line}"
+                    f"- Dữ liệu điểm học lực: {scores_text}\n"
+                    f"- Dữ liệu sở thích Holland: {riasec_text}\n\n"
+                    "Hãy trả về JSON object thuần túy theo đúng cấu trúc sau:\n"
+                    "{\n"
+                    '  "summary": "Tóm tắt 1-2 câu ngắn gọn về thế mạnh và năng lực của học sinh đối với ngành này.",\n'
+                    '  "strengths": [{"title": "Tên điểm mạnh nổi bật", "detail": "Giải thích ngắn gọn"}],\n'
+                    '  "weaknesses": [{"title": "Môn học hoặc điểm cần ôn tập", "detail": "Giải thích ngắn gọn"}],\n'
+                    '  "skill_gaps": [\n'
+                    '    {"skill": "Tên kỹ năng chuyên môn cốt lõi cần rèn luyện cho ngành này", "why": "Lý do kỹ năng này cần thiết", "how_to_improve": ["Cách tự rèn luyện 1", "Cách tự học 2"], "priority": "HIGH"}\n'
+                    '  ]\n'
+                    "}"
+                )
+                raw = await adapter.chat(
+                    snapshot,
+                    [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": f"Hãy phân tích kỹ năng và gợi ý rèn luyện cho tôi với ngành {major_name}."},
+                    ],
+                    max_tokens=min(settings.LLM_MAX_TOKENS, 1500),
+                    timeout=min(settings.LLM_TIMEOUT_SECONDS, 45.0),
+                    response_format={"type": "json_object"},
+                )
+                ai_data = json.loads(raw)
+                ai_summary = str(ai_data.get("summary") or "").strip()
+                ai_strengths = [InsightPoint(title=str(p.get("title") or "")[:80], detail=str(p.get("detail") or "")[:200]) for p in ai_data.get("strengths", []) if isinstance(p, dict) and p.get("title")][:3]
+                ai_weaknesses = [InsightPoint(title=str(p.get("title") or "")[:80], detail=str(p.get("detail") or "")[:200]) for p in ai_data.get("weaknesses", []) if isinstance(p, dict) and p.get("title")][:3]
+                ai_gaps = []
+                for g in ai_data.get("skill_gaps", []):
+                    if isinstance(g, dict) and g.get("skill"):
+                        ai_gaps.append(SkillGapItem(
+                            skill=str(g["skill"])[:100],
+                            why=str(g.get("why") or f"Kỹ năng quan trọng cho ngành {major_name}")[:250],
+                            how_to_improve=[str(h) for h in g.get("how_to_improve", []) if str(h).strip()][:3] or ["Tìm hiểu tài liệu chuyên ngành", "Thực hành bài tập thực tế"],
+                            priority=g.get("priority") if g.get("priority") in {"HIGH", "MEDIUM", "LOW"} else "HIGH",
+                        ))
+                if ai_summary and (ai_strengths or ai_gaps):
+                    summary = ai_summary
+                    strengths = ai_strengths or strengths
+                    weaknesses = ai_weaknesses or weaknesses
+                    gaps = ai_gaps or gaps
+                    is_ai = True
+            except Exception as exc:
+                logger.warning("[SkillAgent] AI skill analysis failed for %s: %s", major_name, exc)
+
+        if db is None:
+            return StudentSkillAnalysisResponse(
+                profile_hash=profile_hash,
+                major_code=major_code,
+                summary=summary,
+                strengths=strengths,
+                weaknesses=weaknesses,
+                skill_gaps=gaps,
+                is_ai_generated=is_ai,
+                cached=False,
+            )
+
         try:
             stmt = select(StudentSkillInsight).where(
                 StudentSkillInsight.profile_hash == profile_hash,
                 StudentSkillInsight.major_code == major_code,
             )
-            cached_entry = (await db.execute(stmt)).scalar_one_or_none()
-            if cached_entry and (cached_entry.is_ai_generated or cached_entry.model_name == "evidence-skills-v3"):
-                return _to_skill_response(cached_entry, cached=True)
+            entry = (await db.execute(stmt)).scalar_one_or_none()
+            payload_data = {
+                "user_id": user_id,
+                "summary": summary,
+                "strengths": [p.model_dump() for p in strengths],
+                "weaknesses": [p.model_dump() for p in weaknesses],
+                "skill_gaps": [g.model_dump() for g in gaps],
+                "is_ai_generated": is_ai,
+                "model_name": "evidence-skills-v3",
+            }
+            if entry:
+                for key, value in payload_data.items():
+                    if key == "user_id" and value is None:
+                        continue
+                    setattr(entry, key, value)
+            else:
+                entry = StudentSkillInsight(
+                    id=uuid.uuid4(),
+                    profile_hash=profile_hash,
+                    major_code=major_code,
+                    **payload_data,
+                )
+                db.add(entry)
+            await db.commit()
+            await db.refresh(entry)
+            return _to_skill_response(entry, cached=False)
         except Exception as exc:
-            logger.warning("[SkillAgent] Cache read failed: %s", exc)
-
-    summary, strengths, weaknesses, gaps = build_deterministic_skill_analysis(payload, major_name)
-    is_ai = False
-
-    if db is not None and major_name:
-        try:
-            from app.services.ai_config.service import resolve_snapshot
-            from app.services.ai_config import adapter
-            from app.core.config import settings
-
-            snapshot = await resolve_snapshot(db)
-            scores_text = ", ".join(f"{k}: {v}" for k, v in (payload.grades_by_subject or {}).items()) or "Chưa nhập điểm cụ thể"
-            riasec_text = ", ".join(f"{k}: {v}" for k, v in (payload.riasec_scores or {}).items()) or "Chưa có điểm sở thích"
-
-            system_prompt = (
-                "Bạn là Chuyên gia Cố vấn Kỹ năng & Lộ trình Học tập của hệ thống AI CareerGuide.\n"
-                f"Nhiệm vụ: Phân tích kỹ năng và khoảng trống năng lực của học sinh đối với ngành **{major_name}**.\n"
-                f"- Dữ liệu điểm học lực: {scores_text}\n"
-                f"- Dữ liệu sở thích Holland: {riasec_text}\n\n"
-                "Hãy trả về JSON object thuần túy theo đúng cấu trúc sau:\n"
-                "{\n"
-                '  "summary": "Tóm tắt 1-2 câu ngắn gọn về thế mạnh và năng lực của học sinh đối với ngành này.",\n'
-                '  "strengths": [{"title": "Tên điểm mạnh nổi bật", "detail": "Giải thích ngắn gọn"}],\n'
-                '  "weaknesses": [{"title": "Môn học hoặc điểm cần ôn tập", "detail": "Giải thích ngắn gọn"}],\n'
-                '  "skill_gaps": [\n'
-                '    {"skill": "Tên kỹ năng chuyên môn cốt lõi cần rèn luyện cho ngành này", "why": "Lý do kỹ năng này cần thiết", "how_to_improve": ["Cách tự rèn luyện 1", "Cách tự học 2"], "priority": "HIGH"}\n'
-                '  ]\n'
-                "}"
-            )
-            raw = await adapter.chat(
-                snapshot,
-                [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": f"Hãy phân tích kỹ năng và gợi ý rèn luyện cho tôi với ngành {major_name}."},
-                ],
-                max_tokens=min(settings.LLM_MAX_TOKENS, 1500),
-                timeout=min(settings.LLM_TIMEOUT_SECONDS, 45.0),
-                response_format={"type": "json_object"},
-            )
-            ai_data = json.loads(raw)
-            ai_summary = str(ai_data.get("summary") or "").strip()
-            ai_strengths = [InsightPoint(title=str(p.get("title") or "")[:80], detail=str(p.get("detail") or "")[:200]) for p in ai_data.get("strengths", []) if isinstance(p, dict) and p.get("title")][:3]
-            ai_weaknesses = [InsightPoint(title=str(p.get("title") or "")[:80], detail=str(p.get("detail") or "")[:200]) for p in ai_data.get("weaknesses", []) if isinstance(p, dict) and p.get("title")][:3]
-            ai_gaps = []
-            for g in ai_data.get("skill_gaps", []):
-                if isinstance(g, dict) and g.get("skill"):
-                    ai_gaps.append(SkillGapItem(
-                        skill=str(g["skill"])[:100],
-                        why=str(g.get("why") or f"Kỹ năng quan trọng cho ngành {major_name}")[:250],
-                        how_to_improve=[str(h) for h in g.get("how_to_improve", []) if str(h).strip()][:3] or ["Tìm hiểu tài liệu chuyên ngành", "Thực hành bài tập thực tế"],
-                        priority=g.get("priority") if g.get("priority") in {"HIGH", "MEDIUM", "LOW"} else "HIGH",
-                    ))
-            if ai_summary and (ai_strengths or ai_gaps):
-                summary = ai_summary
-                strengths = ai_strengths or strengths
-                weaknesses = ai_weaknesses or weaknesses
-                gaps = ai_gaps or gaps
-                is_ai = True
-        except Exception as exc:
-            logger.warning("[SkillAgent] AI skill analysis failed for %s: %s", major_name, exc)
-
-    if db is None:
-        return StudentSkillAnalysisResponse(
-            profile_hash=profile_hash,
-            major_code=major_code,
-            summary=summary,
-            strengths=strengths,
-            weaknesses=weaknesses,
-            skill_gaps=gaps,
-            is_ai_generated=is_ai,
-            cached=False,
-        )
-
-    try:
-        stmt = select(StudentSkillInsight).where(
-            StudentSkillInsight.profile_hash == profile_hash,
-            StudentSkillInsight.major_code == major_code,
-        )
-        entry = (await db.execute(stmt)).scalar_one_or_none()
-        payload_data = {
-            "user_id": user_id,
-            "summary": summary,
-            "strengths": [p.model_dump() for p in strengths],
-            "weaknesses": [p.model_dump() for p in weaknesses],
-            "skill_gaps": [g.model_dump() for g in gaps],
-            "is_ai_generated": is_ai,
-            "model_name": "evidence-skills-v3",
-        }
-        if entry:
-            for key, value in payload_data.items():
-                if key == "user_id" and value is None:
-                    continue
-                setattr(entry, key, value)
-        else:
-            entry = StudentSkillInsight(
-                id=uuid.uuid4(),
+            logger.warning("[SkillAgent] Persist failed: %s", exc)
+            try:
+                await db.rollback()
+            except Exception:
+                pass
+            return StudentSkillAnalysisResponse(
                 profile_hash=profile_hash,
                 major_code=major_code,
-                **payload_data,
+                summary=summary,
+                strengths=strengths,
+                weaknesses=weaknesses,
+                skill_gaps=gaps,
+                is_ai_generated=is_ai,
+                cached=False,
             )
-            db.add(entry)
-        await db.commit()
-        await db.refresh(entry)
-        return _to_skill_response(entry, cached=False)
-    except Exception as exc:
-        logger.warning("[SkillAgent] Persist failed: %s", exc)
-        try:
-            await db.rollback()
-        except Exception:
-            pass
-        return StudentSkillAnalysisResponse(
-            profile_hash=profile_hash,
-            major_code=major_code,
-            summary=summary,
-            strengths=strengths,
-            weaknesses=weaknesses,
-            skill_gaps=gaps,
-            is_ai_generated=is_ai,
-            cached=False,
-        )
