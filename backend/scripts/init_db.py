@@ -8,8 +8,10 @@ from app.db.migrations import migrate
 
 async def init_database():
     try:
-        versions=await migrate(engine)
-        print("Applied schema versions: " + ", ".join(versions))
+        versions = await asyncio.wait_for(migrate(engine), timeout=20.0)
+        print("Applied schema versions: " + ", ".join(versions), flush=True)
+    except asyncio.TimeoutError:
+        print("WARNING: init_db migration timed out after 20s; continuing startup.", flush=True)
     finally:
         await engine.dispose()
 
