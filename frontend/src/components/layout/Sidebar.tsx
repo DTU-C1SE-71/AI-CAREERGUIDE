@@ -59,7 +59,7 @@ const mainLinks: Array<{
     icon: Compass,
   },
   {
-    label: "Lộ trình 4 tuần",
+    label: "Lộ trình học",
     href: "/roadmap",
     icon: Map,
     badge: "Soon",

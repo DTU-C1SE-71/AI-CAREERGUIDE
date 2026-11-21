@@ -740,62 +740,36 @@ export function Dashboard() {
             )}
 
             {/* 2 Tabs tách biệt: Đề xuất theo hồ sơ (Mặc định) vs Nguyện vọng với AI */}
-            <div className="mb-4 sm:mb-5 flex flex-col gap-3 rounded-2xl border border-white/80 bg-white/65 p-2 shadow-[0_10px_35px_rgba(14,165,233,0.08)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-2.5">
-              <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto">
-                <button
-                  type="button"
-                  onClick={handleOpenProfileTab}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition sm:rounded-2xl sm:text-sm ${
-                    recommendationMode === "algorithm"
-                      ? "bg-sky-600 text-white shadow-md shadow-sky-500/20"
-                      : "text-slate-600 hover:bg-white hover:text-sky-700"
-                  }`}
-                >
-                  <Compass size={15} className="shrink-0" />
-                  <span>Đề xuất theo hồ sơ</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                      recommendationMode === "algorithm"
-                        ? "bg-white/20 text-white"
-                        : "bg-sky-100 text-sky-700"
-                    }`}
-                  >
-                    Hồ sơ &amp; Kỹ năng
-                  </span>
-                </button>
+            <div className="mb-4 sm:mb-5 inline-flex w-full flex-col gap-2 rounded-2xl border border-white/80 bg-white/65 p-1.5 shadow-[0_10px_35px_rgba(14,165,233,0.08)] backdrop-blur-xl sm:w-auto sm:flex-row sm:items-center sm:rounded-3xl sm:p-2">
+              <button
+                type="button"
+                onClick={handleOpenProfileTab}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-extrabold transition sm:rounded-2xl ${
+                  recommendationMode === "algorithm"
+                    ? "bg-sky-600 text-white shadow-md shadow-sky-500/20"
+                    : "text-slate-600 hover:bg-white hover:text-sky-700"
+                }`}
+              >
+                <Compass size={16} className="shrink-0" />
+                <span>Đề xuất theo hồ sơ</span>
+              </button>
 
-                <button
-                  type="button"
-                  onClick={handleOpenAspirationAiTab}
-                  className={`inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-xs font-extrabold transition sm:rounded-2xl sm:text-sm ${
-                    recommendationMode === "ai"
-                      ? "bg-sky-600 text-white shadow-md shadow-sky-500/20"
-                      : "text-slate-600 hover:bg-white hover:text-sky-700"
-                  }`}
-                >
-                  {aspirationAiLoading ? (
-                    <Loader2 size={15} className="shrink-0 animate-spin" />
-                  ) : (
-                    <Sparkles size={15} className="shrink-0" />
-                  )}
-                  <span>Nguyện vọng với AI</span>
-                  <span
-                    className={`rounded-full px-2 py-0.5 text-[10px] font-bold ${
-                      recommendationMode === "ai"
-                        ? "bg-white/20 text-white"
-                        : "bg-sky-100 text-sky-700"
-                    }`}
-                  >
-                    Đánh giá nghề mơ ước
-                  </span>
-                </button>
-              </div>
-
-              <p className="px-2 text-[11px] font-medium text-slate-500 sm:text-right sm:text-xs">
-                {recommendationMode === "algorithm"
-                  ? "Tổng hợp hồ sơ Holland, phễu đề xuất ngành 2 tầng và phân tích kỹ năng theo hồ sơ."
-                  : "AI đối chiếu nghề mơ ước với hồ sơ thực tế và gợi ý ngành phù hợp hơn."}
-              </p>
+              <button
+                type="button"
+                onClick={handleOpenAspirationAiTab}
+                className={`inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-extrabold transition sm:rounded-2xl ${
+                  recommendationMode === "ai"
+                    ? "bg-sky-600 text-white shadow-md shadow-sky-500/20"
+                    : "text-slate-600 hover:bg-white hover:text-sky-700"
+                }`}
+              >
+                {aspirationAiLoading ? (
+                  <Loader2 size={16} className="shrink-0 animate-spin" />
+                ) : (
+                  <Sparkles size={16} className="shrink-0" />
+                )}
+                <span>Nguyện vọng với AI</span>
+              </button>
             </div>
 
             {recommendationMode === "algorithm" ? (

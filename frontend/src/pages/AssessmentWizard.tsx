@@ -24,7 +24,6 @@ import {
   HIGH_SCHOOL_SUBJECTS,
   type SubjectGrade,
 } from "../components/assessment/AcademicInputForm"
-import { CareerAspirationStep } from "../components/assessment/CareerAspirationStep"
 import { CognitiveOptionIcon } from "../components/assessment/CognitiveOptionIcon"
 import {
   LiveRiasecHexagon,
@@ -115,8 +114,7 @@ export function AssessmentWizard() {
   )
   const submittingRef = useRef(false)
   const [submitting, setSubmitting] = useState(false)
-  const [cardScale, setCardScale] = useState<"normal" | "large">("large")
-  const [step, setStep] = useState<number>(assessment.step || 1)
+  const [step, setStep] = useState<number>(() => Math.min(assessment.step || 1, 3))
   const [scores, setScores] = useState<Record<string, number>>(() => {
     const mapped = Object.fromEntries(
       assessment.scores.map((s) => [s.subject, s.score])
@@ -529,7 +527,7 @@ export function AssessmentWizard() {
     recordCompletedAttempt({
       ...assessment,
       answers: finalAnswers,
-      step: 4,
+      step: 3,
       scores: normalizedScores,
       aspiration: skipAspiration ? undefined : effectiveAspiration,
       completed: true,
@@ -734,9 +732,6 @@ export function AssessmentWizard() {
     )
   }
 
-  const stageWidthClass =
-    cardScale === "large" ? "max-w-4xl xl:max-w-5xl" : "max-w-3xl xl:max-w-4xl"
-
   return (
     <section className="relative overflow-x-clip py-2.5 sm:py-4">
       {/* Ambient Animated Liquid Glass Background Orbs */}
@@ -759,9 +754,9 @@ export function AssessmentWizard() {
         className="pointer-events-none absolute right-1/4 top-28 h-72 w-72 rounded-full bg-cyan-300/20 blur-3xl"
       />
 
-      {/* Scalable Container: Fluid Responsive Width aligned across monitors */}
-      <PageContainer className={`relative z-10 transition-all duration-200 ${stageWidthClass}`}>
-        {/* Top Header: Prominent Back Button & Scale Toggle */}
+      {/* Spacious Container: Default wide responsive stage aligned across monitors */}
+      <PageContainer className="relative z-10 max-w-4xl xl:max-w-5xl">
+        {/* Top Header: Prominent Back Button */}
         <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2.5">
           <button
             type="button"
@@ -779,19 +774,11 @@ export function AssessmentWizard() {
             <ArrowLeft className="size-4 text-sky-600" />
             <span>Quay lại</span>
           </button>
-
-          <button
-            type="button"
-            onClick={() => setCardScale((prev) => (prev === "large" ? "normal" : "large"))}
-            className="inline-flex items-center gap-1.5 rounded-xl border border-white/85 bg-white/75 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700"
-          >
-            <span>{cardScale === "large" ? "Khung hiển thị: Rộng rãi" : "Khung hiển thị: Gọn"}</span>
-          </button>
         </div>
 
         {/* Top Liquid Glass Step Bar */}
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
-          {/* 4 Main Steps */}
+          {/* 3 Main Steps */}
           <div className="flex flex-wrap items-center gap-1.5">
             {[
               { id: 1, label: "1. Sở thích", done: allRiasecGroupsCovered },
@@ -804,16 +791,8 @@ export function AssessmentWizard() {
                 id: 3,
                 label: "3. Điểm số",
                 done:
-                  (Object.values(scores).filter((v) => typeof v === "number")
-                    .length >= 3 &&
-                    step > 3) ||
-                  assessment.completed,
-              },
-              {
-                id: 4,
-                label: "4. Nguyện vọng",
-                done:
-                  Boolean(aspiration.dreamJob?.trim()) || assessment.completed,
+                  Object.values(scores).filter((v) => typeof v === "number")
+                    .length >= 3 || assessment.completed,
               },
             ].map((s) => {
               const active = step === s.id
@@ -948,7 +927,7 @@ export function AssessmentWizard() {
                   </motion.button>
 
                   {/* Unified Vertical Bento Card (Illustration + Question + 5 Emoticon Ratings) */}
-                  <div className={`relative w-full transition-all duration-200 ${cardScale === "large" ? "max-w-3xl xl:max-w-4xl" : "max-w-2xl xl:max-w-3xl"}`}>
+                  <div className="relative w-full max-w-3xl xl:max-w-4xl">
                     {/* Subtle Stacked Depth Card Behind */}
                     <div className="pointer-events-none absolute inset-x-4 -bottom-2 top-4 rounded-3xl border border-white/60 bg-white/35 backdrop-blur-xl" />
 
@@ -960,7 +939,6 @@ export function AssessmentWizard() {
                         total={ONET_MINI_IP_ITEMS.length}
                         selectedValue={currentCardValue}
                         direction={slideDirection}
-                        cardScale={cardScale}
                         onRate={rateCurrentCard}
                         onNext={goToNextCard}
                         onPrev={goToPrevCard}
@@ -1082,7 +1060,7 @@ export function AssessmentWizard() {
                       goToPrevCog()
                     }
                   }}
-                  className={`w-full mx-auto rounded-3xl border border-white/90 bg-white/75 p-4 sm:p-6 lg:p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition-all duration-200 ${cardScale === "large" ? "max-w-3xl xl:max-w-4xl" : "max-w-2xl xl:max-w-3xl"}`}
+                  className="mx-auto w-full max-w-3xl xl:max-w-4xl rounded-3xl border border-white/90 bg-white/75 p-4 sm:p-6 lg:p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl"
                 >
                   {/* Top Header Pills + Mobile Nav */}
                   <div className="mb-3.5 sm:mb-4 flex items-center justify-between gap-2">
@@ -1214,24 +1192,6 @@ export function AssessmentWizard() {
           </div>
         )}
 
-        {/* ==================== STEP 4: CAREER ASPIRATION & AI AGENT CROSS-CHECK ==================== */}
-        {step === 4 && (
-          <div className="rounded-3xl border border-white/90 bg-white/65 p-5 sm:p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl">
-            <CareerAspirationStep
-              value={aspiration}
-              onChange={(nextAspiration) =>
-                update({ aspiration: nextAspiration })
-              }
-              interestEvidence={{
-                status: totalRiasecAnswered === 30 ? "COMPLETE" : totalRiasecAnswered > 0 ? "PARTIAL" : "MISSING",
-                groups: RIASEC_ORDER.map(code => ({ code, percent: riasecGroupCounts[code] ? riasecGroupPct[code] : null, answered: riasecGroupCounts[code], total: 5 })),
-              }}
-              readOnly={isReviewMode}
-              onSkip={isReviewMode || submitting ? undefined : () => handleCompleteAssessment(true)}
-            />
-          </div>
-        )}
-
         {/* Clean Bottom Action Bar */}
         <div className="mt-3 flex items-center justify-between gap-3 sm:mt-4">
           <Button
@@ -1288,63 +1248,38 @@ export function AssessmentWizard() {
             )}
 
             {step === 3 && (
-              <Button
-                icon={ArrowRight}
-                className="text-sm sm:text-base px-5 py-2.5"
-                disabled={
-                  !isReviewMode &&
-                  Object.values(scores).some(value => !Number.isFinite(value) || value < 0 || value > 10)
-                }
-                onClick={() => {
-                  setStep(4)
-                  update({ step: 4 })
-                  window.scrollTo({ top: 0, behavior: "smooth" })
-                }}
-              >
-                {isReviewMode ? "Xem tiếp: Nguyện vọng" : "Tiếp tục: Nguyện vọng"}
-              </Button>
-            )}
-
-            {step === 4 && (
               <div className="flex flex-wrap items-center justify-end gap-2.5 sm:gap-3">
                 {isReviewMode ? (
                   <>
                     <Button
                       variant="secondary"
-                      className="px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-700 hover:bg-slate-100 border-slate-300"
+                      className="border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 sm:text-sm"
                       onClick={() => setSessionStarted(false)}
                     >
                       Đóng xem lại
                     </Button>
                     <Button
                       icon={LayoutDashboard}
-                      className="px-5 py-2.5 text-xs sm:text-sm font-black bg-sky-600 text-white shadow-md hover:bg-sky-700"
+                      className="bg-sky-600 px-5 py-2.5 text-xs font-black text-white shadow-md hover:bg-sky-700 sm:text-sm"
                       onClick={() => navigate("/dashboard")}
                     >
                       Mở Dashboard kết quả
                     </Button>
                   </>
                 ) : (
-                  <>
-                    <Button
-                      variant="secondary"
-                      className="px-4 py-2.5 text-xs sm:text-sm font-bold text-slate-600 hover:bg-slate-100 hover:text-slate-900 border-slate-300"
-                      disabled={submitting}
-                      onClick={() => handleCompleteAssessment(true)}
-                    >
-                      Bỏ qua & Xem kết quả
-                    </Button>
-                    <Button
-                      icon={Check}
-                      className="px-5 py-2.5 text-xs sm:text-sm font-extrabold"
-                      disabled={submitting}
-                      onClick={() => handleCompleteAssessment(false)}
-                    >
-                      {submitting ? "Đang đồng bộ…" : aspiration.dreamJob?.trim()
-                        ? "Phân tích & Xem kết quả"
-                        : "Xem kết quả phân tích"}
-                    </Button>
-                  </>
+                  <Button
+                    icon={Check}
+                    className="px-5 py-2.5 text-xs font-extrabold sm:text-sm"
+                    disabled={
+                      submitting ||
+                      Object.values(scores).some(
+                        (value) => !Number.isFinite(value) || value < 0 || value > 10,
+                      )
+                    }
+                    onClick={() => handleCompleteAssessment(false)}
+                  >
+                    {submitting ? "Đang đồng bộ…" : "Hoàn tất & Xem kết quả"}
+                  </Button>
                 )}
               </div>
             )}
@@ -1552,7 +1487,6 @@ function VerticalQuestionCard({
   total,
   selectedValue,
   direction,
-  cardScale = "large",
   onRate,
   onNext,
   onPrev,
@@ -1562,7 +1496,6 @@ function VerticalQuestionCard({
   total: number
   selectedValue?: number
   direction: number
-  cardScale?: "normal" | "large"
   onRate: (value: number) => void
   onNext: () => void
   onPrev: () => void
@@ -1570,8 +1503,6 @@ function VerticalQuestionCard({
   const x = useMotionValue(0)
   const rotate = useTransform(x, [-200, 200], [-4, 4])
   const scaleDrag = useTransform(x, [-200, 0, 200], [0.98, 1, 0.98])
-
-  const isLarge = cardScale === "large"
 
   return (
     <motion.div
@@ -1610,9 +1541,7 @@ function VerticalQuestionCard({
         duration: 0.25,
         ease: [0.22, 1, 0.36, 1],
       }}
-      className={`relative flex flex-col cursor-grab active:cursor-grabbing select-none overflow-hidden rounded-3xl border border-white/90 bg-white/75 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_48px_rgba(14,165,233,0.14)] backdrop-blur-2xl transition-all duration-200 ${
-        isLarge ? "p-4 sm:p-6" : "p-3.5 sm:p-5"
-      }`}
+      className="relative flex flex-col cursor-grab active:cursor-grabbing select-none overflow-hidden rounded-3xl border border-white/90 bg-white/75 p-4 sm:p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_48px_rgba(14,165,233,0.14)] backdrop-blur-2xl"
     >
       {/* Specular Top Reflection */}
       <div className="pointer-events-none absolute inset-x-8 top-0 h-px bg-gradient-to-r from-transparent via-white to-transparent" />
@@ -1622,13 +1551,7 @@ function VerticalQuestionCard({
 
       {/* 2. Question Content (Balanced Typography & Generous Spacing) */}
       <div className="my-2.5 sm:my-4 text-center px-1">
-        <h2
-          className={`font-black tracking-tight text-slate-900 leading-snug transition-all ${
-            isLarge
-              ? "text-lg sm:text-xl lg:text-2xl"
-              : "text-base sm:text-lg"
-          }`}
-        >
+        <h2 className="text-lg sm:text-xl lg:text-2xl font-black tracking-tight text-slate-900 leading-snug">
           {item.titleVi}
         </h2>
       </div>
@@ -1649,22 +1572,16 @@ function VerticalQuestionCard({
                 e.stopPropagation()
                 onRate(btn.value)
               }}
-              className={`flex min-h-[48px] sm:min-h-[56px] flex-col items-center justify-center rounded-2xl border text-center transition-all duration-150 cursor-pointer ${
-                isLarge ? "py-2.5 sm:py-3 px-1.5 sm:px-2" : "py-2 px-1"
-              } ${
+              className={`flex min-h-[48px] sm:min-h-[56px] flex-col items-center justify-center rounded-2xl border px-1.5 py-2.5 text-center transition-all duration-150 cursor-pointer sm:px-2 sm:py-3 ${
                 active
                   ? "border-sky-400 bg-gradient-to-b from-sky-500 to-cyan-500 text-white shadow-[0_8px_20px_rgba(14,165,233,0.3)] scale-[1.03]"
                   : "border-white/90 bg-white/80 text-slate-700 shadow-xs hover:border-sky-300 hover:bg-white active:scale-95"
               }`}
             >
-              <span className={isLarge ? "text-xl sm:text-2xl leading-none" : "text-lg sm:text-xl leading-none"}>
+              <span className="text-xl sm:text-2xl leading-none">
                 {btn.emoji}
               </span>
-              <span
-                className={`mt-1 font-extrabold tracking-tight leading-tight ${
-                  isLarge ? "text-xs sm:text-sm" : "text-[11px]"
-                }`}
-              >
+              <span className="mt-1 text-xs sm:text-sm font-extrabold tracking-tight leading-tight">
                 {btn.label}
               </span>
             </motion.button>
