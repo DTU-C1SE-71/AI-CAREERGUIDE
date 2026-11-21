@@ -504,7 +504,7 @@ export function TwoTierFunnelRecommendation({
                               to={`/majors/${major.id || major.code}`}
                               className="inline-flex items-center gap-1 text-xs font-bold text-sky-600 transition hover:gap-1.5 hover:text-sky-800"
                             >
-                              <span>Khám phá chi tiết & lộ trình</span>
+                              <span>Xem chi tiết ngành</span>
                               <ChevronRight size={15} />
                             </Link>
                           </div>

@@ -53,7 +53,7 @@ export function QuestionIllustrationFrame({
   const meta = RIASEC_META[item.dimension]
 
   return (
-    <div className="relative aspect-[16/10] sm:aspect-[16/9] lg:aspect-[2.1/1] max-h-60 sm:max-h-72 w-full overflow-hidden rounded-2xl border border-white/85 bg-gradient-to-br from-sky-100 via-sky-50 to-cyan-100 shadow-sm">
+    <div className="relative h-[clamp(132px,22vh,235px)] w-full overflow-hidden rounded-2xl border border-white/85 bg-gradient-to-br from-sky-100 via-sky-50 to-cyan-100 shadow-sm">
       {/* Skeleton Loading State */}
       {!loaded && !errored && (
         <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-gradient-to-r from-sky-100/80 via-white/90 to-sky-100/80 animate-pulse">

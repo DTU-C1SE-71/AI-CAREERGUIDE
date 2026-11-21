@@ -39,7 +39,7 @@ export function MainLayout() {
 
       <motion.div
         initial={false}
-        animate={{ paddingLeft: desktop ? (collapsed ? 84 : 284) : 0 }}
+        animate={{ paddingLeft: desktop ? (collapsed ? 84 : 260) : 0 }}
         transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
         className="relative z-10 flex min-h-screen min-w-0 flex-col overflow-x-clip pt-18 lg:pt-0"
       >

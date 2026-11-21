@@ -157,6 +157,16 @@
   2. **Tab 2 — `Nguyện vọng với AI`:** Tách riêng đánh giá nghề mơ ước qua endpoint mới `POST /api/v1/major-insights/aspiration-ai` (Smart DB Cache trong `student_skill_insights` dưới `major_code="ASPIRATION_AI"`, tuân thủ cảnh báo PA 3 `STRONG_VETO`, chỉ chọn `better_majors` từ mã ngành thật trong danh mục, có nút **Đổi nghề mơ ước** trực tiếp), bỏ phần lặp thanh Holland và rút gọn thông số thẻ ngành.
   3. **Đồng bộ hệ màu:** Thay toàn bộ lớp `indigo` trên Dashboard và các thẻ phân tích bằng hệ `Sky (#0284c7 / #0ea5e9) + Slate`.
 
+### 3.4. Đánh dấu Lộ trình 4 tuần là `Coming Soon` & Đồng bộ hiển thị Laptop / Màn hình rời
+- **Lộ trình học 4 tuần $\rightarrow$ Coming Soon (`Sidebar.tsx`, `RoadmapView.tsx`, `MajorDetail.tsx`, `TwoTierFunnelRecommendation.tsx`, `AspirationAlignmentCard.tsx`):**
+  1. Gắn nhãn `Soon` tại mục `Lộ trình 4 tuần` trên Sidebar.
+  2. Chuyển `/roadmap` sang màn hình **Coming Soon** theo hệ màu `Sky + Slate`, giới thiệu các tính năng sắp ra mắt và điều hướng về `/dashboard`, `/majors`.
+  3. Cập nhật các nút/thẻ dẫn lộ trình trên `MajorDetail.tsx`, `TwoTierFunnelRecommendation.tsx` và `AspirationAlignmentCard.tsx`.
+- **Đồng bộ hiển thị giữa Laptop (Scale 125%–150%, chiều cao thấp) & Màn hình rời (Full HD/2K+, Scale 100%) (`index.css`, `MainLayout.tsx`, `Sidebar.tsx`, `OnetSwipeCardVisual.tsx`, `AssessmentWizard.tsx`, `Dashboard.tsx`):**
+  1. Bổ sung media query giữ cỡ chữ gốc tối thiểu `17px` ($\ge 1600\text{px}$) và `17.5px` ($\ge 1900\text{px}$) để màn hình rời hiển thị sắc nét, không bị chữ nhỏ.
+  2. Thu gọn nhẹ bề rộng Sidebar mở rộng từ `268px` xuống `244px` (`paddingLeft: 260px`) để nhường thêm không gian ngang trên màn hình Laptop.
+  3. Đặt chiều cao khung ảnh minh họa RIASEC co giãn theo viewport (`clamp(132px, 22vh, 235px)`), đồng bộ một trục chiều rộng chung (`stageWidthClass`: `max-w-4xl xl:max-w-5xl` hoặc `max-w-3xl xl:max-w-4xl`) và nén padding dọc trên `/assessment` & `/dashboard` để thẻ câu hỏi + 5 nút chọn + nút tiếp tục hiển thị trọn vẹn trong 1 màn hình Laptop và thẳng hàng trên màn hình rời.
+
 ---
 
 ## 4. Danh mục Đầy đủ Tính năng của Hệ thống
@@ -179,7 +189,7 @@
    - Tiện ích: **Lịch sử các lần làm bài**, **Làm lại**, **Xuất báo cáo PDF**.
 5. **Danh mục 435 Ngành đào tạo (`/majors` & `/majors/:code`):**
    - Tra cứu toàn bộ 435 ngành chuẩn Bộ GD&ĐT theo mã ngành, tên ngành, bộ lọc lĩnh vực; trang chi tiết gồm nội dung đào tạo, khối xét tuyển, cơ hội nghề nghiệp và giải thích phù hợp.
-6. **Lộ trình 4 tuần (`/roadmap`):** Kế hoạch trải nghiệm ngành học và ôn tập theo từng tuần.
+6. **Lộ trình 4 tuần (`/roadmap`):** Đang hiển thị ở trạng thái **Coming Soon** (gắn nhãn `Soon` trên Sidebar) chờ phát triển tính năng cá nhân hóa theo lộ trình kỹ năng.
 7. **Trợ lý AI / Cố vấn AI (Drawer & Page):**
    - Hỏi đáp hướng nghiệp, học tập/lập trình, hướng dẫn sử dụng giao diện AI CareerGuide; thanh cuộn ngang chống tràn code/bảng; lớp bảo mật 3 tầng chống prompt injection và lộ thông tin nội bộ.
 8. **Tìm kiếm nhanh toàn cục (Command Palette):** Tìm nhanh ngành học & điều hướng trên mọi màn hình.

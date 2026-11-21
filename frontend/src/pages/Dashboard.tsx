@@ -550,10 +550,10 @@ export function Dashboard() {
   const displayName = user?.name || data?.user_name || "Học sinh"
 
   return (
-    <section className="py-6 sm:py-9 lg:py-11" ref={reportTopRef}>
+    <section className="py-4 sm:py-6 lg:py-8" ref={reportTopRef}>
       <PageContainer>
         {/* Header */}
-        <div className="mb-6 flex flex-col justify-between gap-4 sm:mb-8 lg:flex-row lg:items-end">
+        <div className="mb-4 flex flex-col justify-between gap-3 sm:mb-5 lg:flex-row lg:items-end">
           <div className="min-w-0">
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-sky-600">
               <Sparkles size={14} />
@@ -740,7 +740,7 @@ export function Dashboard() {
             )}
 
             {/* 2 Tabs tách biệt: Đề xuất theo hồ sơ (Mặc định) vs Nguyện vọng với AI */}
-            <div className="mb-6 flex flex-col gap-3 rounded-2xl border border-white/80 bg-white/65 p-2 shadow-[0_10px_35px_rgba(14,165,233,0.08)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-2.5">
+            <div className="mb-4 sm:mb-5 flex flex-col gap-3 rounded-2xl border border-white/80 bg-white/65 p-2 shadow-[0_10px_35px_rgba(14,165,233,0.08)] backdrop-blur-xl sm:flex-row sm:items-center sm:justify-between sm:rounded-3xl sm:p-2.5">
               <div className="grid w-full grid-cols-1 gap-2 sm:flex sm:w-auto">
                 <button
                   type="button"
@@ -810,7 +810,7 @@ export function Dashboard() {
                           <p className="text-xs font-bold uppercase tracking-wider text-sky-700">
                             Hồ sơ Định hướng
                           </p>
-                          <h2 className="mt-1 break-words text-lg font-bold text-slate-900 sm:text-xl xl:text-2xl">
+                          <h2 className="mt-1 break-words text-base font-bold leading-snug text-slate-900 sm:text-lg 2xl:text-xl">
                             {archetypeTitle}
                           </h2>
                         </div>

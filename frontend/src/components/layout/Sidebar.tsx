@@ -32,7 +32,12 @@ interface SidebarProps {
   onOpenChat: () => void
 }
 
-const mainLinks = [
+const mainLinks: Array<{
+  label: string
+  href: string
+  icon: typeof BarChart3
+  badge?: string
+}> = [
   {
     label: "Tổng quan",
     href: "/",
@@ -57,6 +62,7 @@ const mainLinks = [
     label: "Lộ trình 4 tuần",
     href: "/roadmap",
     icon: Map,
+    badge: "Soon",
   },
 ]
 
@@ -200,7 +206,7 @@ function SidebarBody({
       <div className="sidebar-scroll mt-5 min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-0.5">
         <nav aria-label="Điều hướng chính">
           <div className="space-y-1.5">
-            {mainLinks.map(({ label, href, icon: Icon }) => (
+            {mainLinks.map(({ label, href, icon: Icon, badge }) => (
               <NavLink
                 key={href}
                 to={href}
@@ -239,6 +245,11 @@ function SidebarBody({
                         }`}
                       >
                         {label}
+                      </span>
+                    )}
+                    {!collapsed && badge && (
+                      <span className="relative z-10 shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-sky-700">
+                        {badge}
                       </span>
                     )}
                   </>
@@ -501,7 +512,7 @@ export function Sidebar({
 
       <motion.aside
         initial={false}
-        animate={{ width: collapsed ? 68 : 268 }}
+        animate={{ width: collapsed ? 68 : 244 }}
         transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
         className="glass-sidebar fixed bottom-3 left-3 top-3 z-50 hidden overflow-hidden rounded-3xl p-3 lg:block"
       >

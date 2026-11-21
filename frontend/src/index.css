@@ -20,6 +20,18 @@
     caret-color: #0284c7;
   }
 
+  @media (min-width: 1600px) and (min-height: 850px) {
+    html {
+      font-size: max(17px, clamp(15px, 14.2px + 0.14vw, 18.5px));
+    }
+  }
+
+  @media (min-width: 1900px) and (min-height: 920px) {
+    html {
+      font-size: max(17.5px, clamp(15px, 14.2px + 0.14vw, 18.5px));
+    }
+  }
+
   body {
     min-width: 320px;
     background: #f4f8fb;

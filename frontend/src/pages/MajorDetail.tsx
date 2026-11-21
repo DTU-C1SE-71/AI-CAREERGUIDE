@@ -381,10 +381,10 @@ export function MajorDetail() {
 
             <Link
               to={`/roadmap?major=${major.code}&name=${encodeURIComponent(major.name)}`}
-              className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-4 py-2 text-xs font-bold text-white shadow-sm transition hover:bg-sky-500"
+              className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-100"
             >
               <Compass size={14} />
-              Xem lộ trình 4 tuần
+              <span>Lộ trình 4 tuần · Coming Soon</span>
             </Link>
           </div>
         </div>
@@ -503,18 +503,23 @@ export function MajorDetail() {
               loading={insightLoading}
             />
 
-            {/* Quick 4-Week Roadmap CTA */}
-            <Card className="rounded-3xl p-6 border border-sky-100 bg-gradient-to-br from-white/95 to-sky-50/50 shadow-xs">
+            {/* Quick 4-Week Roadmap Coming Soon Card */}
+            <Card className="rounded-3xl border border-sky-100 bg-gradient-to-br from-white/95 to-sky-50/50 p-6 shadow-xs">
               <div className="flex items-start gap-3.5">
                 <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-sky-600 text-white shadow-sm">
                   <CircleCheck size={20} />
                 </div>
-                <div>
-                  <h3 className="text-sm font-extrabold text-slate-900">
-                    Lộ trình 4 tuần thử thách
-                  </h3>
-                  <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                    Khám phá chi tiết các cột mốc tuần tự hóa từ căn bản đến sản phẩm đầu tay cho ngành {major.name}.
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <h3 className="text-sm font-extrabold text-slate-900">
+                      Lộ trình 4 tuần
+                    </h3>
+                    <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-sky-700">
+                      Coming Soon
+                    </span>
+                  </div>
+                  <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+                    Tính năng lộ trình hành động 4 tuần theo ngành {major.name} đang được phát triển và sẽ sớm ra mắt.
                   </p>
                 </div>
               </div>
@@ -522,8 +527,8 @@ export function MajorDetail() {
                 to={`/roadmap?major=${major.code}&name=${encodeURIComponent(major.name)}`}
                 className="mt-4 block"
               >
-                <Button icon={ArrowRight} className="w-full justify-center text-xs">
-                  Mở lộ trình học tập 4 tuần
+                <Button variant="secondary" icon={ArrowRight} className="w-full justify-center text-xs">
+                  Lộ trình 4 tuần · Coming Soon
                 </Button>
               </Link>
             </Card>

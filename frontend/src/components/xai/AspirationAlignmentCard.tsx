@@ -121,7 +121,7 @@ function MajorBriefTile({
       </div>
 
       <span className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-xs font-semibold text-sky-700 group-hover:text-sky-800">
-        Xem ngành &amp; lộ trình <ArrowUpRight className="size-4" />
+        Xem chi tiết ngành <ArrowUpRight className="size-4" />
       </span>
     </Link>
   )
@@ -146,7 +146,7 @@ function SuggestionMajorCard({ suggestion }: { suggestion: AspirationMajorSugges
         <p className="mt-1.5 text-xs leading-relaxed text-slate-600">{suggestion.reason}</p>
       </div>
       <span className="mt-3 flex items-center justify-between border-t border-slate-100 pt-2 text-xs font-semibold text-sky-700 group-hover:text-sky-800">
-        Xem ngành &amp; lộ trình <ArrowUpRight className="size-4" />
+        Xem chi tiết ngành <ArrowUpRight className="size-4" />
       </span>
     </Link>
   )

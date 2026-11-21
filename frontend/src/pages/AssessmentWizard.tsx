@@ -636,8 +636,8 @@ export function AssessmentWizard() {
   const hasCompletedAttempt = Boolean(assessment.completed || history.length > 0)
   if (hasCompletedAttempt && !sessionStarted) {
     return (
-      <section className="relative flex min-h-[80vh] items-center justify-center py-8 sm:py-14 overflow-x-clip">
-        <PageContainer className="relative z-10 w-full max-w-4xl">
+      <section className="relative flex min-h-[72vh] items-center justify-center overflow-x-clip py-6 sm:py-10">
+        <PageContainer className="relative z-10 w-full max-w-4xl xl:max-w-5xl">
           {/* Nút quay lại trang phía ngoài (Dashboard) */}
           <div className="mb-6 flex items-center justify-between">
             <button
@@ -734,8 +734,11 @@ export function AssessmentWizard() {
     )
   }
 
+  const stageWidthClass =
+    cardScale === "large" ? "max-w-4xl xl:max-w-5xl" : "max-w-3xl xl:max-w-4xl"
+
   return (
-    <section className="relative py-4 sm:py-6 overflow-x-clip">
+    <section className="relative overflow-x-clip py-2.5 sm:py-4">
       {/* Ambient Animated Liquid Glass Background Orbs */}
       <motion.div
         animate={{
@@ -756,10 +759,10 @@ export function AssessmentWizard() {
         className="pointer-events-none absolute right-1/4 top-28 h-72 w-72 rounded-full bg-cyan-300/20 blur-3xl"
       />
 
-      {/* Scalable Container: Fluid Responsive Width across monitor sizes */}
-      <PageContainer className={`relative z-10 transition-all duration-200 ${cardScale === "large" ? "max-w-4xl lg:max-w-5xl 2xl:max-w-6xl" : "max-w-3xl lg:max-w-4xl 2xl:max-w-5xl"}`}>
+      {/* Scalable Container: Fluid Responsive Width aligned across monitors */}
+      <PageContainer className={`relative z-10 transition-all duration-200 ${stageWidthClass}`}>
         {/* Top Header: Prominent Back Button & Scale Toggle */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2.5">
           <button
             type="button"
             onClick={() => {
@@ -771,28 +774,23 @@ export function AssessmentWizard() {
                 navigate("/dashboard")
               }
             }}
-            className="inline-flex items-center gap-2 rounded-2xl border border-white/90 bg-white/75 px-4 py-2 text-xs sm:text-sm font-extrabold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700 hover:shadow-sm"
+            className="inline-flex items-center gap-2 rounded-2xl border border-white/90 bg-white/75 px-4 py-2 text-xs font-extrabold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700 hover:shadow-sm sm:text-sm"
           >
             <ArrowLeft className="size-4 text-sky-600" />
             <span>Quay lại</span>
           </button>
 
-          <div className="flex items-center gap-2">
-            <span className="hidden sm:inline text-xs font-bold text-slate-500">
-              Kích thước giao diện:
-            </span>
-            <button
-              type="button"
-              onClick={() => setCardScale((prev) => (prev === "large" ? "normal" : "large"))}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/85 bg-white/70 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700"
-            >
-              <span>{cardScale === "large" ? "Thu nhỏ (Vừa)" : "Phóng to (Lớn)"}</span>
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setCardScale((prev) => (prev === "large" ? "normal" : "large"))}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/85 bg-white/75 px-3 py-1.5 text-xs font-bold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700"
+          >
+            <span>{cardScale === "large" ? "Khung hiển thị: Rộng rãi" : "Khung hiển thị: Gọn"}</span>
+          </button>
         </div>
 
         {/* Top Liquid Glass Step Bar */}
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
           {/* 4 Main Steps */}
           <div className="flex flex-wrap items-center gap-1.5">
             {[
@@ -910,11 +908,11 @@ export function AssessmentWizard() {
 
         {/* ==================== STEP 1: VERTICAL QUESTION CARD + ILLUSTRATION + 5 EMOTICONS ==================== */}
         {step === 1 && (
-          <div className="space-y-4">
+          <div className="space-y-2.5 sm:space-y-3">
             {step1Mode === "swipe" && (
               <>
                 {/* Compact Progress Track */}
-                <div className={`mx-auto flex items-center gap-3 px-1 transition-all duration-200 ${cardScale === "large" ? "max-w-2xl lg:max-w-3xl xl:max-w-4xl" : "max-w-md lg:max-w-lg"}`}>
+                <div className="mx-auto flex w-full items-center gap-3 px-1 transition-all duration-200">
                   <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
                     <motion.div
                       animate={{
@@ -935,7 +933,7 @@ export function AssessmentWizard() {
                 <HelpGuideCollapsible />
 
                 {/* Vertical Card Stage: Generous Responsive Stage */}
-                <div className={`relative mx-auto flex w-full items-center justify-center gap-3 sm:gap-4 transition-all duration-200 ${cardScale === "large" ? "max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "max-w-xl lg:max-w-2xl"}`}>
+                <div className="relative mx-auto flex w-full items-center justify-center gap-2.5 sm:gap-4 transition-all duration-200">
                   {/* Left Arrow Button (Previous Question) */}
                   <motion.button
                     type="button"
@@ -944,15 +942,15 @@ export function AssessmentWizard() {
                     disabled={cardIndex === 0}
                     onClick={goToPrevCard}
                     aria-label="Câu trước"
-                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
+                    className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
                   >
-                    <ChevronLeft className="size-6" />
+                    <ChevronLeft className="size-5" />
                   </motion.button>
 
                   {/* Unified Vertical Bento Card (Illustration + Question + 5 Emoticon Ratings) */}
-                  <div className={`relative w-full transition-all duration-200 ${cardScale === "large" ? "max-w-2xl lg:max-w-3xl xl:max-w-4xl" : "max-w-md lg:max-w-xl"}`}>
+                  <div className={`relative w-full transition-all duration-200 ${cardScale === "large" ? "max-w-3xl xl:max-w-4xl" : "max-w-2xl xl:max-w-3xl"}`}>
                     {/* Subtle Stacked Depth Card Behind */}
-                    <div className="pointer-events-none absolute inset-x-4 -bottom-2.5 top-4 rounded-3xl border border-white/60 bg-white/35 backdrop-blur-xl" />
+                    <div className="pointer-events-none absolute inset-x-4 -bottom-2 top-4 rounded-3xl border border-white/60 bg-white/35 backdrop-blur-xl" />
 
                     <AnimatePresence mode="wait" custom={slideDirection}>
                       <VerticalQuestionCard
@@ -978,9 +976,9 @@ export function AssessmentWizard() {
                     disabled={cardIndex >= ONET_MINI_IP_ITEMS.length - 1}
                     onClick={goToNextCard}
                     aria-label="Câu tiếp theo"
-                    className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
+                    className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_6px_18px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
                   >
-                    <ChevronRight className="size-6" />
+                    <ChevronRight className="size-5" />
                   </motion.button>
                 </div>
               </>
@@ -1032,9 +1030,9 @@ export function AssessmentWizard() {
 
         {/* ==================== STEP 2: RELATABLE COGNITIVE SCENARIO CARDS ==================== */}
         {step === 2 && currentCog && (
-          <div className="space-y-4">
+          <div className="space-y-2.5 sm:space-y-3">
             {/* Compact Step 2 Progress Track */}
-            <div className={`mx-auto flex items-center gap-3 px-1 transition-all duration-200 ${cardScale === "large" ? "max-w-2xl lg:max-w-3xl xl:max-w-4xl" : "max-w-xl"}`}>
+            <div className="mx-auto flex w-full items-center gap-3 px-1 transition-all duration-200">
               <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
                 <motion.div
                   animate={{
@@ -1053,7 +1051,7 @@ export function AssessmentWizard() {
               </span>
             </div>
 
-            <div className={`relative mx-auto flex w-full items-center justify-center gap-3 sm:gap-4 transition-all duration-200 ${cardScale === "large" ? "max-w-3xl lg:max-w-4xl xl:max-w-5xl" : "max-w-2xl"}`}>
+            <div className="relative mx-auto flex w-full items-center justify-center gap-2.5 sm:gap-4 transition-all duration-200">
               <motion.button
                 type="button"
                 whileHover={{ scale: 1.08 }}
@@ -1061,9 +1059,9 @@ export function AssessmentWizard() {
                 disabled={cogIndex === 0}
                 onClick={goToPrevCog}
                 aria-label="Câu trước"
-                className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-md backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
+                className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-md backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
               >
-                <ChevronLeft className="size-6" />
+                <ChevronLeft className="size-5" />
               </motion.button>
 
               <AnimatePresence mode="wait" custom={cogDirection}>
@@ -1084,10 +1082,10 @@ export function AssessmentWizard() {
                       goToPrevCog()
                     }
                   }}
-                  className={`w-full mx-auto rounded-3xl border border-white/90 bg-white/75 p-6 sm:p-8 lg:p-9 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition-all duration-200 ${cardScale === "large" ? "max-w-2xl lg:max-w-3xl xl:max-w-4xl" : "max-w-xl"}`}
+                  className={`w-full mx-auto rounded-3xl border border-white/90 bg-white/75 p-4 sm:p-6 lg:p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl transition-all duration-200 ${cardScale === "large" ? "max-w-3xl xl:max-w-4xl" : "max-w-2xl xl:max-w-3xl"}`}
                 >
                   {/* Top Header Pills + Mobile Nav */}
-                  <div className="mb-4 sm:mb-5 flex items-center justify-between gap-2">
+                  <div className="mb-3.5 sm:mb-4 flex items-center justify-between gap-2">
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="rounded-full border border-sky-200/80 bg-white/90 px-3 py-1 text-xs font-black tabular-nums text-sky-800 shadow-2xs">
                         {cogIndex + 1} / {cognitiveQuestions.length}
@@ -1122,12 +1120,12 @@ export function AssessmentWizard() {
                   </div>
 
                   {/* Relatable Scenario Question */}
-                  <h2 className="mb-5 sm:mb-6 text-base sm:text-lg lg:text-xl font-bold leading-snug text-slate-900">
+                  <h2 className="mb-4 sm:mb-5 text-base sm:text-lg lg:text-xl font-bold leading-snug text-slate-900">
                     {currentCog.subtitle}
                   </h2>
 
                   {/* 4 Two-Tier Context Cards */}
-                  <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                  <div className="grid grid-cols-1 gap-2.5 sm:gap-3 sm:grid-cols-2">
                     {currentCog.options.map((opt) => {
                       const isSelected =
                         String(currentCogValue) === opt.option_key
@@ -1191,9 +1189,9 @@ export function AssessmentWizard() {
                 disabled={cogIndex >= cognitiveQuestions.length - 1}
                 onClick={goToNextCog}
                 aria-label="Câu tiếp theo"
-                className="hidden sm:grid size-12 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-md backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
+                className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-md backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
               >
-                <ChevronRight className="size-6" />
+                <ChevronRight className="size-5" />
               </motion.button>
             </div>
           </div>
@@ -1235,7 +1233,7 @@ export function AssessmentWizard() {
         )}
 
         {/* Clean Bottom Action Bar */}
-        <div className="mt-5 flex items-center justify-between gap-3">
+        <div className="mt-3 flex items-center justify-between gap-3 sm:mt-4">
           <Button
             variant="ghost"
             icon={ArrowLeft}
@@ -1613,7 +1611,7 @@ function VerticalQuestionCard({
         ease: [0.22, 1, 0.36, 1],
       }}
       className={`relative flex flex-col cursor-grab active:cursor-grabbing select-none overflow-hidden rounded-3xl border border-white/90 bg-white/75 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_20px_48px_rgba(14,165,233,0.14)] backdrop-blur-2xl transition-all duration-200 ${
-        isLarge ? "p-6 sm:p-8 lg:p-9" : "p-5 sm:p-6"
+        isLarge ? "p-4 sm:p-6" : "p-3.5 sm:p-5"
       }`}
     >
       {/* Specular Top Reflection */}
@@ -1623,21 +1621,21 @@ function VerticalQuestionCard({
       <QuestionIllustrationFrame item={item} index={index} total={total} />
 
       {/* 2. Question Content (Balanced Typography & Generous Spacing) */}
-      <div className="my-4 sm:my-6 text-center px-1">
+      <div className="my-2.5 sm:my-4 text-center px-1">
         <h2
           className={`font-black tracking-tight text-slate-900 leading-snug transition-all ${
             isLarge
-              ? "text-xl sm:text-2xl lg:text-3xl"
-              : "text-lg sm:text-xl"
+              ? "text-lg sm:text-xl lg:text-2xl"
+              : "text-base sm:text-lg"
           }`}
         >
           {item.titleVi}
         </h2>
       </div>
 
-      {/* 3. 5-Level Rating Emoticons with 52px+ Comfortable Tap Targets */}
-      <div className="pt-4 border-t border-sky-100/80">
-        <div className="grid grid-cols-5 gap-2 sm:gap-3">
+      {/* 3. 5-Level Rating Emoticons with 48px+ Comfortable Tap Targets */}
+      <div className="border-t border-sky-100/80 pt-3">
+        <div className="grid grid-cols-5 gap-2 sm:gap-2.5">
         {ONET_REACTION_SCALE.map((btn) => {
           const active = selectedValue === btn.value
           return (
@@ -1651,19 +1649,19 @@ function VerticalQuestionCard({
                 e.stopPropagation()
                 onRate(btn.value)
               }}
-              className={`flex min-h-[52px] sm:min-h-[62px] flex-col items-center justify-center rounded-2xl border text-center transition-all duration-150 cursor-pointer ${
-                isLarge ? "py-3 sm:py-3.5 px-1.5 sm:px-2.5" : "py-2 px-1"
+              className={`flex min-h-[48px] sm:min-h-[56px] flex-col items-center justify-center rounded-2xl border text-center transition-all duration-150 cursor-pointer ${
+                isLarge ? "py-2.5 sm:py-3 px-1.5 sm:px-2" : "py-2 px-1"
               } ${
                 active
                   ? "border-sky-400 bg-gradient-to-b from-sky-500 to-cyan-500 text-white shadow-[0_8px_20px_rgba(14,165,233,0.3)] scale-[1.03]"
                   : "border-white/90 bg-white/80 text-slate-700 shadow-xs hover:border-sky-300 hover:bg-white active:scale-95"
               }`}
             >
-              <span className={isLarge ? "text-2xl sm:text-3xl leading-none" : "text-xl leading-none"}>
+              <span className={isLarge ? "text-xl sm:text-2xl leading-none" : "text-lg sm:text-xl leading-none"}>
                 {btn.emoji}
               </span>
               <span
-                className={`mt-1.5 font-extrabold tracking-tight leading-tight ${
+                className={`mt-1 font-extrabold tracking-tight leading-tight ${
                   isLarge ? "text-xs sm:text-sm" : "text-[11px]"
                 }`}
               >
