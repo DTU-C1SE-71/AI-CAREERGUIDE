@@ -104,7 +104,11 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-21
-- **`fix(trend-agent): respect adapter 4096 max_tokens budget via batching and extract object error messages`**
+- **`feat(ai-runtime): raise adapter max_tokens to 65536, timeout to 90s and use per-model caps in trend agent`**
+  - Mở trần ngân sách trong `backend/app/services/ai_config/adapter.py`: `1 <= max_tokens <= 65536` và timeout tới `90` giây.
+  - Bổ sung `_max_output_tokens_for_model` trong `backend/app/services/taxonomy/trend_agent.py` tự động cấp đúng trần tối đa của từng model xKiro (`65536` cho `mistral-medium-3.5`/`mistral-small-2603`/`command-a-plus`/`sensenova-6.8-flash-lite`, `32768` cho `command-a-reasoning`, `16384` cho `mistral-large-2512`, `8192` cho `command-a`/`ministral-14b`), gom tới `100` ứng viên trong 1 lượt gọi với `timeout=38s`.
+  - Kiểm chứng: `python -m py_compile` (Pass); script kiểm thử tự động các mức trần `8192`/`16384`/`32768`/`65536` và xử lý 60 ngành trong 1 lượt (Pass).
+- **`160b718` — `fix(trend-agent): respect adapter 4096 max_tokens budget via batching and extract object error messages`**
   - Sửa lỗi `HTTP 422` (`TOKEN_BUDGET`) phát sinh từ `backend/app/services/ai_config/adapter.py` (`1 <= max_tokens <= 4096`) bằng cách đưa `max_tokens=4096`, `timeout=25` và chia danh sách ứng viên trong `_refine_tiers_with_llm` (`backend/app/services/taxonomy/trend_agent.py`) thành từng lô tối đa `20` ngành/lần gọi.
   - Cập nhật `extractApiError` trong `frontend/src/components/admin/TrendAgentPanel.tsx` để đọc thêm `detail.message` khi backend trả JSON object `{ code, message }`.
   - Kiểm chứng: `python -m py_compile` (Pass); script kiểm thử 6 mẫu lỗi 502, bóc JSON markdown và chia lô 45 ngành (Pass); `npm run build` & `npm test` (12/12 pass).

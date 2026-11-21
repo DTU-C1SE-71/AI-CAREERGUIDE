@@ -117,7 +117,7 @@ async def _request_json(snapshot: ConfigSnapshot, suffix: str, data: dict | None
         async with _semaphore():
             addresses = await asyncio.to_thread(resolve_target_addresses, snapshot.base_url, snapshot.binding)
             url, headers, extensions = _pinned_request(snapshot, addresses[0], suffix)
-            async with httpx.AsyncClient(timeout=httpx.Timeout(min(max(timeout, 1), 30)), follow_redirects=False, trust_env=False) as client:
+            async with httpx.AsyncClient(timeout=httpx.Timeout(min(max(timeout, 1), 90)), follow_redirects=False, trust_env=False) as client:
                 async with client.stream("POST" if data is not None else "GET", url, headers=headers, content=body, extensions=extensions) as response:
                     # Cấm redirect trước cả khi đọc body.
                     if 300 <= response.status_code < 400:
@@ -129,7 +129,7 @@ async def _request_json(snapshot: ConfigSnapshot, suffix: str, data: dict | None
                             raise AIConfigError("RESPONSE_LIMIT", "Phản hồi provider vượt giới hạn.", 502)
                     return _redact(_safe_json(bytes(chunks), response.status_code), snapshot.credential)
     try:
-        return await asyncio.wait_for(run(), timeout=min(max(timeout, 1), 30))
+        return await asyncio.wait_for(run(), timeout=min(max(timeout, 1), 90))
     except (asyncio.TimeoutError, httpx.TimeoutException):
         raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ.", 504) from None
     except httpx.RequestError:
@@ -139,13 +139,13 @@ async def _request_json(snapshot: ConfigSnapshot, suffix: str, data: dict | None
 def _request_json_sync_worker(snapshot: ConfigSnapshot, suffix: str, data: dict | None = None, *, timeout: float = 20) -> dict:
     _validate_snapshot(snapshot)
     body = _body(data)
-    deadline = time.monotonic() + min(max(timeout, 1), 30)
+    deadline = time.monotonic() + min(max(timeout, 1), 90)
     addresses = resolve_target_addresses(snapshot.base_url, snapshot.binding)
     if time.monotonic() >= deadline:
         raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ trước khi kết nối.", 504)
     url, headers, extensions = _pinned_request(snapshot, addresses[0], suffix)
     try:
-        with httpx.Client(timeout=httpx.Timeout(min(max(timeout, 1), 30)), follow_redirects=False, trust_env=False) as client:
+        with httpx.Client(timeout=httpx.Timeout(min(max(timeout, 1), 90)), follow_redirects=False, trust_env=False) as client:
             with client.stream("POST" if data is not None else "GET", url, headers=headers, content=body, extensions=extensions) as response:
                 if 300 <= response.status_code < 400:
                     return _safe_json(b"{}", response.status_code)
@@ -168,7 +168,7 @@ def _request_json_sync(snapshot: ConfigSnapshot, suffix: str, data: dict | None 
     # Cả DNS lẫn HTTP sync phải có deadline. Worker daemon giữ slot tới khi
     # đóng client; DNS hệ điều hành bị treo không sinh vô hạn worker mới.
     _validate_snapshot(snapshot)
-    budget = min(max(timeout, 1), 30)
+    budget = min(max(timeout, 1), 90)
     started = time.monotonic()
     if not _SYNC_SLOTS.acquire(timeout=min(budget, 1)):
         raise AIConfigError("AI_BUSY", "Đã đạt giới hạn tác vụ AI đồng thời.", 429)
@@ -193,8 +193,8 @@ def _request_json_sync(snapshot: ConfigSnapshot, suffix: str, data: dict | None 
 
 
 def _chat_body(snapshot: ConfigSnapshot, messages: list[dict], max_tokens: int, response_format: dict | None) -> dict:
-    if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or not 1 <= max_tokens <= 4096:
-        raise AIConfigError("TOKEN_BUDGET", "Ngân sách đầu ra phải từ 1 đến 4096 token.")
+    if isinstance(max_tokens, bool) or not isinstance(max_tokens, int) or not 1 <= max_tokens <= 65536:
+        raise AIConfigError("TOKEN_BUDGET", "Ngân sách đầu ra phải từ 1 đến 65536 token.")
     if not isinstance(messages, list) or not 1 <= len(messages) <= 32:
         raise AIConfigError("CONTEXT_LIMIT", "Số lượt hội thoại AI vượt giới hạn.")
     for message in messages:
