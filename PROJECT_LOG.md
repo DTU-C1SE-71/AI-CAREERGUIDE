@@ -2,7 +2,7 @@
 
 > **Mục đích file:** Tài liệu nhật ký tập trung, tối ưu để bất kỳ AI / lập trình viên nào đọc vào đầu phiên làm việc mới đều nắm ngay kiến trúc, quy ước bất biến, lịch sử thay đổi theo commit và quy trình kiểm thử/triển khai của dự án **AI CareerGuide**.
 >
-> **Cập nhật lần cuối:** 2026-11-21 (HEAD trước commit tạo log: `d42f2ce`, nhánh `develop`)
+> **Cập nhật lần cuối:** 2026-11-21 (HEAD: `713b0a5`, nhánh `develop`)
 > **Tài liệu kỹ thuật chi tiết đi kèm:** `docs/ENGINEERING_NOTES.md`, `docs/AUDIT_AND_HANDOFF_REPORT.md`, `AGENTS.md`
 
 ---
@@ -14,7 +14,7 @@
   - **Frontend:** React 19 + TypeScript + Vite 8 + Tailwind CSS v4 + Framer Motion + Recharts (`frontend/`).
   - **Backend:** FastAPI + Python 3.11/3.12 + SQLAlchemy Async + Pydantic v2 + Argon2id + PyJWT (`backend/`).
   - **Database:** PostgreSQL (`Supabase`, Project ID `uwggiegmkwfayeutjrty`) trên production; SQLite (`backend/app/db/careerguide_active.db`) cho chạy thử cục bộ.
-  - **AI / Search:** Cấu hình LLM Runtime động (OpenAI-compatible / Gemini / OpenRouter qua `ai_config`, mã hóa API key bằng Fernet) + Tavily Search cho Trend Discovery & HITL RAG.
+  - **AI / Search:** Cấu hình LLM Runtime động qua **xKiro AI Gateway** (`https://api.xkiro.com/v1`, bắt buộc dùng model ID có vendor prefix như `mistralai/...`, `cohere/...`, `sensenova/...`; mặc định `mistralai/mistral-large-2512`, danh sách chọn nhanh qua `LLM_AVAILABLE_MODELS`, mã hóa API key DB bằng Fernet qua `AI_CONFIG_ENCRYPTION_KEY`) + Tavily Search cho Trend Discovery & HITL RAG.
 - **Hạ tầng Production:**
   - **Frontend (Vercel):** `https://ai-careerguide-ten.vercel.app` (proxy `/api/*` sang Render qua `frontend/vercel.json`, timeout mặc định 45s cho cold-start).
   - **Backend (Render Free):** `https://ai-careerguide-bny3.onrender.com` (`startCommand`: `python scripts/init_db.py && uvicorn app.main:app --host 0.0.0.0 --port $PORT`).
@@ -50,7 +50,9 @@
 6. **Trend Discovery Agent (`Zero Fabrication`):**
    - `backend/app/services/recommender/trend_agent.py` **tuyệt đối không** bốc ngành có sẵn từ DB hay bịa nguồn bài báo. Chỉ chấp nhận ngành xuất hiện trực tiếp trong ít nhất 1 bài báo thực (`evidence_score >= 2.0`, khớp biên từ chặt); nếu không có ngành khớp trả `status: "no_matching_majors"`, `trending_majors: []`.
 7. **Bảo mật & Tài khoản Admin:**
-   - Không hardcode mật khẩu Admin hay API key trong code git.
+   - Không hardcode mật khẩu Admin, khóa Fernet hay API key trong code git / file log.
+   - Đã **xóa hoàn toàn** chức năng hiển thị lại API key ở trang Admin (không còn nút "Hiện key trong 15 giây", đã xóa `POST /api/v1/admin/ai-config/reveal`, `reveal_supported` luôn là `False`).
+   - Chọn nhiều model động ở trang Admin qua biến `LLM_AVAILABLE_MODELS` (phân cách dấu phẩy) kết hợp khóa mã hóa `AI_CONFIG_ENCRYPTION_KEY` trên Render khi chuyển sang nguồn `DATABASE`.
    - Enum quyền trong DB (`user_role_enum`) là chữ **IN HOA**: `'STUDENT'`, `'ADMIN'`.
    - Mật khẩu lưu bằng **Argon2id** (`backend/app/core/security.py`), không bao giờ ghi plaintext vào `hashed_password`.
    - Hỗ trợ bootstrap Admin trên Render qua biến môi trường trong `backend/scripts/init_db.py`: `BOOTSTRAP_ADMIN_EMAIL`, `BOOTSTRAP_ADMIN_PASSWORD`, `BOOTSTRAP_ADMIN_NAME`, `BOOTSTRAP_ADMIN_RESET_PASSWORD`.
@@ -102,9 +104,10 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-21
-- **`feat(admin-ai): remove API key reveal and support env-driven LLM_AVAILABLE_MODELS`**
+- **`713b0a5` — `feat(admin-ai): remove API key reveal and support env-driven LLM_AVAILABLE_MODELS` + Cấu hình Render xKiro**
   - Xóa hoàn toàn chức năng hiển thị lại API key ở trang Admin cả Frontend (`LLMConnectionPanel.tsx`: bỏ nút `"Hiện key trong 15 giây"`, state/handler `reveal`) lẫn Backend (`router.py`: xóa `POST /admin/ai-config/reveal`, `service.py`: xóa `reveal_credential` và khóa `reveal_supported = False`).
   - Bổ sung biến môi trường `LLM_AVAILABLE_MODELS` (phân cách bằng dấu phẩy trong `.env` / Render) vào `backend/app/core/config.py`, trả qua `AIConfigStatus.available_models` và hiển thị động trong `ModelQuickSelect.tsx` để Admin chọn nhanh model trên giao diện.
+  - Cấu hình production trên Render chuyển sang **xKiro AI Gateway** (`https://api.xkiro.com/v1`), `LLM_MODEL=mistralai/mistral-large-2512`, `LLM_AVAILABLE_MODELS` gồm 8 model miễn phí đã lọc (`mistralai/mistral-large-2512`, `mistralai/mistral-medium-3.5`, `mistralai/mistral-small-2603`, `cohere/command-a-plus`, `cohere/command-a`, `cohere/command-a-reasoning`, `mistralai/ministral-14b`, `sensenova/sensenova-6.8-flash-lite`) và bổ sung khóa Fernet `AI_CONFIG_ENCRYPTION_KEY` (không lưu giá trị secret trong repo).
   - Kiểm chứng: `python -m py_compile` (4 file Python) thành công; `npm run build` (`tsc -b && vite build`) và `npm test` (12/12 pass).
 - **`d42f2ce` — `feat(auth): support env-driven admin bootstrap in init_db.py`**
   - Thêm `bootstrap_admin_from_env()` vào `backend/scripts/init_db.py` để tự tạo hoặc nâng quyền `ADMIN` trên Render/Supabase thông qua biến môi trường `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` mà không hardcode mật khẩu trong repo.
