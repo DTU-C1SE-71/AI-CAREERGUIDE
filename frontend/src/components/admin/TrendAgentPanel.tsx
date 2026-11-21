@@ -102,27 +102,32 @@ function formatRunTime(iso?: string | null): string {
 }
 
 const DEFAULT_TREND_QUERY_2026 =
-  "dự báo nhu cầu nhân lực thị trường lao động Việt Nam 2026 ngành mũi nhọn AI bán dẫn y tế kinh tế xanh"
+  "dự báo nhu cầu nhân lực Việt Nam 2026: trí tuệ nhân tạo, an ninh mạng, kỹ thuật phần mềm, khoa học dữ liệu, toán ứng dụng, công nghệ bán dẫn, khoa học vật liệu; thiết kế vi mạch, cơ điện tử, tự động hóa, kỹ thuật robot, kỹ thuật ô tô, điện tử viễn thông, công nghệ thực phẩm, an toàn thực phẩm, kiến trúc, kỹ thuật xây dựng; quản trị kinh doanh, digital marketing, thương mại điện tử, fintech, logistics, kinh tế số, tâm lý học, luật kinh tế, luật thương mại quốc tế; y khoa, dược học, điều dưỡng, kỹ thuật xét nghiệm y học, công nghệ sinh học, nông nghiệp công nghệ cao, nuôi trồng thủy sản, bác sĩ thú y; công nghệ giáo dục, giáo dục tiểu học, sư phạm tin học, ngôn ngữ anh, ngôn ngữ trung quốc, truyền thông đa phương tiện, quan hệ công chúng, thiết kế đồ họa, nghệ thuật số; quản trị khách sạn, ngành du lịch, khai thác vận tải, quản lý hoạt động bay, khoa học hàng hải, phát triển bền vững, ESG, quản lý tài nguyên môi trường, công tác xã hội, an ninh không gian mạng, điều tra hình sự"
 
 const TREND_QUERY_PRESETS: Array<{ label: string; query: string }> = [
   {
-    label: "Toàn cảnh Nhân lực 2026",
+    label: "Toàn cảnh 23 Nhóm ngành 2026",
     query: DEFAULT_TREND_QUERY_2026,
   },
   {
-    label: "AI, Bán dẫn & An ninh mạng 2026",
+    label: "Công nghệ, Kỹ thuật & Xây dựng 2026",
     query:
-      "xu hướng tuyển dụng Việt Nam 2026 trí tuệ nhân tạo AI thiết kế vi mạch bán dẫn an ninh mạng khoa học dữ liệu",
+      "xu hướng tuyển dụng kỹ sư 2026: trí tuệ nhân tạo, kỹ thuật phần mềm, an ninh mạng, khoa học máy tính, khoa học dữ liệu, toán ứng dụng, thống kê; công nghệ bán dẫn, vật lý chất rắn, khoa học vật liệu, thiết kế vi mạch, cơ điện tử, tự động hóa, kỹ thuật robot, kỹ thuật ô tô, điện tử viễn thông; công nghệ thực phẩm, an toàn thực phẩm, công nghệ dệt may, kiến trúc, thiết kế nội thất, kỹ thuật xây dựng, quản lý xây dựng, quy hoạch đô thị",
   },
   {
-    label: "Fintech, Thương mại & Logistics 2026",
+    label: "Kinh tế, Luật, Truyền thông & Dịch vụ 2026",
     query:
-      "nhu cầu nhân lực 2026 Fintech tài chính số thương mại điện tử logistics chuỗi cung ứng kinh tế số Việt Nam",
+      "nhu cầu nhân lực 2026: quản trị kinh doanh, digital marketing, thương mại điện tử, fintech, logistics, kinh doanh quốc tế, tài chính ngân hàng; kinh tế số, kinh tế đầu tư, tâm lý học, xã hội học, luật kinh tế, luật thương mại quốc tế, ngành luật; truyền thông đa phương tiện, quan hệ công chúng, báo chí, công nghệ truyền thông, quản trị khách sạn, du lịch, quản trị nhà hàng, khai thác vận tải, quản lý hoạt động bay, khoa học hàng hải",
   },
   {
-    label: "Y tế, Kỹ thuật Xanh & Giáo dục 2026",
+    label: "Y tế, Sinh học, Nông nghiệp & Môi trường 2026",
     query:
-      "thiếu hụt nhân lực 2026 y khoa điều dưỡng robot tự động hóa năng lượng tái tạo ESG giáo dục STEM Việt Nam",
+      "thiếu hụt nhân lực 2026: y khoa, bác sĩ đa khoa, dược học, điều dưỡng, kỹ thuật xét nghiệm y học, công nghệ sinh học, kỹ thuật sinh học, vi sinh vật học; nông nghiệp công nghệ cao, kinh tế nông nghiệp, khoa học cây trồng, nuôi trồng thủy sản, chăn nuôi, bác sĩ thú y, ngành thú y; quản lý tài nguyên và môi trường, môi trường và phát triển bền vững, ESG, quản lý đất đai, an toàn vệ sinh lao động",
+  },
+  {
+    label: "Giáo dục, Nhân văn, Nghệ thuật & Xã hội 2026",
+    query:
+      "tuyển dụng nhân lực 2026: công nghệ giáo dục, quản lý giáo dục, giáo dục tiểu học, giáo dục mầm non, sư phạm tin học, sư phạm tiếng anh; ngôn ngữ anh, ngôn ngữ trung quốc, ngôn ngữ nhật, ngôn ngữ hàn quốc, văn hóa học, thiết kế đồ họa, nghệ thuật số, thiết kế thời trang, thiết kế công nghiệp; công tác xã hội, dân số và phát triển, trinh sát an ninh, điều tra hình sự, kỹ thuật hình sự, an ninh không gian mạng",
   },
 ]
 
@@ -636,7 +641,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
             )
           })}
           <span className="ml-auto font-medium text-slate-400 hidden sm:inline">
-            Tự mở rộng 6 truy vấn báo chí + Tavily
+            Tự tách tới 6 cụm Tavily + 8 truy vấn báo chí
           </span>
         </div>
       </div>

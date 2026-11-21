@@ -2,7 +2,7 @@
 
 > **Mục đích file:** Tài liệu nhật ký tập trung, tối ưu để bất kỳ AI / lập trình viên nào đọc vào đầu phiên làm việc mới đều nắm ngay kiến trúc, quy ước bất biến, lịch sử thay đổi theo commit và quy trình kiểm thử/triển khai của dự án **AI CareerGuide**.
 >
-> **Cập nhật lần cuối:** 2026-11-21 (HEAD: `713b0a5`, nhánh `develop`)
+> **Cập nhật lần cuối:** 2026-11-21 (nhánh `develop`)
 > **Tài liệu kỹ thuật chi tiết đi kèm:** `docs/ENGINEERING_NOTES.md`, `docs/AUDIT_AND_HANDOFF_REPORT.md`, `AGENTS.md`
 
 ---
@@ -104,7 +104,12 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-21
-- **`feat(admin-ai): allow model selection in ENV mode and show on-click model explanations`**
+- **`feat(trend-agent): expand multi-query RSS/Tavily search and 23-category evidence synonyms`**
+  - Tách truy vấn tìm kiếm trong `backend/app/services/taxonomy/trend_agent.py` qua `_build_search_queries` (tối đa 6 cụm Tavily + 6–8 truy vấn `OR` theo lượt phủ đều Google News RSS/Bing News RSS, nâng trần thu thập lên `160` bài) mà vẫn giữ tuyệt đối nguyên tắc `Strict Evidence-Only` (không bịa ngành).
+  - Làm sạch phần mã số trong ngoặc đơn khỏi tên ngành trước khi khớp (`Quản trị khách sạn (7810201, 8810201)`), mở rộng `STRICT_MAJOR_SYNONYMS` lên `99` mã ngành phủ đủ `23/23` nhóm ngành TT74 (mỗi nhóm >= 3 mã, trừ `DỊCH VỤ XÃ HỘI` = 2, `THÚ Y` = 1), và tăng `max_tokens=8192` / `timeout=35` trong `_refine_tiers_with_llm`.
+  - Viết lại `DEFAULT_TREND_QUERY_2026` (6 cụm phân tách `;` phủ 23 nhóm ngành) và 5 mẫu `TREND_QUERY_PRESETS` trong `frontend/src/components/admin/TrendAgentPanel.tsx`.
+  - Kiểm chứng: `python -m py_compile backend/app/services/taxonomy/trend_agent.py` (Pass); script kiểm chứng độc lập phủ `23/23` nhóm ngành & quy tắc chống dương tính giả (Pass); `npm run build` & `npm test` (12/12 pass).
+- **`68dcfe4` — `feat(admin-ai): allow model selection in ENV mode and show on-click model explanations`**
   - Cho phép Admin chọn/đổi model trực tiếp ở cả chế độ `ENV` (`backend/app/services/ai_config/service.py`: lưu `model` đã chọn vào `AIRuntimeConfig` trong khi vẫn khóa cứng `base_url`/`credential_binding`/`LLM_API_KEY` từ ENV; mở khóa `ModelQuickSelect` và ô `Model` trong `LLMConnectionPanel.tsx`).
   - Bổ sung tên hiển thị đẹp, badge thông số và giải thích tiếng Việt cho 8 model xKiro trong `frontend/src/constants/aiModels.ts`; trong `ModelQuickSelect.tsx`, khung giải thích **chỉ hiển thị khi Admin bấm vào model** (có nút `×` để đóng lại, không làm rối giao diện mặc định).
 - **`713b0a5` — `feat(admin-ai): remove API key reveal and support env-driven LLM_AVAILABLE_MODELS` + Cấu hình Render xKiro**
