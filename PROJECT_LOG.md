@@ -104,7 +104,11 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-21
-- **`feat(ai-runtime): raise adapter max_tokens to 65536, timeout to 90s and use per-model caps in trend agent`**
+- **`fix(trend-agent): make LLM JSON extraction and partial batch validation resilient in _refine_tiers_with_llm`**
+  - Sửa lỗi `502 Kết quả phân tích xu hướng từ provider không hợp lệ.` trong `_refine_tiers_with_llm` (`backend/app/services/taxonomy/trend_agent.py`) khi danh sách ngành ứng viên lớn hoặc LLM bọc lời dẫn quanh ```` ```json [...] ``` ````.
+  - Hỗ trợ bóc code block/mảng JSON dù có lời dẫn, bỏ qua mã trùng lặp hoặc mã dư khi đánh giá nhiều ngành (vẫn giữ chặt lỗi `502` nếu toàn bộ đầu ra sai kiểu/không có mã hợp lệ), và tự động dùng `macro_suggested_tier` + nguồn bài báo thật cho ứng viên bị LLM bỏ sót trong `_build_classified_trend_map`.
+  - Kiểm chứng: `python -m py_compile` (Pass); script kiểm thử 6 đầu ra lỗi `502`, trích xuất JSON kèm lời dẫn, lặp mã, mã thừa và giữ đủ `50/50` ngành khi LLM trả `48/50` (Pass).
+- **`a2850d2` — `feat(ai-runtime): raise adapter max_tokens to 65536, timeout to 90s and use per-model caps in trend agent`**
   - Mở trần ngân sách trong `backend/app/services/ai_config/adapter.py`: `1 <= max_tokens <= 65536` và timeout tới `90` giây.
   - Bổ sung `_max_output_tokens_for_model` trong `backend/app/services/taxonomy/trend_agent.py` tự động cấp đúng trần tối đa của từng model xKiro (`65536` cho `mistral-medium-3.5`/`mistral-small-2603`/`command-a-plus`/`sensenova-6.8-flash-lite`, `32768` cho `command-a-reasoning`, `16384` cho `mistral-large-2512`, `8192` cho `command-a`/`ministral-14b`), gom tới `100` ứng viên trong 1 lượt gọi với `timeout=38s`.
   - Kiểm chứng: `python -m py_compile` (Pass); script kiểm thử tự động các mức trần `8192`/`16384`/`32768`/`65536` và xử lý 60 ngành trong 1 lượt (Pass).

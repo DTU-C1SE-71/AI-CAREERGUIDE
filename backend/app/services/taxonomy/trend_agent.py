@@ -734,8 +734,14 @@ async def _refine_tiers_with_llm(
                 {"role": "user", "content": sanitize_pii(user_prompt)[:32000]},
             ], max_tokens=model_max_tokens, timeout=38)
             cleaned_raw = raw.strip()
-            if cleaned_raw.startswith("```"):
-                cleaned_raw = re.sub(r"^```(?:json)?\s*|\s*```$", "", cleaned_raw, flags=re.IGNORECASE).strip()
+            fence_match = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", cleaned_raw, flags=re.IGNORECASE)
+            if fence_match:
+                cleaned_raw = fence_match.group(1).strip()
+            if not cleaned_raw.startswith("["):
+                arr_start = cleaned_raw.find("[")
+                arr_end = cleaned_raw.rfind("]")
+                if arr_start != -1 and arr_end > arr_start:
+                    cleaned_raw = cleaned_raw[arr_start : arr_end + 1]
             parsed_list = json.loads(cleaned_raw)
             if not isinstance(parsed_list, list):
                 raise ValueError("INVALID_PROVIDER_SCHEMA")
@@ -746,14 +752,22 @@ async def _refine_tiers_with_llm(
                 if not isinstance(item, dict):
                     raise ValueError("INVALID_PROVIDER_SCHEMA")
                 code, tier, reason = item.get("major_code"), item.get("trend_tier"), item.get("trend_reason")
-                if not isinstance(code, str) or code not in batch_catalog or code in batch_refined:
+                if not isinstance(code, str):
                     raise ValueError("INVALID_PROVIDER_ID")
+                code = code.strip()
+                if code not in batch_catalog:
+                    if len(parsed_list) <= 1:
+                        raise ValueError("INVALID_PROVIDER_ID")
+                    continue
+                if code in batch_refined:
+                    continue
+                tier = tier.strip().upper() if isinstance(tier, str) else tier
                 if tier not in ("TIER_1", "TIER_2", "TIER_3") or not isinstance(reason, str) or not reason.strip():
                     raise ValueError("INVALID_PROVIDER_SCHEMA")
                 if any(key in item and item[key] != batch_catalog[code][key] for key in ("major_name", "category")):
                     raise ValueError("INVALID_PROVIDER_IDENTITY")
                 batch_refined[code] = {"trend_tier": tier, "trend_reason": reason.strip()[:220]}
-            if set(batch_refined) != set(batch_catalog):
+            if not batch_refined:
                 raise ValueError("INCOMPLETE_PROVIDER_RESULT")
             refined.update(batch_refined)
         return refined
