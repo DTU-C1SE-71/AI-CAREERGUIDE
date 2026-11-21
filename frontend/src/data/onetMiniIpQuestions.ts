@@ -10,6 +10,8 @@ export interface Question {
   iconKey:
     | "hammer"
     | "wrench"
+    | "sprout"
+    | "dumbbell"
     | "fish"
     | "truck"
     | "check"
@@ -22,9 +24,12 @@ export interface Question {
     | "music"
     | "film"
     | "palette"
+    | "home"
+    | "sparkles"
     | "clapperboard"
     | "heart"
     | "compass"
+    | "globe"
     | "activity"
     | "handheart"
     | "graduation"
@@ -32,6 +37,7 @@ export interface Question {
     | "rocket"
     | "handshake"
     | "megaphone"
+    | "calendar"
     | "shopping"
     | "network"
     | "calculator"
@@ -100,8 +106,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Tự tay tháo lắp, sửa đồ đạc hỏng trong nhà hoặc mày mò lắp mạch điện, mô hình máy móc",
     titleEn: "Repair household items or assemble electronic circuits and mechanical models",
-    imageUrl:
-      "https://images.unsplash.com/photo-1581783898377-1c85bf937427?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/R1.jpg",
     iconKey: "wrench",
   },
   {
@@ -111,9 +116,8 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Giải các bài toán khó, câu đố suy luận logic hoặc tự mày mò hiểu vì sao một công thức lại đúng",
     titleEn: "Solve hard math problems, logic puzzles, or understand why a formula works",
-    imageUrl:
-      "https://images.unsplash.com/photo-1532187863486-abf9dbad1b69?auto=format&fit=crop&w=900&q=80",
-    iconKey: "flask",
+    imageUrl: "/images/assessment/I1.jpg",
+    iconKey: "calculator",
   },
   {
     code: "A1",
@@ -122,8 +126,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Vẽ minh họa, phối màu trang trí poster, bài thuyết trình đẹp mắt hoặc tự phác thảo kiểu trang phục, đồ trang trí riêng",
     titleEn: "Draw illustrations, design posters and slides, or sketch outfits and decor",
-    imageUrl:
-      "https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/A1.jpg",
     iconKey: "palette",
   },
   {
@@ -133,8 +136,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Kiên nhẫn giảng lại bài khó cho bạn bè hoặc em nhỏ bằng cách giải thích thật dễ hiểu",
     titleEn: "Patiently explain difficult lessons to classmates or younger students",
-    imageUrl:
-      "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/S1.jpg",
     iconKey: "graduation",
   },
   {
@@ -144,8 +146,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Đứng ra làm nhóm trưởng, phân chia công việc và thúc đẩy cả nhóm hoàn thành mục tiêu đúng hạn",
     titleEn: "Act as team leader, delegate tasks, and keep the group on schedule",
-    imageUrl:
-      "https://images.unsplash.com/photo-1542744173-8e7e53415bb0?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/E1.jpg",
     iconKey: "building",
   },
   {
@@ -155,8 +156,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Ghi chép cẩn thận tiền tiêu vặt, giữ quỹ lớp hoặc tính toán các khoản thu chi của nhóm chính xác từng con số",
     titleEn: "Track pocket money, manage the class fund, or calculate group budgets accurately",
-    imageUrl:
-      "https://images.unsplash.com/photo-1554224155-6726b3ff858f?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/C1.jpg",
     iconKey: "calculator",
   },
 
@@ -168,8 +168,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Đo đạc kích thước, kẻ vẽ sơ đồ mặt bằng hoặc tự tay dựng mô hình nhà cửa, kết cấu vững chắc",
     titleEn: "Measure dimensions, draw floor plans, or build sturdy architectural models",
-    imageUrl:
-      "https://images.unsplash.com/photo-1581092160607-ee22621dd758?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/R2.jpg",
     iconKey: "hammer",
   },
   {
@@ -179,8 +178,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Tò mò cách một ứng dụng, trò chơi hay AI được lập trình bên trong hoặc thích tìm quy luật từ bảng số liệu, biểu đồ",
     titleEn: "Explore how apps, games, or AI are coded, or find patterns in charts and data",
-    imageUrl:
-      "https://images.unsplash.com/photo-1558494949-ef010cbdcc31?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/I2.jpg",
     iconKey: "network",
   },
   {
@@ -190,9 +188,8 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Phối màu, bài trí lại góc học tập, phòng ở cho có gu hoặc thích phác họa không gian nhà cửa, quán xá đẹp mắt",
     titleEn: "Style and arrange your study corner or room, or sketch appealing spaces",
-    imageUrl:
-      "https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=900&q=80",
-    iconKey: "palette",
+    imageUrl: "/images/assessment/A2.jpg",
+    iconKey: "home",
   },
   {
     code: "S2",
@@ -201,8 +198,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Tìm hiểu cách sơ cứu vết thương, chăm sóc sức khỏe cho mọi người hoặc xây dựng chế độ dinh dưỡng, ăn uống khoa học",
     titleEn: "Learn first aid, healthcare basics, or how to build a scientific nutrition plan",
-    imageUrl:
-      "https://images.unsplash.com/photo-1576091160550-2173dba999ef?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/S2.jpg",
     iconKey: "activity",
   },
   {
@@ -212,8 +208,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Làm gian hàng hội chợ ở trường, tập mua bán nhỏ online hoặc nghĩ ý tưởng kinh doanh để tạo ra tiền lãi",
     titleEn: "Run a school fair booth, try small online selling, or brainstorm profitable ideas",
-    imageUrl:
-      "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/E2.jpg",
     iconKey: "rocket",
   },
   {
@@ -223,8 +218,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Sắp xếp thư mục máy tính, vở ghi và tài liệu học tập ngăn nắp theo từng mục để cần là tìm thấy ngay",
     titleEn: "Organize computer folders, notebooks, and study materials neatly by category",
-    imageUrl:
-      "https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/C2.jpg",
     iconKey: "clipboard",
   },
 
@@ -236,9 +230,8 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Tự tay trồng trọt, chăm bẵm cây cối, vật nuôi hoặc tham gia cải tạo vườn tược, không gian xanh ngoài trời",
     titleEn: "Grow plants, care for animals, or help improve outdoor gardens and green spaces",
-    imageUrl:
-      "https://images.unsplash.com/photo-1544551763-46a013bb70d5?auto=format&fit=crop&w=900&q=80",
-    iconKey: "fish",
+    imageUrl: "/images/assessment/R3.jpg",
+    iconKey: "sprout",
   },
   {
     code: "I3",
@@ -247,8 +240,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Tìm hiểu cơ thể sống và di truyền hoạt động thế nào, vì sao ta bị ốm và cách thuốc giúp cơ thể khỏe lại",
     titleEn: "Explore how living bodies and genetics work, why illness happens, and how medicine heals",
-    imageUrl:
-      "https://images.unsplash.com/photo-1582719471384-894fbb16e074?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/I3.jpg",
     iconKey: "pill",
   },
   {
@@ -258,8 +250,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Viết truyện, viết bài chia sẻ cảm nhận hoặc chụp ảnh, quay dựng video kể lại một câu chuyện theo ý mình",
     titleEn: "Write stories or reflections, or shoot and edit photos and videos to tell a story",
-    imageUrl:
-      "https://images.unsplash.com/photo-1574717024653-61fd2cf4d44d?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/A3.jpg",
     iconKey: "film",
   },
   {
@@ -269,8 +260,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Kiên nhẫn ngồi lắng nghe người khác tâm sự chuyện buồn, thấu cảm và giúp họ tháo gỡ khúc mắc trong lòng",
     titleEn: "Listen patiently when others confide in you, empathize, and help ease their worries",
-    imageUrl:
-      "https://images.unsplash.com/photo-1573497620053-ea5300f94f21?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/S3.jpg",
     iconKey: "heart",
   },
   {
@@ -280,8 +270,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Tham gia tranh biện, đưa ra dẫn chứng và lý lẽ chặt chẽ để thuyết phục người khác hoặc phân xử khi nhóm có bất đồng",
     titleEn: "Debate with clear evidence and reasoning to persuade others or resolve group disagreements",
-    imageUrl:
-      "https://images.unsplash.com/photo-1560250097-0b93528c311a?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/E3.jpg",
     iconKey: "handshake",
   },
   {
@@ -291,8 +280,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Rà soát tỉ mỉ từng dòng bài làm, con số hay lỗi chính tả nhỏ để chắc chắn không sót lỗi trước khi nộp",
     titleEn: "Carefully proofread every line, number, and spelling detail before submitting work",
-    imageUrl:
-      "https://images.unsplash.com/photo-1553413077-190dd305871c?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/C3.jpg",
     iconKey: "scan",
   },
 
@@ -304,8 +292,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Tự tay sử dụng ống nghiệm, kính hiển vi trong giờ thực hành hoặc tỉ mỉ cân đo, pha chế mẫu thử đúng chuẩn",
     titleEn: "Use test tubes and microscopes in lab practice or measure and mix samples accurately",
-    imageUrl:
-      "https://images.unsplash.com/photo-1579154204601-01588f351e67?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/R4.jpg",
     iconKey: "microscope",
   },
   {
@@ -315,8 +302,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Tìm hiểu nguyên lý đằng sau các hiện tượng tự nhiên, dòng điện, biến đổi chất hay thời tiết, khí hậu quanh mình",
     titleEn: "Explore principles behind natural phenomena, electricity, chemical reactions, and weather",
-    imageUrl:
-      "https://images.unsplash.com/photo-1504608524841-42fe6f032b4b?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/I4.jpg",
     iconKey: "cloud",
   },
   {
@@ -326,8 +312,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Ca hát, tập chơi nhạc cụ, bắt nhịp làm nhạc hoặc tham gia nhảy múa, diễn kịch trong các buổi văn nghệ",
     titleEn: "Sing, practice musical instruments, make beats, or perform dance and drama on stage",
-    imageUrl:
-      "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/A4.jpg",
     iconKey: "music",
   },
   {
@@ -337,8 +322,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Tham gia hoạt động tình nguyện, giúp đỡ cộng đồng hoặc nhiệt tình đón tiếp, hỗ trợ mọi người trong sự kiện lớp, trường",
     titleEn: "Join community volunteering or warmly welcome and assist people at school events",
-    imageUrl:
-      "https://images.unsplash.com/photo-1559027615-cd4628902d4a?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/S4.jpg",
     iconKey: "handheart",
   },
   {
@@ -348,8 +332,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Đứng lên thuyết trình trước lớp, trước đám đông hoặc nghĩ cách quảng bá hoạt động, sản phẩm sao cho thật thu hút",
     titleEn: "Present in front of a class or crowd, or plan catchy promotions for school activities",
-    imageUrl:
-      "https://images.unsplash.com/photo-1557804506-669a67965ba0?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/E4.jpg",
     iconKey: "megaphone",
   },
   {
@@ -359,9 +342,8 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Lên lịch trình chi tiết về giờ giấc, đường đi và danh sách đồ đạc cần mang để chuyến đi hay kế hoạch nhóm diễn ra đúng giờ",
     titleEn: "Plan detailed schedules, routes, and packing checklists so group trips run on time",
-    imageUrl:
-      "https://images.unsplash.com/photo-1519003722824-194d4455a60c?auto=format&fit=crop&w=900&q=80",
-    iconKey: "truck",
+    imageUrl: "/images/assessment/C4.jpg",
+    iconKey: "calendar",
   },
 
   // Round 5
@@ -372,9 +354,8 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Tập luyện các môn sức bền, võ thuật, kỹ năng vận động ngoài trời hoặc rèn tác phong kỷ luật như giờ Quốc phòng",
     titleEn: "Train in endurance sports, martial arts, outdoor skills, or disciplined drills",
-    imageUrl:
-      "https://images.unsplash.com/photo-1581091226825-a6a2a5aee158?auto=format&fit=crop&w=900&q=80",
-    iconKey: "check",
+    imageUrl: "/images/assessment/R5.jpg",
+    iconKey: "dumbbell",
   },
   {
     code: "I5",
@@ -383,8 +364,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Đọc và suy ngẫm vì sao con người có tâm lý, hành vi khác nhau hoặc tìm hiểu sâu về lịch sử, văn hóa, xã hội",
     titleEn: "Read and reflect on human psychology, behavior, history, culture, and society",
-    imageUrl:
-      "https://images.unsplash.com/photo-1576086213369-97a306d36557?auto=format&fit=crop&w=900&q=80",
+    imageUrl: "/images/assessment/I5.jpg",
     iconKey: "book",
   },
   {
@@ -394,9 +374,8 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Nghĩ ra cách thể hiện mới lạ, phá cách cho bài tập hay sản phẩm sáng tạo thay vì làm theo khuôn mẫu quen thuộc",
     titleEn: "Invent fresh, unconventional approaches for assignments instead of following templates",
-    imageUrl:
-      "https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=900&q=80",
-    iconKey: "clapperboard",
+    imageUrl: "/images/assessment/A5.jpg",
+    iconKey: "sparkles",
   },
   {
     code: "S5",
@@ -405,9 +384,8 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Trò chuyện, giao lưu bằng ngoại ngữ hoặc tìm hiểu phong tục, đời sống văn hóa của nhiều vùng miền, quốc gia",
     titleEn: "Converse in foreign languages or learn about customs and cultures across regions",
-    imageUrl:
-      "https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=900&q=80",
-    iconKey: "compass",
+    imageUrl: "/images/assessment/S5.jpg",
+    iconKey: "globe",
   },
   {
     code: "E5",
@@ -416,9 +394,8 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Đứng ra tổ chức buổi liên hoan lớp, sự kiện câu lạc bộ hoặc sắp xếp công việc cho từng bạn để mọi khâu diễn ra suôn sẻ",
     titleEn: "Organize class parties or club events and coordinate roles so every step runs smoothly",
-    imageUrl:
-      "https://images.unsplash.com/photo-1556742049-0cfed4f6a45d?auto=format&fit=crop&w=900&q=80",
-    iconKey: "shopping",
+    imageUrl: "/images/assessment/E5.jpg",
+    iconKey: "calendar",
   },
   {
     code: "C5",
@@ -427,8 +404,7 @@ export const ONET_MINI_IP_ITEMS: Question[] = [
     titleVi:
       "Học tập và làm việc theo danh sách từng bước rõ ràng, có quy tắc và biểu mẫu cụ thể để thực hiện thật chuẩn xác",
     titleEn: "Study and work using clear step-by-step checklists, rules, and structured templates",
-    imageUrl:
-      "https://images.unsplash.com/photo-1450133064473-71024230f91b?auto=format&fit=crop&w=900&q=80",
-    iconKey: "mail",
+    imageUrl: "/images/assessment/C5.jpg",
+    iconKey: "check",
   },
 ];

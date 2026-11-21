@@ -181,7 +181,8 @@
 2. **Hồ sơ Cá nhân (Profile Modal):**
    - Cập nhật Họ tên, **Khối lớp (10 / 11 / 12 / Đã tốt nghiệp)**, **Giới tính**, Lớp học, Trường THPT; thay đổi Khối lớp/Giới tính/Điểm tự động cập nhật đề xuất & khóa cache AI.
 3. **Trắc nghiệm Hướng nghiệp 3 bước (`/assessment`):**
-   - Bộ **38 câu hỏi 100% trải nghiệm học đường THPT** (30 câu RIASEC + 8 câu Tư duy) và nhập điểm học bạ/thi thử; mặc định khung hiển thị rộng rãi cố định (bỏ nút chuyển khung và bước Nguyện vọng do đã tích hợp riêng tại tab `Nguyện vọng với AI` trên `/dashboard`).
+   - Bộ **38 câu hỏi 100% trải nghiệm học đường THPT** (30 câu RIASEC + 8 câu Tư duy) và nhập điểm học bạ/thi thử; mặc định khung hiển thị rộng rãi cố định (bỏ nút chuyển khung, bỏ bước Nguyện vọng, đưa thanh bước ngang hàng tách biệt cạnh nút Quay lại và bỏ nút Hướng dẫn làm bài).
+   - Toàn bộ **30 ảnh minh họa RIASEC** (`frontend/public/images/assessment/R1.jpg`..`C5.jpg`, chuẩn hóa tỷ lệ `960×480` 2:1, tải tĩnh nội bộ không phụ thuộc link ảnh ngoài) và `iconKey` được tối ưu khớp nội dung từng câu hỏi học đường THPT.
    - Chế độ xem `Thẻ`, `Danh sách`, `Radar`; nút **Quay lại** về cổng chọn làm bài mới / xem lại; lưu đầy đủ lên PostgreSQL và hydrate lại khi đăng nhập lại.
 4. **Khám phá Ngành (`/dashboard` — 2 tab đồng bộ Sky + Slate):**
    - **Tab `Đề xuất theo hồ sơ` (mặc định · Hồ sơ & Kỹ năng):** Biểu đồ Radar RIASEC, Top 3 nhóm sở thích, Khối thi tốt nhất (Z-Score), Phễu 2 tầng (Lĩnh vực $\rightarrow$ Ngành) với Sub-facet Veto Gate & HA-GAE v3.1 ở phía trên, kèm Phân tích kỹ năng theo hồ sơ (`SkillAnalysisCard`, lưới 2 cột + Smart DB Cache `evidence-skills-v4`, tự tính điểm Holland từ `riasec_answers`) ngay phía dưới.

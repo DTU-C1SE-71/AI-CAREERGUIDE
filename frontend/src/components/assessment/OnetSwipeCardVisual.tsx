@@ -3,20 +3,24 @@ import {
   BookOpen,
   Building2,
   Calculator,
+  CalendarCheck,
   CheckCircle2,
   Clapperboard,
   ClipboardList,
   CloudSun,
   Compass,
   Droplets,
+  Dumbbell,
   Film,
   Fish,
   FlaskConical,
+  Globe,
   GraduationCap,
   Hammer,
   HandHeart,
   Handshake,
   HeartPulse,
+  Home,
   Mail,
   Megaphone,
   Microscope,
@@ -28,6 +32,7 @@ import {
   ScanBarcode,
   ShoppingBag,
   Sparkles,
+  Sprout,
   Truck,
   Wrench,
 } from "lucide-react"
@@ -69,7 +74,8 @@ export function QuestionIllustrationFrame({
         <img
           src={item.imageUrl}
           alt={item.titleVi}
-          loading="lazy"
+          loading="eager"
+          decoding="async"
           draggable={false}
           onLoad={() => setLoaded(true)}
           onError={() => setErrored(true)}
@@ -217,6 +223,10 @@ function getOnetIcon(key: OnetMiniIpItem["iconKey"]) {
       return Hammer
     case "wrench":
       return Wrench
+    case "sprout":
+      return Sprout
+    case "dumbbell":
+      return Dumbbell
     case "fish":
       return Fish
     case "truck":
@@ -241,12 +251,18 @@ function getOnetIcon(key: OnetMiniIpItem["iconKey"]) {
       return Film
     case "palette":
       return Palette
+    case "home":
+      return Home
+    case "sparkles":
+      return Sparkles
     case "clapperboard":
       return Clapperboard
     case "heart":
       return HeartPulse
     case "compass":
       return Compass
+    case "globe":
+      return Globe
     case "activity":
       return Activity
     case "handheart":
@@ -261,6 +277,8 @@ function getOnetIcon(key: OnetMiniIpItem["iconKey"]) {
       return Handshake
     case "megaphone":
       return Megaphone
+    case "calendar":
+      return CalendarCheck
     case "shopping":
       return ShoppingBag
     case "network":
