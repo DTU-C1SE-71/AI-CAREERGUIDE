@@ -104,6 +104,9 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-21
+- **`feat(admin-ai): allow model selection in ENV mode and show on-click model explanations`**
+  - Cho phép Admin chọn/đổi model trực tiếp ở cả chế độ `ENV` (`backend/app/services/ai_config/service.py`: lưu `model` đã chọn vào `AIRuntimeConfig` trong khi vẫn khóa cứng `base_url`/`credential_binding`/`LLM_API_KEY` từ ENV; mở khóa `ModelQuickSelect` và ô `Model` trong `LLMConnectionPanel.tsx`).
+  - Bổ sung tên hiển thị đẹp, badge thông số và giải thích tiếng Việt cho 8 model xKiro trong `frontend/src/constants/aiModels.ts`; trong `ModelQuickSelect.tsx`, khung giải thích **chỉ hiển thị khi Admin bấm vào model** (có nút `×` để đóng lại, không làm rối giao diện mặc định).
 - **`713b0a5` — `feat(admin-ai): remove API key reveal and support env-driven LLM_AVAILABLE_MODELS` + Cấu hình Render xKiro**
   - Xóa hoàn toàn chức năng hiển thị lại API key ở trang Admin cả Frontend (`LLMConnectionPanel.tsx`: bỏ nút `"Hiện key trong 15 giây"`, state/handler `reveal`) lẫn Backend (`router.py`: xóa `POST /admin/ai-config/reveal`, `service.py`: xóa `reveal_credential` và khóa `reveal_supported = False`).
   - Bổ sung biến môi trường `LLM_AVAILABLE_MODELS` (phân cách bằng dấu phẩy trong `.env` / Render) vào `backend/app/core/config.py`, trả qua `AIConfigStatus.available_models` và hiển thị động trong `ModelQuickSelect.tsx` để Admin chọn nhanh model trên giao diện.

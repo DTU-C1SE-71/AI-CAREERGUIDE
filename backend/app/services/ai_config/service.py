@@ -87,7 +87,10 @@ def _current(row: dict | None) -> dict:
                 locked_code = "ENV_BINDING_CHANGED"
                 state = "LOCKED"
             else:
-                profile = current_env
+                saved_model = profile.get("model")
+                profile = dict(current_env)
+                if saved_model:
+                    profile["model"] = validate_model(saved_model)
                 if row["credential_state"] != "CLEARED":
                     secret = env_secret
                     state = "SET" if secret else "MISSING"
@@ -200,6 +203,8 @@ def _draft(state: dict, payload: AIConfigDraft) -> tuple[dict, str | None, str]:
         raise AIConfigError("UNEXPECTED_CREDENTIAL", "Chỉ truyền credential mới khi chọn REPLACE.")
     if payload.source_mode == "ENV":
         profile, env_secret = _env_profile()
+        if payload.model and payload.model.strip():
+            profile["model"] = validate_model(payload.model)
         if payload.credential_action == "REPLACE":
             raise AIConfigError("ENV_REPLACE_NOT_ALLOWED", "Để thay credential trong ứng dụng, hãy chọn nguồn DATABASE.")
         if payload.credential_action == "CLEAR":
