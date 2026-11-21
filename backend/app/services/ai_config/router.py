@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.dependencies import require_admin
 from app.models.identity import User
-from app.schemas.ai_config import AIConfigDraft, AIConfigProbe, AIActiveProbe, AIRevealRequest, AIConfigStatus, AIProbeResult, AIRevealResponse
+from app.schemas.ai_config import AIConfigDraft, AIConfigProbe, AIActiveProbe, AIConfigStatus, AIProbeResult
 from app.services.ai_config import service
 
 
@@ -38,9 +38,3 @@ async def probe(payload: AIConfigProbe, response: Response, user: User = Depends
 async def probe_current(payload: AIActiveProbe, response: Response, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     no_store(response)
     return await service.probe_active(db, payload, user.id)
-
-
-@router.post("/reveal", response_model=AIRevealResponse)
-async def reveal(payload: AIRevealRequest, response: Response, user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
-    no_store(response)
-    return await service.reveal_credential(db, payload.base_revision_token, user.id)

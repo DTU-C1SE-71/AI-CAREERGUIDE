@@ -4,17 +4,29 @@ import { AI_MODEL_CHOICES } from "../../constants/aiModels"
 interface ModelQuickSelectProps {
   value: string
   activeModel?: string
+  availableModels?: string[]
   disabled: boolean
   onSelect: (model: string) => void
 }
 
-export function ModelQuickSelect({ value, activeModel, disabled, onSelect }: ModelQuickSelectProps) {
+const KNOWN_MODELS = new Map<string, (typeof AI_MODEL_CHOICES)[number]>(
+  AI_MODEL_CHOICES.map(model => [model.id, model])
+)
+
+export function ModelQuickSelect({ value, activeModel, availableModels, disabled, onSelect }: ModelQuickSelectProps) {
+  const models = availableModels && availableModels.length > 0
+    ? availableModels.map((id, index) => {
+        const known = KNOWN_MODELS.get(id)
+        return known ?? { id, label: id, symbol: index % 2 === 0 ? "sol" : "astra" as const }
+      })
+    : AI_MODEL_CHOICES
+
   return (
     <fieldset className="admin-model-picker" disabled={disabled}>
       <legend>Chọn nhanh model</legend>
       <p id="model-choice-help">Chọn model để cập nhật bản nháp. Cấu hình đang chạy chỉ đổi khi bạn lưu và áp dụng.</p>
       <div className="admin-model-options" role="group" aria-label="Model có sẵn" aria-describedby="model-choice-help">
-        {AI_MODEL_CHOICES.map(model => {
+        {models.map(model => {
           const selected = value === model.id
           const active = activeModel === model.id
           const Icon = model.symbol === "sol" ? SunMedium : Orbit
@@ -26,7 +38,7 @@ export function ModelQuickSelect({ value, activeModel, disabled, onSelect }: Mod
           </button>
         })}
       </div>
-      <p className="admin-model-custom">Bạn vẫn có thể nhập model khác trong ô bên dưới.</p>
+      <p className="admin-model-custom">Bạn vẫn có thể nhập model khác trong ô bên dưới hoặc thêm vào biến môi trường <code>LLM_AVAILABLE_MODELS</code>.</p>
     </fieldset>
   )
 }

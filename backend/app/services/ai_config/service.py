@@ -148,6 +148,19 @@ async def resolve_snapshot(db: AsyncSession | None = None, *, allow_unconfigured
     return _snapshot(state["profile"], state["credential"], state["revision_token"], not allow_unconfigured)
 
 
+def _available_models() -> list[str]:
+    raw = settings.LLM_AVAILABLE_MODELS or ""
+    items: list[str] = []
+    for part in raw.replace("\n", ",").split(","):
+        model_id = part.strip()
+        if model_id and model_id not in items:
+            items.append(model_id)
+    default_model = (settings.LLM_MODEL or "").strip()
+    if default_model and default_model not in items:
+        items.insert(0, default_model)
+    return items
+
+
 def _public_status(state: dict, last_probe: dict | None = None) -> dict:
     cipher, configured_id, _ = _key_info()
     row = state["row"]
@@ -162,10 +175,11 @@ def _public_status(state: dict, last_probe: dict | None = None) -> dict:
             "state": state["credential_state"],
             "source": state["profile"]["source_mode"] if credential_set or state["credential_state"] == "LOCKED" else "NONE",
             "masked": "••••••••" if credential_set or state["credential_state"] == "LOCKED" else None,
-            "reveal_supported": credential_set and bool(state["credential"]),
+            "reveal_supported": False,
         },
         "encryption": {"available": cipher is not None, "key_id": row["encryption_key_id"] if row else None, "configured_key_id": configured_id},
         "last_probe": last_probe,
+        "available_models": _available_models(),
     }
 
 
@@ -314,14 +328,3 @@ async def probe_active(db: AsyncSession, payload: AIActiveProbe, actor_id: Any) 
     _require_unlocked(state)
     snapshot = _snapshot(state["profile"], state["credential"], state["revision_token"], require_credential=False)
     return await _run_probe(db, snapshot, payload, actor_id, "PROBE_ACTIVE")
-
-
-async def reveal_credential(db: AsyncSession, revision_token: str, actor_id: Any) -> dict:
-    state = _current(await _read_row(db))
-    _check_revision(state, revision_token)
-    _require_unlocked(state)
-    if not state["credential"] or state["credential_state"] != "SET":
-        raise AIConfigError("UNCONFIGURED_CREDENTIAL", "Không có credential để hiển thị.", 409)
-    _audit(db, actor_id, "REVEAL", revision_token)
-    await db.commit()
-    return {"api_key": state["credential"], "expires_in_seconds": 15, "revision_token": revision_token}

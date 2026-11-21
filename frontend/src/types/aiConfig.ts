@@ -25,4 +25,5 @@ export interface AIConfigStatus {
   credential: { state: "SET" | "CLEARED" | "MISSING" | "LOCKED"; source: "DATABASE" | "ENV" | "NONE"; masked: string | null; reveal_supported: boolean }
   encryption: { available: boolean; key_id: string | null; configured_key_id: string | null }
   last_probe: AIProbeResult | null
+  available_models?: string[]
 }

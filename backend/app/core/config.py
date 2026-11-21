@@ -71,6 +71,7 @@ class Settings(BaseSettings):
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://codex.fosta.app/v1"
     LLM_MODEL: str = "gpt-6-luna"
+    LLM_AVAILABLE_MODELS: str = ""
     LLM_TIMEOUT_SECONDS: float = 120.0
     LLM_MAX_TOKENS: int = 128000
     LLM_MAX_CONTEXT_TOKENS: int = 272000

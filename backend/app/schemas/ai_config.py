@@ -1,5 +1,5 @@
 """DTO quản trị AI; credential mới luôn tách khỏi trạng thái đã che."""
-from typing import Literal, Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, SecretStr
 
 
@@ -25,11 +25,6 @@ class AIActiveProbe(BaseModel):
     base_revision_token: str = Field(min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
     probe_request_id: str = Field(min_length=1, max_length=100, pattern=r"^[A-Za-z0-9_.:-]+$")
     draft_digest: str = Field(min_length=1, max_length=128, pattern=r"^[A-Za-z0-9_.:-]+$")
-
-
-class AIRevealRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    base_revision_token: str = Field(min_length=64, max_length=64, pattern=r"^[a-f0-9]{64}$")
 
 
 class AITargetBinding(BaseModel):
@@ -85,9 +80,4 @@ class AIConfigStatus(BaseModel):
     credential: AICredentialStatus
     encryption: AIEncryptionStatus
     last_probe: Optional[AIProbeResult]
-
-
-class AIRevealResponse(BaseModel):
-    api_key: str
-    expires_in_seconds: int
-    revision_token: str
+    available_models: List[str] = Field(default_factory=list)

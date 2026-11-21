@@ -1,6 +1,6 @@
 import { ModelQuickSelect } from "./ModelQuickSelect"
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react"
-import { Eye, EyeOff, KeyRound, PencilLine, RefreshCw, Save, ShieldCheck, TestTube2 } from "lucide-react"
+import { KeyRound, PencilLine, RefreshCw, Save, ShieldCheck, TestTube2 } from "lucide-react"
 import { ApiError, requestJSON, SESSION_INVALID_EVENT, SESSION_CHANGED_EVENT } from "../../services/api"
 import type { AIConfigDraft, AIConfigStatus, AIProbeResult, AIProfile } from "../../types/aiConfig"
 
@@ -33,8 +33,6 @@ export function LLMConnectionPanel({ onNotify }: { onNotify?: (message: string, 
   const [testing, setTesting] = useState<"draft" | "active" | null>(null)
   const [probe, setProbe] = useState<{ result: AIProbeResult; scope: "draft" | "active"; stale: boolean } | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [revealed, setRevealed] = useState<string | null>(null)
-  const [revealing, setRevealing] = useState(false)
   const [dirty, setDirty] = useState(false)
   const mounted = useRef(true)
   const generation = useRef(0)
@@ -42,18 +40,15 @@ export function LLMConnectionPanel({ onNotify }: { onNotify?: (message: string, 
   const statusRef = useRef<AIConfigStatus | null>(null)
   const busy = useRef(false)
   const probing = useRef(false)
-  const revealingRef = useRef(false)
   const probeRequest = useRef<AbortController | null>(null)
   const loadRequest = useRef<AbortController | null>(null)
-  const revealRequest = useRef<AbortController | null>(null)
   const errorRef = useRef<HTMLParagraphElement>(null)
 
   const invalidate = useCallback(() => {
     generation.current += 1
     probeRequest.current?.abort()
-    revealRequest.current?.abort()
-    probing.current = false; revealingRef.current = false
-    setTesting(null); setRevealing(false); setRevealed(null)
+    probing.current = false
+    setTesting(null)
     setProbe(current => current ? { ...current, stale: true } : null)
   }, [])
   const installStatus = useCallback((next: AIConfigStatus, reset: boolean) => {
@@ -101,7 +96,7 @@ export function LLMConnectionPanel({ onNotify }: { onNotify?: (message: string, 
     window.addEventListener("pagehide", leave)
     return () => {
       mounted.current = false; generation.current += 1
-      loadRequest.current?.abort(); probeRequest.current?.abort(); revealRequest.current?.abort()
+      loadRequest.current?.abort(); probeRequest.current?.abort()
       draftRef.current = { ...draftRef.current, api_key: "" }
       window.clearInterval(timer)
       window.removeEventListener("focus", refresh)
@@ -114,11 +109,6 @@ export function LLMConnectionPanel({ onNotify }: { onNotify?: (message: string, 
       window.removeEventListener("pagehide", leave)
     }
   }, [loadStatus, invalidate])
-  useEffect(() => {
-    if (!revealed) return
-    const timer = window.setTimeout(() => setRevealed(null), 15000)
-    return () => window.clearTimeout(timer)
-  }, [revealed])
   const change = (patch: Partial<AIConfigDraft>) => {
     invalidate()
     const next = { ...draftRef.current, ...patch }
@@ -175,19 +165,6 @@ export function LLMConnectionPanel({ onNotify }: { onNotify?: (message: string, 
       setError(err instanceof Error ? err.message : "Chưa lưu được cấu hình. Cấu hình đang chạy được giữ nguyên.")
     } finally { busy.current = false; if (mounted.current) setSaving(false) }
   }
-  const reveal = async () => {
-    if (revealed) { setRevealed(null); return }
-    if (!statusRef.current || revealingRef.current) return
-    const base = statusRef.current.revision_token
-    const version = generation.current
-    const controller = new AbortController(); revealRequest.current = controller
-    revealingRef.current = true; setRevealing(true)
-    try {
-      const result = await requestJSON<{ api_key: string; revision_token: string }>(`${endpoint}/reveal`, { method: "POST", body: JSON.stringify({ base_revision_token: base }), signal: controller.signal })
-      if (mounted.current && !controller.signal.aborted && version === generation.current && result.revision_token === statusRef.current?.revision_token) setRevealed(result.api_key)
-    } catch (err) { if (mounted.current && !controller.signal.aborted) setError(err instanceof Error ? err.message : "Không thể hiển thị credential.") }
-    finally { if (mounted.current && !controller.signal.aborted) { revealingRef.current = false; setRevealing(false) } }
-  }
   const staleBase = Boolean(status && draft.base_revision_token !== status.revision_token)
   const disabled = saving || loading || !status
   return <div className="admin-ai-settings">
@@ -197,10 +174,8 @@ export function LLMConnectionPanel({ onNotify }: { onNotify?: (message: string, 
       {loading && !status ? <p role="status">Đang tải cấu hình…</p> : status ? <>
         <div className="admin-profile-grid"><ProfileDetails title="Cấu hình đã lưu (Persisted)" profile={status.persisted} /><ProfileDetails title="Cấu hình hiệu lực (Runtime)" profile={status.active} /></div>
         <dl className="admin-revision-grid"><div><dt className="font-semibold">Revision đã lưu</dt><dd className="mt-1 break-all font-mono" data-testid="persisted-revision">{status.revision_token}</dd></div><div><dt className="font-semibold">Revision tại Runtime</dt><dd className="mt-1 break-all font-mono" data-testid="runtime-revision">{status.runtime_revision_token}</dd><dd className="mt-1 text-slate-600">{status.sync_state === "current" ? "Tác vụ mới sử dụng revision này; tác vụ đang chạy giữ snapshot cũ." : "Đang đồng bộ cấu hình giữa các worker."}</dd></div></dl>
-        <div className="admin-credential-summary"><div><p className="font-semibold flex items-center gap-2"><KeyRound size={17} aria-hidden="true" />Credential: {credentialLabels[status.credential.state]}</p><p className="mt-1 text-sm text-slate-600">Nguồn: {status.credential.source} · <span data-testid="masked-credential">{status.credential.masked || "Không có key"}</span></p></div>{status.credential.reveal_supported && <button type="button" className="admin-button" onClick={() => void reveal()} disabled={revealing || saving || status.credential.state !== "SET"} aria-pressed={Boolean(revealed)}>{revealed ? <EyeOff size={17} /> : <Eye size={17} />}{revealed ? "Ẩn key" : revealing ? "Đang xác minh…" : "Hiện key trong 15 giây"}</button>}</div>
-        {revealed && <div className="mt-4 rounded border border-amber-300 bg-amber-50 p-4"><p className="mb-2 text-sm text-amber-900">Key tự ẩn sau 15 giây hoặc khi bạn rời trang.</p><output aria-label="Credential đang hiển thị" className="break-all font-mono">{revealed}</output></div>}
+        <div className="admin-credential-summary"><div><p className="font-semibold flex items-center gap-2"><KeyRound size={17} aria-hidden="true" />Credential: {credentialLabels[status.credential.state]}</p><p className="mt-1 text-sm text-slate-600">Nguồn: {status.credential.source} · <span data-testid="masked-credential">{status.credential.masked || "Không có key"}</span></p></div></div>
         {!status.encryption.available && <p role="status" className="mt-4 text-sm text-amber-900">Khóa mã hóa chưa sẵn sàng. Cấu hình dùng credential trong DB cần được khôi phục khóa trước khi sử dụng.</p>}
-        {!status.credential.reveal_supported && <p className="mt-3 text-sm text-slate-600">Nguồn credential này không hỗ trợ đọc lại. Bạn có thể thay credential mới trong bản nháp.</p>}
       </> : <p className="text-slate-600">Chưa tải được trạng thái. Dùng “Tải lại trạng thái” để thử lại.</p>}
     </section>
     <form className="admin-panel admin-ai-draft" aria-labelledby="ai-draft-title" onSubmit={apply}>
@@ -211,7 +186,7 @@ export function LLMConnectionPanel({ onNotify }: { onNotify?: (message: string, 
         {draft.source_mode === "ENV" && <p className="text-sm text-slate-600">Áp dụng toàn bộ model, endpoint và credential từ ENV. Chọn hồ sơ cơ sở dữ liệu để chỉnh từng trường hoặc xóa credential.</p>}
         <div className="grid gap-5 md:grid-cols-2"><label htmlFor="ai-protocol" className="admin-field">Giao thức<select id="ai-protocol" name="protocol" value={draft.protocol} disabled={draft.source_mode === "ENV"} onChange={() => change({ protocol: "openai_compatible" })}><option value="openai_compatible">OpenAI Compatible</option></select></label><label htmlFor="ai-auth" className="admin-field">Cách xác thực<select id="ai-auth" name="auth_mode" value={draft.auth_mode} disabled={draft.source_mode === "ENV"} onChange={event => change({ auth_mode: event.target.value as AIConfigDraft["auth_mode"] })}><option value="BEARER">Bearer credential</option><option value="NONE">Không dùng credential</option></select></label></div>
         <label htmlFor="ai-base-url" className="admin-field">Base URL<input id="ai-base-url" name="base_url" type="url" required={draft.source_mode === "DATABASE"} disabled={draft.source_mode === "ENV"} value={draft.base_url} spellCheck={false} autoCapitalize="none" onChange={event => change({ base_url: event.target.value })} aria-describedby="ai-binding-hint" /><span id="ai-binding-hint" className="font-normal text-sm text-slate-600">Đổi host, cổng hoặc đường dẫn tenant cần cung cấp credential mới.</span></label>
-        <ModelQuickSelect value={draft.model} activeModel={status?.active.model} disabled={disabled || draft.source_mode === "ENV"} onSelect={model => change({ model })} />
+        <ModelQuickSelect value={draft.model} activeModel={status?.active.model} availableModels={status?.available_models} disabled={disabled || draft.source_mode === "ENV"} onSelect={model => change({ model })} />
         <label htmlFor="ai-model" className="admin-field">Model<input id="ai-model" name="model" required={draft.source_mode === "DATABASE"} disabled={draft.source_mode === "ENV"} value={draft.model} maxLength={160} spellCheck={false} autoCapitalize="none" onChange={event => change({ model: event.target.value })} /></label>
         <fieldset disabled={draft.source_mode === "ENV"} className="admin-key-actions"><legend className="font-semibold">Thao tác với credential</legend><div className="mt-2 grid gap-3 sm:grid-cols-3">{([['KEEP','Giữ key hiện tại'],['REPLACE','Thay key mới'],['CLEAR','Xóa key']] as const).map(([value,label]) => <label key={value} className="flex min-h-12 cursor-pointer items-center gap-3 text-sm"><input type="radio" name="credential_action" value={value} checked={draft.credential_action === value} onChange={() => change({ credential_action: value })} />{label}</label>)}</div></fieldset>
         {draft.credential_action === "REPLACE" && draft.source_mode === "DATABASE" && <label htmlFor="ai-new-key" className="admin-field">Credential mới<input id="ai-new-key" name="new_credential" type="password" value={draft.api_key} autoComplete="new-password" required spellCheck={false} onChange={event => change({ api_key: event.target.value })} aria-describedby="ai-key-hint" /><span id="ai-key-hint" className="font-normal text-sm text-slate-600">Ô này luôn trống khi tải cấu hình. Key che ở trên chỉ để đọc.</span></label>}

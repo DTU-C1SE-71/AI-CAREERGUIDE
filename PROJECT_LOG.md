@@ -102,6 +102,10 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-21
+- **`feat(admin-ai): remove API key reveal and support env-driven LLM_AVAILABLE_MODELS`**
+  - Xóa hoàn toàn chức năng hiển thị lại API key ở trang Admin cả Frontend (`LLMConnectionPanel.tsx`: bỏ nút `"Hiện key trong 15 giây"`, state/handler `reveal`) lẫn Backend (`router.py`: xóa `POST /admin/ai-config/reveal`, `service.py`: xóa `reveal_credential` và khóa `reveal_supported = False`).
+  - Bổ sung biến môi trường `LLM_AVAILABLE_MODELS` (phân cách bằng dấu phẩy trong `.env` / Render) vào `backend/app/core/config.py`, trả qua `AIConfigStatus.available_models` và hiển thị động trong `ModelQuickSelect.tsx` để Admin chọn nhanh model trên giao diện.
+  - Kiểm chứng: `python -m py_compile` (4 file Python) thành công; `npm run build` (`tsc -b && vite build`) và `npm test` (12/12 pass).
 - **`d42f2ce` — `feat(auth): support env-driven admin bootstrap in init_db.py`**
   - Thêm `bootstrap_admin_from_env()` vào `backend/scripts/init_db.py` để tự tạo hoặc nâng quyền `ADMIN` trên Render/Supabase thông qua biến môi trường `BOOTSTRAP_ADMIN_EMAIL` / `BOOTSTRAP_ADMIN_PASSWORD` mà không hardcode mật khẩu trong repo.
   - Xác nhận DB production dùng **Supabase PostgreSQL** (`uwggiegmkwfayeutjrty`) với enum `UserRole` viết HOA (`ADMIN`, `STUDENT`) và mật khẩu băm Argon2id.
