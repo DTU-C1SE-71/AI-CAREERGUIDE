@@ -219,7 +219,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
         },
         body: JSON.stringify({
           focus_query: focusQuery.trim() || DEFAULT_TREND_QUERY_2026,
-          auto_save: false,
+          auto_save: true,
         }),
       })
       if (res.status === 401 || res.status === 403) {
@@ -238,13 +238,13 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
       setStatusData({
         ...data,
         has_run: true,
-        pending_save: data.pending_save ?? true,
-        saved_to_db: data.saved_to_db ?? false,
+        pending_save: data.pending_save ?? false,
+        saved_to_db: data.saved_to_db ?? (data.status === "saved"),
       })
       setExpanded(true)
       onNotify(
         data.message ||
-          `Đã tạo bản nháp ${data.total_trending_marked ?? 0} ngành xu hướng phủ ${data.categories_covered ?? 0}/${data.total_categories ?? 23} nhóm ngành. Hãy rà soát và bấm "Lưu vào CSDL".`,
+          `Đã cập nhật ${data.total_trending_marked ?? 0} ngành xu hướng mới (phủ ${data.categories_covered ?? 0}/${data.total_categories ?? 23} nhóm ngành) và xóa sạch tag cũ.`,
       )
     } catch (err) {
       onNotify(

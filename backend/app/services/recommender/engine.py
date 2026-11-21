@@ -883,71 +883,87 @@ def classify_major_academic_benchmark(
             "description": "Ngưỡng điểm chuẩn cấu hình trực tiếp theo dữ liệu ngành.",
         }
 
+    code6 = extract_6digit_code(major_code)
     name_lower = (major_name or "").lower()
-    cat_lower = (category or "").lower()
 
-    # Tầng 1: Cạnh tranh cực cao (Điểm chuẩn thường >= 24.5 - 28.5đ)
-    high_keywords = [
-        "y khoa", "y đa khoa", "bác sĩ", "răng hàm mặt", "răng - hàm - mặt", "dược học",
-        "y học cổ truyền", "khoa học máy tính", "trí tuệ nhân tạo", "khoa học dữ liệu",
-        "vi mạch", "bán dẫn", "kinh tế quốc tế", "kinh doanh quốc tế", "tài chính quốc tế",
-        "quan hệ quốc tế", "luật kinh tế", "logistics", "chuỗi cung ứng", "truyền thông đa phương tiện",
-        "sư phạm toán", "sư phạm ngữ văn", "sư phạm tiếng anh", "sư phạm lịch sử",
-        "sư phạm địa lý", "sư phạm địa lí", "sư phạm vật lý", "sư phạm vật lí", "sư phạm hóa học"
-    ]
-    if any(k in name_lower for k in high_keywords):
+    # Ngưỡng đảm bảo chất lượng đầu vào (điểm sàn tối thiểu) theo quy định của Bộ GD&ĐT
+    if code6 in {"720101", "720501"} or any(
+        k in name_lower for k in ("y khoa", "y đa khoa", "bác sĩ đa khoa", "răng hàm mặt", "răng - hàm - mặt")
+    ):
         return {
             "tier": "HIGH_COMPETITION",
-            "tier_label": "Cạnh tranh cao (~25.5đ)",
-            "benchmark_cutoff": 25.5,
-            "min_recommended": 23.5,
-            "description": "Ngành mũi nhọn với điểm chuẩn đại học thuộc top đầu cả nước."
+            "tier_label": "Điểm sàn Bộ GD&ĐT (22.5đ)",
+            "benchmark_cutoff": 22.5,
+            "min_recommended": 22.5,
+            "description": "Ngưỡng đảm bảo chất lượng đầu vào tối thiểu do Bộ GD&ĐT quy định cho ngành Y khoa và Răng - Hàm - Mặt.",
         }
 
-    # Tầng 2: Cạnh tranh khá (Điểm chuẩn thường 19.5 - 23.5đ)
-    medium_keywords = [
-        "kỹ thuật xét nghiệm", "kỹ thuật hình ảnh", "phục hồi chức năng", "điều dưỡng",
-        "hộ sinh", "dinh dưỡng", "y tế công cộng",
-        "công nghệ thông tin", "an toàn thông tin", "kỹ thuật phần mềm", "hệ thống thông tin",
-        "mạng máy tính", "kỹ thuật máy tính", "công nghệ tài chính", "fintech",
-        "tài chính", "ngân hàng", "kế toán", "kiểm toán", "quản trị kinh doanh",
-        "marketing", "thương mại điện tử", "luật", "sư phạm", "giáo dục tiểu học",
-        "giáo dục mầm non", "ngôn ngữ anh", "ngôn ngữ trung", "ngôn ngữ nhật",
-        "ngôn ngữ hàn", "tâm lý học", "kiến trúc", "thiết kế đồ họa", "quan hệ công chúng"
-    ]
-    if any(k in name_lower for k in medium_keywords):
+    if code6 in {"720201", "720115"} or any(
+        k in name_lower for k in ("dược học", "y học cổ truyền")
+    ):
+        return {
+            "tier": "HIGH_COMPETITION",
+            "tier_label": "Điểm sàn Bộ GD&ĐT (21.0đ)",
+            "benchmark_cutoff": 21.0,
+            "min_recommended": 21.0,
+            "description": "Ngưỡng đảm bảo chất lượng đầu vào tối thiểu do Bộ GD&ĐT quy định cho ngành Dược học và Y học cổ truyền.",
+        }
+
+    if code6 in {"140206", "140221", "140222", "140245"} or any(
+        k in name_lower for k in ("giáo dục thể chất", "sư phạm âm nhạc", "sư phạm mỹ thuật", "sư phạm nghệ thuật")
+    ):
         return {
             "tier": "MEDIUM_COMPETITION",
-            "tier_label": "Cạnh tranh khá (~21.0đ)",
-            "benchmark_cutoff": 21.0,
-            "min_recommended": 19.0,
-            "description": "Ngành học có tính cạnh tranh khá tại các trường đại học uy tín."
+            "tier_label": "Điểm sàn Bộ GD&ĐT (18.0đ)",
+            "benchmark_cutoff": 18.0,
+            "min_recommended": 18.0,
+            "description": "Ngưỡng đảm bảo chất lượng đầu vào tối thiểu do Bộ GD&ĐT quy định cho nhóm Giáo dục Thể chất và Sư phạm Âm nhạc/Mỹ thuật.",
         }
 
-    # Tầng 3: Tiêu chuẩn / Vừa sức (Điểm chuẩn thường 15.0 - 18.5đ)
-    standard_keywords = [
-        "công nghệ sinh học", "sinh học", "thú y", "chăn nuôi", "nông nghiệp",
-        "cây trồng", "lâm nghiệp", "thủy sản", "môi trường", "đất đai", "thực phẩm",
-        "vật liệu", "dệt may", "văn phòng", "công tác xã hội", "xã hội học",
-        "triết học", "lịch sử", "địa lý", "địa lí", "thống kê", "phát triển",
-        "quản lý nhà nước", "công nghệ kỹ thuật"
-    ]
-    if any(k in name_lower for k in standard_keywords) or any(k in cat_lower for k in standard_keywords):
+    if code6.startswith("1402") or "sư phạm" in name_lower or any(
+        k in name_lower for k in ("giáo dục mầm non", "giáo dục tiểu học", "giáo dục công dân", "giáo dục chính trị", "giáo dục quốc phòng", "giáo dục pháp luật")
+    ):
         return {
-            "tier": "STANDARD_COMPETITION",
-            "tier_label": "Vừa sức / Tiêu chuẩn (~16.5đ)",
-            "benchmark_cutoff": 16.5,
-            "min_recommended": 15.0,
-            "description": "Ngành đào tạo ứng dụng thực tế, điểm chuẩn phù hợp với mặt bằng phổ thông."
+            "tier": "MEDIUM_COMPETITION",
+            "tier_label": "Điểm sàn Bộ GD&ĐT (19.0đ)",
+            "benchmark_cutoff": 19.0,
+            "min_recommended": 19.0,
+            "description": "Ngưỡng đảm bảo chất lượng đầu vào tối thiểu do Bộ GD&ĐT quy định cho nhóm ngành đào tạo giáo viên.",
         }
 
-    # Mặc định phổ thông
+    if code6.startswith("72") or any(
+        k in name_lower for k in (
+            "điều dưỡng", "hộ sinh", "kỹ thuật xét nghiệm y học", "kỹ thuật hình ảnh y học",
+            "phục hồi chức năng", "phục hình răng", "y học dự phòng", "dinh dưỡng",
+            "khúc xạ nhãn khoa", "y tế công cộng", "quản lý y tế", "gây mê hồi sức",
+            "hồi sức cấp cứu", "ngoại khoa", "sản phụ khoa", "nhi khoa", "nội khoa",
+            "hóa dược", "công nghệ dược phẩm",
+        )
+    ):
+        return {
+            "tier": "MEDIUM_COMPETITION",
+            "tier_label": "Điểm sàn Bộ GD&ĐT (19.0đ)",
+            "benchmark_cutoff": 19.0,
+            "min_recommended": 19.0,
+            "description": "Ngưỡng đảm bảo chất lượng đầu vào tối thiểu do Bộ GD&ĐT quy định cho nhóm ngành Sức khỏe có chứng chỉ hành nghề.",
+        }
+
+    if code6.startswith("38") or "luật" in name_lower:
+        return {
+            "tier": "MEDIUM_COMPETITION",
+            "tier_label": "Điểm sàn Bộ GD&ĐT (18.0đ)",
+            "benchmark_cutoff": 18.0,
+            "min_recommended": 18.0,
+            "description": "Ngưỡng đảm bảo chất lượng đầu vào tối thiểu theo chuẩn chương trình đào tạo lĩnh vực Pháp luật của Bộ GD&ĐT.",
+        }
+
+    # Tất cả các ngành Đại học còn lại: ngưỡng sàn tối thiểu 15.0đ (trung bình 5.0đ/môn)
     return {
         "tier": "STANDARD_COMPETITION",
-        "tier_label": "Phổ thông (~18.0đ)",
-        "benchmark_cutoff": 18.0,
-        "min_recommended": 15.5,
-        "description": "Ngành học có phổ điểm tuyển sinh đa dạng theo phân khúc trường."
+        "tier_label": "Điểm sàn tối thiểu (15.0đ)",
+        "benchmark_cutoff": 15.0,
+        "min_recommended": 15.0,
+        "description": "Ngưỡng điểm sàn tối thiểu đầu vào bậc Đại học theo mặt bằng chung Bộ GD&ĐT (tổng 3 môn ≥ 15.0đ).",
     }
 
 

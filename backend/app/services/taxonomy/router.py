@@ -81,12 +81,14 @@ async def sync_tt09_catalog(
     Synchronizes 435 MOET Level-IV majors according to Circular 74/2026/TT-BGDĐT into PostgreSQL CSDL.
     """
     try:
+        deleted_old = await service.purge_old_major_catalog_data(db)
         seed_data = service.load_seed_majors()
-        return await service.bulk_sync_majors(
+        res = await service.bulk_sync_majors(
             db,
             seed_data,
-            deactivate_missing=len(seed_data) >= 20,
+            deactivate_missing=True,
         )
+        return {**res, "deleted_old": deleted_old}
     except Exception as exc:
         await db.rollback()
         raise HTTPException(503, "Không thể đồng bộ danh mục; dữ liệu chưa được lưu.") from exc
@@ -179,7 +181,7 @@ async def import_majors_from_excel(
             "sheets": all_sheets,
         }
 
-    should_replace = True if replace_catalog is None else bool(replace_catalog)
+    should_replace = True
     deleted_old = 0
 
     try:

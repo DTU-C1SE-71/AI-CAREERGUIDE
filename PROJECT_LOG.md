@@ -104,7 +104,12 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-21
-- **`fix(trend-agent): make LLM JSON extraction and partial batch validation resilient in _refine_tiers_with_llm`**
+- **`feat(catalog,recommender,trend): enforce full catalog replace, MOET minimum floors and clean trend overwrite`**
+  - **Thay thế hoàn toàn khi nhập danh mục mới:** Bỏ tùy chọn cộng dồn ở `frontend/src/pages/AdminImportPage.tsx` (luôn gửi `replace_catalog=true`) và khóa `should_replace = True` / gọi `purge_old_major_catalog_data(db)` ở cả `POST /taxonomy/import-excel` và `POST /taxonomy/sync-tt09` (`backend/app/services/taxonomy/router.py`).
+  - **Áp dụng điểm sàn tối thiểu của Bộ GD&ĐT:** Cập nhật `classify_major_academic_benchmark` trong `backend/app/services/recommender/engine.py` (Y khoa & Răng-Hàm-Mặt `22.5đ`; Dược học & Y học cổ truyền `21.0đ`; Sức khỏe có CCHN & Sư phạm `19.0đ`; GD Thể chất, SP Âm nhạc/Mỹ thuật & Pháp luật `18.0đ`; các ngành Đại học còn lại `15.0đ`).
+  - **Xóa xu hướng cũ & gỡ tag bị loại khi tìm xu hướng mới:** `apply_trending_markers` (`backend/app/services/taxonomy/trend_agent.py`) dùng `flag_modified` và xóa `_trend` / tiền tố cũ trên toàn bộ bảng `majors`, `_clear_registry_file_cache` xóa cache file tĩnh, `TrendAgentPanel.tsx` gửi `auto_save: true` để ghi đè CSDL ngay khi tìm ra xu hướng mới, và `MajorDetail.tsx` xóa sạch `trend_*` khi `is_trending` là `false`.
+  - Kiểm chứng: `python -m py_compile` (Pass); script kiểm tra 13 trường hợp điểm sàn Bộ GD&ĐT (Pass); `npm run build` & `npm test` (12/12 pass).
+- **`85640aa` — `fix(trend-agent): make LLM JSON extraction and partial batch validation resilient in _refine_tiers_with_llm`**
   - Sửa lỗi `502 Kết quả phân tích xu hướng từ provider không hợp lệ.` trong `_refine_tiers_with_llm` (`backend/app/services/taxonomy/trend_agent.py`) khi danh sách ngành ứng viên lớn hoặc LLM bọc lời dẫn quanh ```` ```json [...] ``` ````.
   - Hỗ trợ bóc code block/mảng JSON dù có lời dẫn, bỏ qua mã trùng lặp hoặc mã dư khi đánh giá nhiều ngành (vẫn giữ chặt lỗi `502` nếu toàn bộ đầu ra sai kiểu/không có mã hợp lệ), và tự động dùng `macro_suggested_tier` + nguồn bài báo thật cho ứng viên bị LLM bỏ sót trong `_build_classified_trend_map`.
   - Kiểm chứng: `python -m py_compile` (Pass); script kiểm thử 6 đầu ra lỗi `502`, trích xuất JSON kèm lời dẫn, lặp mã, mã thừa và giữ đủ `50/50` ngành khi LLM trả `48/50` (Pass).

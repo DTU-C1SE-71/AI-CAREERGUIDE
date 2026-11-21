@@ -32,7 +32,6 @@ export function AdminImportPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
-  const [replaceCatalog, setReplaceCatalog] = useState(false)
   const [previewPage, setPreviewPage] = useState(1)
   const lock = useRef(false)
   const version = useRef(0)
@@ -57,7 +56,7 @@ export function AdminImportPage() {
       data.append("file", file)
       const query = new URLSearchParams({
         preview_only: String(!apply),
-        replace_catalog: String(replaceCatalog),
+        replace_catalog: "true",
         ...(sheet ? { sheet_name: sheet } : {}),
       })
       const result = await requestJSON<ImportPreview>(`/v1/taxonomy/import-excel?${query}`, {
@@ -72,7 +71,6 @@ export function AdminImportPage() {
         setFile(null)
         setPreview(null)
         setSheet("")
-        setReplaceCatalog(false)
         if (fileInput.current) fileInput.current.value = ""
       } else {
         setPreview(result)
@@ -151,9 +149,8 @@ export function AdminImportPage() {
             <div className="admin-pagination"><span>Trang {previewPage}/{previewPages}</span><button className="admin-button" type="button" disabled={previewPage <= 1} onClick={() => setPreviewPage(value => value - 1)}>Trước</button><button className="admin-button" type="button" disabled={previewPage >= previewPages} onClick={() => setPreviewPage(value => value + 1)}>Sau</button></div>
           </> : <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Tệp chưa có ngành để nhập. Kiểm tra tên cột và các dòng dữ liệu rồi xem trước lại.</p>}
           <fieldset className="mt-5 border-t border-slate-200 pt-4" disabled={busy}><legend className="font-semibold">Cách lưu danh mục</legend>
-            <p className="mt-2 text-sm text-slate-600">Mặc định thêm hoặc cập nhật các ngành trong tệp. Chỉ thay thế toàn bộ khi tệp chứa danh mục hoàn chỉnh.</p>
-            <label className="my-4 flex min-h-12 items-start gap-3 text-sm"><input type="checkbox" checked={replaceCatalog} onChange={event => setReplaceCatalog(event.target.checked)} className="mt-1" />Thay thế toàn bộ danh mục hiện có bằng tệp này</label>
-            <button type="button" className="admin-button primary" disabled={!rows.length || busy} onClick={() => { if (!replaceCatalog || window.confirm("Thay thế toàn bộ danh mục hiện có bằng tệp đã chọn?")) void upload(true) }}>{busy ? "Đang lưu…" : "Lưu danh mục"}</button>
+            <p className="mt-2 mb-4 text-sm text-slate-600">Khi lưu danh mục mới, hệ thống sẽ tự động xóa toàn bộ danh mục ngành cũ và thay thế hoàn toàn bằng danh mục trong tệp này.</p>
+            <button type="button" className="admin-button primary" disabled={!rows.length || busy} onClick={() => { if (window.confirm("Xóa toàn bộ danh mục ngành cũ và thay thế hoàn toàn bằng tệp đã chọn?")) void upload(true) }}>{busy ? "Đang lưu…" : "Lưu danh mục"}</button>
           </fieldset>
         </>}
       </section>

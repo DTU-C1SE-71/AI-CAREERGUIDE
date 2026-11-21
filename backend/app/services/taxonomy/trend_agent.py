@@ -31,6 +31,7 @@ from typing import Any, Dict, List, Optional, Tuple
 import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm.attributes import flag_modified
 
 from app.core.config import settings
 from app.models.staging import StagingRecord, StagingStatus, StagingStreamType
@@ -840,24 +841,27 @@ def _strip_old_trend_prefix(outlook: str) -> str:
 
 
 async def apply_trending_markers(db: AsyncSession, registry_payload: Dict[str, Any], sync_active_json=None) -> None:
-    """Giao dịch DB là nguồn duy nhất; không ghi seed/registry hoặc nạp lại ngành."""
+    """Giao dịch DB là nguồn duy nhất; xóa sạch tag xu hướng cũ ở mọi ngành trước khi ghi xu hướng mới."""
     from fastapi import HTTPException
     if db is None:
         raise HTTPException(503,"Chưa có kết nối DB để lưu xu hướng.")
     try:
-        rows=list((await db.execute(select(Major).where(Major.is_active.is_(True)).with_for_update())).scalars())
+        rows=list((await db.execute(select(Major).with_for_update())).scalars())
         entries=registry_payload.get("majors") or {}
-        known={row.major_code for row in rows}
+        known={row.major_code for row in rows if row.is_active}
         if set(entries)-known:
             raise HTTPException(422,"Danh sách xu hướng chứa ngành không hoạt động hoặc không tồn tại.")
         for major in rows:
             attributes=dict(major.cognitive_attributes or {})
-            entry=entries.get(major.major_code)
+            attributes.pop("_trend",None)
+            entry=entries.get(major.major_code) if major.is_active else None
             if entry:
                 attributes["_trend"]={**entry,"run_metadata":{k:registry_payload.get(k) for k in ("last_run_at","saved_at","focus_query","articles_scanned","search_sources","triggered_by")}}
-            else:
-                attributes.pop("_trend",None)
             major.cognitive_attributes=attributes
+            flag_modified(major,"cognitive_attributes")
+            cleaned_outlook=_strip_old_trend_prefix(major.industry_outlook or "")
+            if major.industry_outlook and cleaned_outlook != major.industry_outlook:
+                major.industry_outlook=cleaned_outlook
         await db.commit()
     except HTTPException:
         await db.rollback();raise
@@ -1023,6 +1027,20 @@ async def _active_trend_rows(db):
         raise HTTPException(503,"Không đọc được dữ liệu xu hướng.") from exc
 
 
+def _clear_registry_file_cache() -> None:
+    if settings.ENVIRONMENT == "test":
+        return
+    try:
+        reg_path = _get_registry_path()
+        if reg_path.exists():
+            reg_path.write_text(json.dumps({
+                "last_run_at": None, "saved_at": None, "triggered_by": None,
+                "focus_query": "", "articles_scanned": 0, "search_sources": [], "majors": {},
+            }, ensure_ascii=False, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
 async def save_trending_majors_to_db(db, majors_list, focus_query="", articles_scanned=0,
                                     search_sources=None, triggered_by="admin", llm_refined=False):
     from fastapi import HTTPException
@@ -1043,8 +1061,9 @@ async def save_trending_majors_to_db(db, majors_list, focus_query="", articles_s
             "trend_sources":item.get("trend_sources") or [],"updated_at":now}
     await apply_trending_markers(db,{"majors":normalized,"last_run_at":now,"saved_at":now,
         "focus_query":focus_query,"articles_scanned":articles_scanned,"search_sources":search_sources or [],"triggered_by":triggered_by})
+    _clear_registry_file_cache()
     result=await get_trending_status_async(db)
-    return {**result,"message":f"Đã lưu {len(normalized)} ngành xu hướng vào CSDL.","llm_refined":llm_refined}
+    return {**result,"message":f"Đã xóa xu hướng cũ và lưu {len(normalized)} ngành xu hướng mới vào CSDL.","llm_refined":llm_refined}
 
 
 async def update_single_major_trend_tier(db, major_code, trend_tier, trend_reason=None):
@@ -1069,6 +1088,7 @@ async def update_single_major_trend_tier(db, major_code, trend_tier, trend_reaso
 
 async def clear_trending_markers(db):
     await apply_trending_markers(db,{"majors":{}})
+    _clear_registry_file_cache()
     return await get_trending_status_async(db)
 
 

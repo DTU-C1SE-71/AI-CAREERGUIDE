@@ -154,12 +154,12 @@ export function MajorDetail() {
             code: taxonomyInfo.major_code,
             name: taxonomyInfo.name_vi || taxonomyInfo.name || prev.name,
             category: taxonomyInfo.category || prev.category,
-            is_trending: taxonomyInfo.is_trending ?? prev.is_trending,
-            trend_tier: taxonomyInfo.trend_tier ?? prev.trend_tier,
-            trend_priority: taxonomyInfo.trend_priority ?? prev.trend_priority,
-            trend_label: taxonomyInfo.trend_label ?? prev.trend_label,
-            trend_reason: taxonomyInfo.trend_reason ?? prev.trend_reason,
-            trend_sources: taxonomyInfo.trend_sources ?? prev.trend_sources,
+            is_trending: Boolean(taxonomyInfo.is_trending),
+            trend_tier: taxonomyInfo.is_trending ? taxonomyInfo.trend_tier ?? null : null,
+            trend_priority: taxonomyInfo.is_trending ? taxonomyInfo.trend_priority ?? 0 : 0,
+            trend_label: taxonomyInfo.is_trending ? taxonomyInfo.trend_label ?? null : null,
+            trend_reason: taxonomyInfo.is_trending ? taxonomyInfo.trend_reason ?? null : null,
+            trend_sources: taxonomyInfo.is_trending ? taxonomyInfo.trend_sources ?? [] : [],
             university:
               prev.university ||
               `${taxonomyInfo.category || "Khối ngành chuẩn Bộ GD&ĐT"} · Khối ${(taxonomyInfo.subject_blocks || []).join(", ")}`,
