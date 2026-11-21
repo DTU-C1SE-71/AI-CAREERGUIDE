@@ -104,7 +104,11 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-21
-- **`feat(trend-agent): expand multi-query RSS/Tavily search and 23-category evidence synonyms`**
+- **`fix(trend-agent): raise focus_query limit, compact presets under 380 chars and format 422 errors`**
+  - Sửa lỗi `[object Object]` (HTTP `422`) khi chạy Agent tìm xu hướng do `TrendAgentRunRequest.focus_query` trong `backend/app/schemas/taxonomy.py` bị giới hạn `max_length=400` và frontend truyền mảng lỗi `detail` vào `Error`: nâng giới hạn backend lên `2000` ký tự, bổ sung `extractApiError` ở `TrendAgentPanel.tsx` và nén 5 mẫu `TREND_QUERY_PRESETS` xuống `274–350` ký tự (`<= 380`).
+  - Tự động bóc markdown code fence (` ```json `) trước `json.loads` trong `_refine_tiers_with_llm` (`backend/app/services/taxonomy/trend_agent.py`).
+  - Kiểm chứng: `python -m py_compile` (Pass); script kiểm tra độ dài 5 preset (`<= 350` ký tự) & tách truy vấn (Pass); `npm run build` & `npm test` (12/12 pass).
+- **`cb9d7db` — `feat(trend-agent): expand multi-query RSS/Tavily search and 23-category evidence synonyms`**
   - Tách truy vấn tìm kiếm trong `backend/app/services/taxonomy/trend_agent.py` qua `_build_search_queries` (tối đa 6 cụm Tavily + 6–8 truy vấn `OR` theo lượt phủ đều Google News RSS/Bing News RSS, nâng trần thu thập lên `160` bài) mà vẫn giữ tuyệt đối nguyên tắc `Strict Evidence-Only` (không bịa ngành).
   - Làm sạch phần mã số trong ngoặc đơn khỏi tên ngành trước khi khớp (`Quản trị khách sạn (7810201, 8810201)`), mở rộng `STRICT_MAJOR_SYNONYMS` lên `99` mã ngành phủ đủ `23/23` nhóm ngành TT74 (mỗi nhóm >= 3 mã, trừ `DỊCH VỤ XÃ HỘI` = 2, `THÚ Y` = 1), và tăng `max_tokens=8192` / `timeout=35` trong `_refine_tiers_with_llm`.
   - Viết lại `DEFAULT_TREND_QUERY_2026` (6 cụm phân tách `;` phủ 23 nhóm ngành) và 5 mẫu `TREND_QUERY_PRESETS` trong `frontend/src/components/admin/TrendAgentPanel.tsx`.

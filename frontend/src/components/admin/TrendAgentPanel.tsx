@@ -102,7 +102,7 @@ function formatRunTime(iso?: string | null): string {
 }
 
 const DEFAULT_TREND_QUERY_2026 =
-  "dự báo nhu cầu nhân lực Việt Nam 2026: trí tuệ nhân tạo, an ninh mạng, kỹ thuật phần mềm, khoa học dữ liệu, toán ứng dụng, công nghệ bán dẫn, khoa học vật liệu; thiết kế vi mạch, cơ điện tử, tự động hóa, kỹ thuật robot, kỹ thuật ô tô, điện tử viễn thông, công nghệ thực phẩm, an toàn thực phẩm, kiến trúc, kỹ thuật xây dựng; quản trị kinh doanh, digital marketing, thương mại điện tử, fintech, logistics, kinh tế số, tâm lý học, luật kinh tế, luật thương mại quốc tế; y khoa, dược học, điều dưỡng, kỹ thuật xét nghiệm y học, công nghệ sinh học, nông nghiệp công nghệ cao, nuôi trồng thủy sản, bác sĩ thú y; công nghệ giáo dục, giáo dục tiểu học, sư phạm tin học, ngôn ngữ anh, ngôn ngữ trung quốc, truyền thông đa phương tiện, quan hệ công chúng, thiết kế đồ họa, nghệ thuật số; quản trị khách sạn, ngành du lịch, khai thác vận tải, quản lý hoạt động bay, khoa học hàng hải, phát triển bền vững, ESG, quản lý tài nguyên môi trường, công tác xã hội, an ninh không gian mạng, điều tra hình sự"
+  "nhân lực 2026: trí tuệ nhân tạo, an ninh mạng, khoa học dữ liệu, bán dẫn; vi mạch, cơ điện tử, tự động hóa, xây dựng, kiến trúc; kinh doanh, fintech, logistics, kinh tế số, luật kinh tế; y khoa, điều dưỡng, dược học, sinh học, thực phẩm, nông nghiệp, thú y; sư phạm, ngôn ngữ, báo chí, đồ họa, khách sạn, du lịch, vận tải, môi trường, công tác xã hội"
 
 const TREND_QUERY_PRESETS: Array<{ label: string; query: string }> = [
   {
@@ -112,24 +112,44 @@ const TREND_QUERY_PRESETS: Array<{ label: string; query: string }> = [
   {
     label: "Công nghệ, Kỹ thuật & Xây dựng 2026",
     query:
-      "xu hướng tuyển dụng kỹ sư 2026: trí tuệ nhân tạo, kỹ thuật phần mềm, an ninh mạng, khoa học máy tính, khoa học dữ liệu, toán ứng dụng, thống kê; công nghệ bán dẫn, vật lý chất rắn, khoa học vật liệu, thiết kế vi mạch, cơ điện tử, tự động hóa, kỹ thuật robot, kỹ thuật ô tô, điện tử viễn thông; công nghệ thực phẩm, an toàn thực phẩm, công nghệ dệt may, kiến trúc, thiết kế nội thất, kỹ thuật xây dựng, quản lý xây dựng, quy hoạch đô thị",
+      "tuyển dụng kỹ sư 2026: trí tuệ nhân tạo, phần mềm, an ninh mạng, khoa học dữ liệu; bán dẫn, vật liệu, vi mạch, cơ điện tử, tự động hóa, robot, ô tô, điện tử viễn thông; công nghệ thực phẩm, an toàn thực phẩm, kiến trúc, thiết kế nội thất, kỹ thuật xây dựng, quy hoạch đô thị",
   },
   {
     label: "Kinh tế, Luật, Truyền thông & Dịch vụ 2026",
     query:
-      "nhu cầu nhân lực 2026: quản trị kinh doanh, digital marketing, thương mại điện tử, fintech, logistics, kinh doanh quốc tế, tài chính ngân hàng; kinh tế số, kinh tế đầu tư, tâm lý học, xã hội học, luật kinh tế, luật thương mại quốc tế, ngành luật; truyền thông đa phương tiện, quan hệ công chúng, báo chí, công nghệ truyền thông, quản trị khách sạn, du lịch, quản trị nhà hàng, khai thác vận tải, quản lý hoạt động bay, khoa học hàng hải",
+      "nhân lực 2026: quản trị kinh doanh, digital marketing, thương mại điện tử, fintech, logistics, kinh doanh quốc tế; kinh tế số, tâm lý học, luật kinh tế, luật thương mại quốc tế; truyền thông đa phương tiện, quan hệ công chúng, báo chí, quản trị khách sạn, du lịch, khai thác vận tải, hàng hải",
   },
   {
     label: "Y tế, Sinh học, Nông nghiệp & Môi trường 2026",
     query:
-      "thiếu hụt nhân lực 2026: y khoa, bác sĩ đa khoa, dược học, điều dưỡng, kỹ thuật xét nghiệm y học, công nghệ sinh học, kỹ thuật sinh học, vi sinh vật học; nông nghiệp công nghệ cao, kinh tế nông nghiệp, khoa học cây trồng, nuôi trồng thủy sản, chăn nuôi, bác sĩ thú y, ngành thú y; quản lý tài nguyên và môi trường, môi trường và phát triển bền vững, ESG, quản lý đất đai, an toàn vệ sinh lao động",
+      "nhân lực 2026: y khoa, dược học, điều dưỡng, xét nghiệm y học; công nghệ sinh học, vi sinh vật; nông nghiệp công nghệ cao, kinh tế nông nghiệp, khoa học cây trồng, nuôi trồng thủy sản, chăn nuôi, bác sĩ thú y; quản lý tài nguyên môi trường, phát triển bền vững, ESG, quản lý đất đai, an toàn lao động",
   },
   {
     label: "Giáo dục, Nhân văn, Nghệ thuật & Xã hội 2026",
     query:
-      "tuyển dụng nhân lực 2026: công nghệ giáo dục, quản lý giáo dục, giáo dục tiểu học, giáo dục mầm non, sư phạm tin học, sư phạm tiếng anh; ngôn ngữ anh, ngôn ngữ trung quốc, ngôn ngữ nhật, ngôn ngữ hàn quốc, văn hóa học, thiết kế đồ họa, nghệ thuật số, thiết kế thời trang, thiết kế công nghiệp; công tác xã hội, dân số và phát triển, trinh sát an ninh, điều tra hình sự, kỹ thuật hình sự, an ninh không gian mạng",
+      "tuyển dụng 2026: công nghệ giáo dục, quản lý giáo dục, giáo dục tiểu học, giáo dục mầm non, sư phạm tin học, sư phạm tiếng anh; ngôn ngữ anh, ngôn ngữ trung, ngôn ngữ nhật, ngôn ngữ hàn, văn hóa học; thiết kế đồ họa, nghệ thuật số, thiết kế thời trang; công tác xã hội, điều tra hình sự, an ninh mạng",
   },
 ]
+
+function extractApiError(errData: unknown, status: number): string {
+  if (errData && typeof errData === "object" && "detail" in errData) {
+    const detail = (errData as { detail?: unknown }).detail
+    if (typeof detail === "string" && detail.trim()) return detail
+    if (Array.isArray(detail)) {
+      const msgs = detail
+        .map((item) =>
+          item && typeof item === "object" && "msg" in item
+            ? String((item as { msg?: unknown }).msg || "")
+            : typeof item === "string"
+              ? item
+              : "",
+        )
+        .filter(Boolean)
+      if (msgs.length > 0) return msgs.join("; ")
+    }
+  }
+  return `Lỗi HTTP ${status}`
+}
 
 const SMOOTH_EASE: [number, number, number, number] = [0.22, 1, 0.36, 1]
 
@@ -207,7 +227,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
       }
       if (!res.ok) {
         const errData = await res.json().catch(() => null)
-        throw new Error(errData?.detail || `Lỗi HTTP ${res.status}`)
+        throw new Error(extractApiError(errData, res.status))
       }
       const data: TrendAgentStatusPayload = await res.json()
       if (!mounted.current) return
@@ -273,7 +293,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
       }
       if (!res.ok) {
         const errData = await res.json().catch(() => null)
-        throw new Error(errData?.detail || `Lỗi HTTP ${res.status}`)
+        throw new Error(extractApiError(errData, res.status))
       }
       const saved: TrendAgentStatusPayload = await res.json()
       if (!mounted.current) return
