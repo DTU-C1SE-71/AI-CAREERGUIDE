@@ -135,6 +135,10 @@ function extractApiError(errData: unknown, status: number): string {
   if (errData && typeof errData === "object" && "detail" in errData) {
     const detail = (errData as { detail?: unknown }).detail
     if (typeof detail === "string" && detail.trim()) return detail
+    if (detail && typeof detail === "object" && !Array.isArray(detail) && "message" in detail) {
+      const msg = String((detail as { message?: unknown }).message || "").trim()
+      if (msg) return msg
+    }
     if (Array.isArray(detail)) {
       const msgs = detail
         .map((item) =>

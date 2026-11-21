@@ -104,7 +104,11 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-21
-- **`fix(trend-agent): raise focus_query limit, compact presets under 380 chars and format 422 errors`**
+- **`fix(trend-agent): respect adapter 4096 max_tokens budget via batching and extract object error messages`**
+  - Sửa lỗi `HTTP 422` (`TOKEN_BUDGET`) phát sinh từ `backend/app/services/ai_config/adapter.py` (`1 <= max_tokens <= 4096`) bằng cách đưa `max_tokens=4096`, `timeout=25` và chia danh sách ứng viên trong `_refine_tiers_with_llm` (`backend/app/services/taxonomy/trend_agent.py`) thành từng lô tối đa `20` ngành/lần gọi.
+  - Cập nhật `extractApiError` trong `frontend/src/components/admin/TrendAgentPanel.tsx` để đọc thêm `detail.message` khi backend trả JSON object `{ code, message }`.
+  - Kiểm chứng: `python -m py_compile` (Pass); script kiểm thử 6 mẫu lỗi 502, bóc JSON markdown và chia lô 45 ngành (Pass); `npm run build` & `npm test` (12/12 pass).
+- **`575d13d` — `fix(trend-agent): raise focus_query limit, compact presets under 380 chars and format 422 errors`**
   - Sửa lỗi `[object Object]` (HTTP `422`) khi chạy Agent tìm xu hướng do `TrendAgentRunRequest.focus_query` trong `backend/app/schemas/taxonomy.py` bị giới hạn `max_length=400` và frontend truyền mảng lỗi `detail` vào `Error`: nâng giới hạn backend lên `2000` ký tự, bổ sung `extractApiError` ở `TrendAgentPanel.tsx` và nén 5 mẫu `TREND_QUERY_PRESETS` xuống `274–350` ký tự (`<= 380`).
   - Tự động bóc markdown code fence (` ```json `) trước `json.loads` trong `_refine_tiers_with_llm` (`backend/app/services/taxonomy/trend_agent.py`).
   - Kiểm chứng: `python -m py_compile` (Pass); script kiểm tra độ dài 5 preset (`<= 350` ký tự) & tách truy vấn (Pass); `npm run build` & `npm test` (12/12 pass).
