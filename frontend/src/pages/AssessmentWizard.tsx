@@ -4,7 +4,6 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
-  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
@@ -756,8 +755,8 @@ export function AssessmentWizard() {
 
       {/* Spacious Container: Default wide responsive stage aligned across monitors */}
       <PageContainer className="relative z-10 max-w-4xl xl:max-w-5xl">
-        {/* Top Header: Prominent Back Button */}
-        <div className="mb-2.5 flex flex-wrap items-center justify-between gap-2.5">
+        {/* Top Row: Separate Back Button + Liquid Glass Step Bar side-by-side */}
+        <div className="mb-3 flex flex-wrap items-center gap-2.5 sm:flex-nowrap">
           <button
             type="button"
             onClick={() => {
@@ -769,15 +768,14 @@ export function AssessmentWizard() {
                 navigate("/dashboard")
               }
             }}
-            className="inline-flex items-center gap-2 rounded-2xl border border-white/90 bg-white/75 px-4 py-2 text-xs font-extrabold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700 hover:shadow-sm sm:text-sm"
+            className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-white/90 bg-white/75 px-4 py-2.5 text-xs font-extrabold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700 hover:shadow-sm sm:text-sm"
           >
             <ArrowLeft className="size-4 text-sky-600" />
             <span>Quay lại</span>
           </button>
-        </div>
 
-        {/* Top Liquid Glass Step Bar */}
-        <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
+          {/* Top Liquid Glass Step Bar (separate container) */}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
           {/* 3 Main Steps */}
           <div className="flex flex-wrap items-center gap-1.5">
             {[
@@ -877,6 +875,7 @@ export function AssessmentWizard() {
               </button>
             )}
           </div>
+          </div>
         </div>
 
         {loading && step < 3 && (
@@ -907,9 +906,6 @@ export function AssessmentWizard() {
                     {totalRiasecAnswered}/30
                   </span>
                 </div>
-
-                {/* Compact Collapsible Guide - Distraction Free */}
-                <HelpGuideCollapsible />
 
                 {/* Vertical Card Stage: Generous Responsive Stage */}
                 <div className="relative mx-auto flex w-full items-center justify-center gap-2.5 sm:gap-4 transition-all duration-200">
@@ -1287,64 +1283,6 @@ export function AssessmentWizard() {
         </div>
       </PageContainer>
     </section>
-  )
-}
-
-function HelpGuideCollapsible() {
-  const [isOpen, setIsOpen] = useState(false)
-  return (
-    <div className="mx-auto w-full max-w-xl transition-all">
-      <div className="flex justify-center">
-        <button
-          type="button"
-          onClick={() => setIsOpen((prev) => !prev)}
-          className="inline-flex items-center gap-1.5 rounded-full border border-sky-200/90 bg-white/80 px-3.5 py-1 text-xs font-extrabold text-sky-800 shadow-2xs backdrop-blur-md transition hover:border-sky-300 hover:bg-white hover:text-sky-950 cursor-pointer active:scale-95"
-        >
-          <Sparkles className="size-3 text-sky-600" />
-          <span>Hướng dẫn làm bài</span>
-          <ChevronDown
-            className={`size-3.5 text-sky-600 transition-transform duration-200 ${
-              isOpen ? "rotate-180" : ""
-            }`}
-          />
-        </button>
-      </div>
-
-      <AnimatePresence>
-        {isOpen && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.24, ease: [0.22, 1, 0.36, 1] }}
-            className="overflow-hidden"
-          >
-            <div className="mt-2.5 rounded-2xl border border-sky-200/90 bg-white/90 p-4 text-xs leading-relaxed text-slate-700 shadow-sm backdrop-blur-xl">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="flex items-start gap-2">
-                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sky-100 text-[10px] font-black text-sky-800">
-                    1
-                  </span>
-                  <span>Đánh giá theo cảm nhận tự nhiên đầu tiên của bạn. Không có đáp án đúng hay sai.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sky-100 text-[10px] font-black text-sky-800">
-                    2
-                  </span>
-                  <span>Nếu có dịp làm những việc này ở trường, ở nhà hoặc cùng bạn bè, hãy chọn theo cảm nhận thật — không đo điểm học lực.</span>
-                </div>
-                <div className="flex items-start gap-2">
-                  <span className="grid size-5 shrink-0 place-items-center rounded-full bg-sky-100 text-[10px] font-black text-sky-800">
-                    3
-                  </span>
-                  <span>Phím tắt: dùng ← / → để chuyển câu, hoặc phím 1 - 5 để đánh giá nhanh.</span>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
   )
 }
 
