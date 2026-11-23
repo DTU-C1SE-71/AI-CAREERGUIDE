@@ -360,3 +360,33 @@ async def test_google_nonfinite_expiry_is_unauthorized(auth_client, google_provi
     signed, _, _ = google_provider
     response = await client.post("/api/identity/google-login", json={"credential": signed(exp=float("inf"))})
     assert response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_google_login_flags_profile_setup_until_completed(auth_client, google_provider):
+    client, _ = auth_client
+    signed, _, _ = google_provider
+    first = await client.post(
+        "/api/v1/identity/google-login",
+        json={"credential": signed(email="new.google.student@example.com", name="Học sinh Google")},
+    )
+    assert first.status_code == 200
+    first_data = first.json()
+    assert first_data["needs_profile_setup"] is True
+    assert first_data["user"]["gender"] is None
+    assert first_data["user"]["grade_level"] is None
+
+    headers = {"Authorization": f"Bearer {first_data['access_token']}"}
+    updated = await client.put(
+        "/api/v1/identity/profile",
+        headers=headers,
+        json={"full_name": "Học sinh Google", "gender": "Nữ", "grade_level": "Lớp 11", "school_class": "11A2"},
+    )
+    assert updated.status_code == 200
+
+    second = await client.post(
+        "/api/v1/identity/google-login",
+        json={"credential": signed(email="new.google.student@example.com", name="Học sinh Google")},
+    )
+    assert second.status_code == 200
+    assert second.json()["needs_profile_setup"] is False

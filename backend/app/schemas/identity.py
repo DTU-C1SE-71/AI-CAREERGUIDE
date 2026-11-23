@@ -93,6 +93,7 @@ class TokenResponse(BaseModel):
     user_id: uuid.UUID
     expires_in_minutes: int
     user: Optional[UserResponse] = None
+    needs_profile_setup: bool = False
 
 
 class UserConsentCreate(BaseModel):

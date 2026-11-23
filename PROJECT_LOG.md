@@ -103,8 +103,17 @@
 
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
+### Ngày 2026-11-23
+- **`feat(auth): prompt student profile setup after Google login`**
+  - **Vấn đề / Yêu cầu:** Sau khi học sinh đăng nhập bằng Google OAuth, hệ thống trước đây tự gán mặc định `"Nam"` / `"Lớp 12"` ở frontend và chuyển thẳng vào `/dashboard` mà không mở mục thiết lập hồ sơ.
+  - **Thay đổi chính (`backend/app/schemas/identity.py`, `backend/app/services/identity/service.py`, `backend/tests/test_auth_security.py`, `frontend/src/components/profile/UserProfileModal.tsx`, `frontend/src/pages/Login.tsx`, `frontend/src/pages/GoogleCallback.tsx`, `frontend/src/components/layout/MainLayout.tsx`):**
+    - Backend trả thêm cờ `needs_profile_setup` trong `TokenResponse` (true khi học sinh đăng nhập Google lần đầu hoặc còn thiếu `gender`/`grade_level`, và tự động chuyển `false` sau khi lưu hồ sơ qua `PUT /api/v1/identity/profile`).
+    - Bổ sung chế độ `isSetupMode` cho `UserProfileModal` (tiêu đề `"Thiết lập hồ sơ học sinh"`, yêu cầu chọn rõ giới tính/khối lớp, nút `"Hoàn tất thiết lập"` / `"Để sau"`, chống reset dữ liệu đang nhập khi `refreshSession` chạy nền).
+    - Gắn cờ phiên `career-guide:open-profile-setup` trên cả 2 luồng đăng nhập Google (popup `Login.tsx` và redirect `GoogleCallback.tsx`) và tự động mở hộp thoại một lần duy nhất trong `MainLayout.tsx` sau khi vào trang học sinh.
+  - **Kiểm chứng:** `python -m py_compile` (Pass); `npm run build` (`tsc -b && vite build`, Pass); `npm test` (12/12 pass).
+
 ### Ngày 2026-11-21
-- **`feat(catalog,recommender,trend): enforce full catalog replace, MOET minimum floors and clean trend overwrite`**
+- **`8ab9144` — `feat(catalog): enforce full catalog replace, MOET minimum floors and clean trend overwrite`**
   - **Thay thế hoàn toàn khi nhập danh mục mới:** Bỏ tùy chọn cộng dồn ở `frontend/src/pages/AdminImportPage.tsx` (luôn gửi `replace_catalog=true`) và khóa `should_replace = True` / gọi `purge_old_major_catalog_data(db)` ở cả `POST /taxonomy/import-excel` và `POST /taxonomy/sync-tt09` (`backend/app/services/taxonomy/router.py`).
   - **Áp dụng điểm sàn tối thiểu của Bộ GD&ĐT:** Cập nhật `classify_major_academic_benchmark` trong `backend/app/services/recommender/engine.py` (Y khoa & Răng-Hàm-Mặt `22.5đ`; Dược học & Y học cổ truyền `21.0đ`; Sức khỏe có CCHN & Sư phạm `19.0đ`; GD Thể chất, SP Âm nhạc/Mỹ thuật & Pháp luật `18.0đ`; các ngành Đại học còn lại `15.0đ`).
   - **Xóa xu hướng cũ & gỡ tag bị loại khi tìm xu hướng mới:** `apply_trending_markers` (`backend/app/services/taxonomy/trend_agent.py`) dùng `flag_modified` và xóa `_trend` / tiền tố cũ trên toàn bộ bảng `majors`, `_clear_registry_file_cache` xóa cache file tĩnh, `TrendAgentPanel.tsx` gửi `auto_save: true` để ghi đè CSDL ngay khi tìm ra xu hướng mới, và `MajorDetail.tsx` xóa sạch `trend_*` khi `is_trending` là `false`.

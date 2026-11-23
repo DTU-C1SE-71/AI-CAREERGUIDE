@@ -20,6 +20,7 @@ import {
 import { type FormEvent, useEffect, useMemo, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router"
 import { Button } from "../components/common/Button"
+import { PROFILE_SETUP_STORAGE_KEY } from "../components/profile/UserProfileModal"
 import { useAuth } from "../context/AuthContext"
 import { authPost } from "../services/api"
 import type { UserRole } from "../types/user"
@@ -37,11 +38,16 @@ interface LoginApiResponse {
   access_token: string
   token_type: string
   role?: "STUDENT" | "ADMIN"
+  needs_profile_setup?: boolean
   user?: {
     id: string
     email: string
     full_name: string
     role: "STUDENT" | "ADMIN"
+    gender?: string | null
+    grade_level?: string | null
+    school_class?: string | null
+    school_name?: string | null
   }
 }
 
@@ -252,20 +258,39 @@ export function Login() {
     setSuccessMsg(null)
   }
 
-  const applyLoginResponse = (data: LoginApiResponse) => {
+  const applyLoginResponse = (
+    data: LoginApiResponse,
+    options?: { fromGoogle?: boolean },
+  ) => {
     const rawRole = (
       data.user?.role ||
       data.role ||
       "STUDENT"
     ).toLowerCase()
     const mappedRole: UserRole = rawRole === "admin" ? "admin" : "student"
+    const fromGoogle = Boolean(options?.fromGoogle)
     const userEmail = data.user?.email || email.trim()
     const userName =
       data.user?.full_name || fullName.trim() || userEmail.split("@")[0]
-    const userGender = (data.user as any)?.gender || gender
-    const userGradeLevel = (data.user as any)?.grade_level || gradeLevel
-    const userSchoolClass = (data.user as any)?.school_class || schoolClass
-    const userSchoolName = (data.user as any)?.school_name || schoolName
+    const userGender =
+      data.user?.gender?.trim() || (!fromGoogle && isRegister ? gender : undefined)
+    const userGradeLevel =
+      data.user?.grade_level?.trim() || (!fromGoogle && isRegister ? gradeLevel : undefined)
+    const userSchoolClass =
+      data.user?.school_class?.trim() || (!fromGoogle && isRegister ? schoolClass.trim() || undefined : undefined)
+    const userSchoolName =
+      data.user?.school_name?.trim() || (!fromGoogle && isRegister ? schoolName.trim() || undefined : undefined)
+
+    const shouldSetupProfile =
+      fromGoogle &&
+      mappedRole === "student" &&
+      (Boolean(data.needs_profile_setup) || !userGender || !userGradeLevel)
+
+    if (shouldSetupProfile) {
+      sessionStorage.setItem(PROFILE_SETUP_STORAGE_KEY, "1")
+    } else {
+      sessionStorage.removeItem(PROFILE_SETUP_STORAGE_KEY)
+    }
 
     login(
       mappedRole,
@@ -278,11 +303,22 @@ export function Login() {
         grade_level: userGradeLevel,
         school_class: userSchoolClass,
         school_name: userSchoolName,
-        grade: userGradeLevel === "Lớp 11" ? 11 : 12,
+        grade:
+          userGradeLevel === "Lớp 10"
+            ? 10
+            : userGradeLevel === "Lớp 11"
+              ? 11
+              : userGradeLevel
+                ? 12
+                : undefined,
       },
       data.access_token,
     )
-    setSuccessMsg("Đăng nhập thành công! Đang chuyển hướng...")
+    setSuccessMsg(
+      shouldSetupProfile
+        ? "Đăng nhập Google thành công! Đang mở thiết lập hồ sơ..."
+        : "Đăng nhập thành công! Đang chuyển hướng...",
+    )
     window.setTimeout(() => {
       navigate(mappedRole === "admin" ? "/admin" : "/dashboard", {
         replace: true,
@@ -506,7 +542,7 @@ export function Login() {
     })
 
     if (data && data.access_token) {
-      applyLoginResponse(data)
+      applyLoginResponse(data, { fromGoogle: true })
     } else {
       throw new Error("Không nhận được phản hồi xác thực từ hệ thống.")
     }

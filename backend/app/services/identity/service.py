@@ -49,7 +49,7 @@ def _require_database(db: Optional[AsyncSession]) -> AsyncSession:
     return db
 
 
-def _token_response(user: User) -> TokenResponse:
+def _token_response(user: User, needs_profile_setup: bool = False) -> TokenResponse:
     return TokenResponse(
         access_token=create_access_token(str(user.id), user.role.value),
         token_type="bearer",
@@ -57,6 +57,7 @@ def _token_response(user: User) -> TokenResponse:
         user_id=user.id,
         expires_in_minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES,
         user=UserResponse.model_validate(user),
+        needs_profile_setup=needs_profile_setup,
     )
 
 
@@ -239,6 +240,7 @@ async def authenticate_google_user(db: Optional[AsyncSession], payload: GoogleLo
     display_name = str(profile.get("name") or email.split("@")[0])[:255]
     try:
         user = (await db.execute(select(User).where(func.lower(User.email) == email))).scalar_one_or_none()
+        is_new_user = user is None
         if user is None:
             user = User(
                 email=email,
@@ -259,7 +261,15 @@ async def authenticate_google_user(db: Optional[AsyncSession], payload: GoogleLo
             await db.commit()
         if not user.is_active:
             raise HTTPException(403, "Tài khoản này đã bị vô hiệu hóa.")
-        return _token_response(user)
+        needs_profile_setup = (
+            user.role == UserRole.STUDENT
+            and (
+                is_new_user
+                or not (user.gender and user.gender.strip())
+                or not (user.grade_level and user.grade_level.strip())
+            )
+        )
+        return _token_response(user, needs_profile_setup=needs_profile_setup)
     except IntegrityError:
         await db.rollback()
         raise HTTPException(409, "Tài khoản vừa được tạo bởi phiên khác. Vui lòng đăng nhập lại.") from None

@@ -5,11 +5,15 @@ import { Outlet, ScrollRestoration, useLocation } from "react-router"
 const AIChatAdvisor = lazy(() => import("../../pages/AIChatAdvisor").then(module => ({ default: module.AIChatAdvisor })))
 import { Footer } from "./Footer"
 import { Sidebar } from "./Sidebar"
+import { PROFILE_SETUP_STORAGE_KEY, UserProfileModal } from "../profile/UserProfileModal"
+import { useAuth } from "../../context/AuthContext"
 
 export function MainLayout() {
+  const { user } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
   const [mobileOpen, setMobileOpen] = useState(false)
   const [chatOpen, setChatOpen] = useState(false)
+  const [showProfileSetup, setShowProfileSetup] = useState(false)
   const [desktop, setDesktop] = useState(() =>
     typeof window !== "undefined" ? window.innerWidth >= 1024 : true,
   )
@@ -21,6 +25,21 @@ export function MainLayout() {
     query.addEventListener("change", update)
     return () => query.removeEventListener("change", update)
   }, [])
+
+  useEffect(() => {
+    if (!user || user.role !== "student" || location.pathname.startsWith("/login")) {
+      setShowProfileSetup(false)
+      return
+    }
+    if (sessionStorage.getItem(PROFILE_SETUP_STORAGE_KEY) === "1") {
+      setShowProfileSetup(true)
+    }
+  }, [user, location.pathname])
+
+  const handleCloseProfileSetup = () => {
+    sessionStorage.removeItem(PROFILE_SETUP_STORAGE_KEY)
+    setShowProfileSetup(false)
+  }
 
   return (
     <div className="mesh-bg min-h-screen text-slate-900">
@@ -77,6 +96,11 @@ export function MainLayout() {
           <span className="hidden sm:inline">Cố vấn AI</span>
         </motion.button>
       )}
+      <UserProfileModal
+        isOpen={showProfileSetup}
+        onClose={handleCloseProfileSetup}
+        isSetupMode
+      />
       <ScrollRestoration />
     </div>
   )

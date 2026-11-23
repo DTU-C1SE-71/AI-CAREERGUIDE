@@ -8,6 +8,7 @@ import {
 import { useEffect, useRef, useState } from "react"
 import { useNavigate, useSearchParams } from "react-router"
 import { Button } from "../components/common/Button"
+import { PROFILE_SETUP_STORAGE_KEY } from "../components/profile/UserProfileModal"
 import { useAuth } from "../context/AuthContext"
 import { authPost } from "../services/api"
 import type { UserRole } from "../types/user"
@@ -16,15 +17,16 @@ interface GoogleLoginApiResponse {
   access_token: string
   token_type: string
   role?: string
+  needs_profile_setup?: boolean
   user?: {
     id: string
     email: string
     full_name: string
     role: string
-    gender?: string
-    grade_level?: string
-    school_class?: string
-    school_name?: string
+    gender?: string | null
+    grade_level?: string | null
+    school_class?: string | null
+    school_name?: string | null
   }
 }
 
@@ -72,6 +74,18 @@ export function GoogleCallback() {
     requestRef.current.then(data => {
       if (!mounted || !data.access_token || !data.user) return
       const mappedRole: UserRole = data.user.role.toUpperCase() === "ADMIN" ? "admin" : "student"
+      const userGender = data.user.gender?.trim() || undefined
+      const userGradeLevel = data.user.grade_level?.trim() || undefined
+      const shouldSetupProfile =
+        mappedRole === "student" &&
+        (Boolean(data.needs_profile_setup) || !userGender || !userGradeLevel)
+
+      if (shouldSetupProfile) {
+        sessionStorage.setItem(PROFILE_SETUP_STORAGE_KEY, "1")
+      } else {
+        sessionStorage.removeItem(PROFILE_SETUP_STORAGE_KEY)
+      }
+
       login(
         mappedRole,
         {
@@ -79,10 +93,18 @@ export function GoogleCallback() {
           name: data.user.full_name,
           email: data.user.email,
           role: mappedRole,
-          gender: data.user.gender || "Nam",
-          grade_level: data.user.grade_level || "Lớp 12",
-          school_class: data.user.school_class,
-          school_name: data.user.school_name,
+          gender: userGender,
+          grade_level: userGradeLevel,
+          school_class: data.user.school_class || undefined,
+          school_name: data.user.school_name || undefined,
+          grade:
+            userGradeLevel === "Lớp 10"
+              ? 10
+              : userGradeLevel === "Lớp 11"
+                ? 11
+                : userGradeLevel
+                  ? 12
+                  : undefined,
         },
         data.access_token,
       )

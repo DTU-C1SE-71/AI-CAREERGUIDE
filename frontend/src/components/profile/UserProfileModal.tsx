@@ -6,42 +6,57 @@ import {
   Mail,
   School,
   ShieldCheck,
+  Sparkles,
   User as UserIcon,
   X,
 } from "lucide-react"
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { Button } from "../common/Button"
 import { useAuth } from "../../context/AuthContext"
 import { authPut } from "../../services/api"
 
+export const PROFILE_SETUP_STORAGE_KEY = "career-guide:open-profile-setup"
+
 interface UserProfileModalProps {
   isOpen: boolean
   onClose: () => void
+  isSetupMode?: boolean
 }
 
-export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
+export function UserProfileModal({
+  isOpen,
+  onClose,
+  isSetupMode = false,
+}: UserProfileModalProps) {
   const { user, updateUser } = useAuth()
   const [fullName, setFullName] = useState("")
-  const [gender, setGender] = useState<string>("Nam")
-  const [gradeLevel, setGradeLevel] = useState<string>("Lớp 12")
+  const [gender, setGender] = useState<string>("")
+  const [gradeLevel, setGradeLevel] = useState<string>("")
   const [schoolClass, setSchoolClass] = useState("")
   const [schoolName, setSchoolName] = useState("")
   const [loading, setLoading] = useState(false)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [successMsg, setSuccessMsg] = useState<string | null>(null)
 
+  const initializedRef = useRef(false)
+
   useEffect(() => {
-    if (user && isOpen) {
+    if (!isOpen) {
+      initializedRef.current = false
+      return
+    }
+    if (user && !initializedRef.current) {
+      initializedRef.current = true
       setFullName(user.name || "")
-      setGender(user.gender || "Nam")
-      setGradeLevel(user.grade_level || "Lớp 12")
+      setGender(user.gender || (isSetupMode ? "" : "Nam"))
+      setGradeLevel(user.grade_level || (isSetupMode ? "" : "Lớp 12"))
       setSchoolClass(user.school_class || "")
       setSchoolName(user.school_name || "")
       setErrorMsg(null)
       setSuccessMsg(null)
     }
-  }, [user, isOpen])
+  }, [user, isOpen, isSetupMode])
 
   useEffect(() => {
     if (!isOpen) return
@@ -89,10 +104,15 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
         grade_level: gradeLevel,
         school_class: schoolClass.trim() || undefined,
         school_name: schoolName.trim() || undefined,
-        grade: gradeLevel === "Lớp 11" ? 11 : 12,
+        grade: gradeLevel === "Lớp 10" ? 10 : gradeLevel === "Lớp 11" ? 11 : 12,
       })
+      sessionStorage.removeItem(PROFILE_SETUP_STORAGE_KEY)
 
-      setSuccessMsg("Đã lưu thông tin hồ sơ.")
+      setSuccessMsg(
+        isSetupMode
+          ? "Thiết lập hồ sơ học sinh thành công!"
+          : "Đã lưu thông tin hồ sơ.",
+      )
       window.setTimeout(() => {
         onClose()
       }, 750)
@@ -138,23 +158,40 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
               <X size={18} />
             </button>
 
-            <div className="flex items-center gap-4 border-b border-slate-100 pb-5 pr-10">
+            <div className="flex items-start gap-4 border-b border-slate-100 pb-5 pr-10">
               <span className="grid size-13 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-600 text-base font-bold text-white shadow-sm">
-                {initials}
+                {isSetupMode ? <Sparkles size={22} /> : initials}
               </span>
               <div className="min-w-0 flex-1">
-                <h2 className="truncate text-lg font-bold text-slate-900 sm:text-xl">
-                  {user.name}
-                </h2>
-                <div className="mt-1 flex flex-wrap items-center gap-2">
-                  <span className="truncate text-xs text-slate-500">
-                    {user.email}
-                  </span>
-                  <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700">
-                    <ShieldCheck size={12} />
-                    {user.role === "admin" ? "Quản trị viên" : "Học sinh THPT"}
-                  </span>
-                </div>
+                {isSetupMode ? (
+                  <>
+                    <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] font-semibold text-sky-700">
+                      <ShieldCheck size={12} />
+                      Hoàn thiện hồ sơ sau đăng nhập Google
+                    </span>
+                    <h2 className="mt-1.5 text-lg font-bold text-slate-900 sm:text-xl">
+                      Thiết lập hồ sơ học sinh
+                    </h2>
+                    <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                      Cập nhật giới tính, khối lớp và thông tin trường để hệ thống cá nhân hóa gợi ý ngành học phù hợp hơn với bạn.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h2 className="truncate text-lg font-bold text-slate-900 sm:text-xl">
+                      {user.name}
+                    </h2>
+                    <div className="mt-1 flex flex-wrap items-center gap-2">
+                      <span className="truncate text-xs text-slate-500">
+                        {user.email}
+                      </span>
+                      <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700">
+                        <ShieldCheck size={12} />
+                        {user.role === "admin" ? "Quản trị viên" : "Học sinh THPT"}
+                      </span>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -304,7 +341,7 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
 
               <div className="mt-6 flex items-center justify-end gap-3 border-t border-slate-100 pt-4">
                 <Button type="button" variant="secondary" onClick={onClose}>
-                  Hủy
+                  {isSetupMode ? "Để sau" : "Hủy"}
                 </Button>
                 <Button
                   type="submit"
@@ -312,7 +349,11 @@ export function UserProfileModal({ isOpen, onClose }: UserProfileModalProps) {
                   disabled={loading}
                   icon={Check}
                 >
-                  {loading ? "Đang lưu..." : "Lưu thay đổi"}
+                  {loading
+                    ? "Đang lưu..."
+                    : isSetupMode
+                      ? "Hoàn tất thiết lập"
+                      : "Lưu thay đổi"}
                 </Button>
               </div>
             </form>
