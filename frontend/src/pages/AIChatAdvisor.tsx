@@ -10,15 +10,14 @@ import {
   Clock,
   GraduationCap,
   History,
+  Info,
   LoaderCircle,
   Maximize2,
   MessageSquare,
   Minimize2,
   Paperclip,
-  SlidersHorizontal,
   Sparkles,
   SquarePen,
-  Target,
   Trash2,
   User,
   X,
@@ -37,8 +36,8 @@ interface AIChatAdvisorProps {
   onClose: () => void
 }
 
-type ResponseLengthPreference = "auto" | "short" | "medium" | "detailed"
-type ResponseLengthMode = "short" | "medium" | "detailed"
+type ReasoningEffort = "auto" | "low" | "medium" | "high" | "extra_high"
+type ResponseLengthMode = "short" | "medium" | "detailed" | "extra_high"
 
 interface AdvisorMessage {
   id: string
@@ -97,48 +96,39 @@ const GUEST_CHAT_HISTORY_KEY = "career-guide:chat-history:guest"
 const MAX_GUEST_SESSIONS = 20
 const MAX_GUEST_MESSAGES = 40
 
-const LENGTH_OPTIONS: Array<{
-  value: ResponseLengthPreference
+const EFFORT_OPTIONS: Array<{
+  value: ReasoningEffort
   label: string
-  hint: string
 }> = [
-  {
-    value: "auto",
-    label: "Tự động",
-    hint: "Tự điều chỉnh ngắn hoặc chi tiết tùy câu hỏi",
-  },
-  { value: "short", label: "Ngắn gọn", hint: "Trả lời nhanh 2–4 câu trọng tâm" },
-  { value: "medium", label: "Vừa phải", hint: "Trả lời cân bằng, súc tích" },
-  {
-    value: "detailed",
-    label: "Chi tiết",
-    hint: "Phân tích sâu, so sánh và ví dụ đầy đủ",
-  },
+  { value: "auto", label: "Tự động" },
+  { value: "low", label: "Thấp" },
+  { value: "medium", label: "Trung bình" },
+  { value: "high", label: "Cao" },
+  { value: "extra_high", label: "Rất cao" },
 ]
 
 const LENGTH_MODE_LABELS: Record<ResponseLengthMode, string> = {
-  short: "Trả lời ngắn gọn",
-  medium: "Trả lời vừa phải",
-  detailed: "Trả lời chi tiết",
+  short: "Thấp",
+  medium: "Trung bình",
+  detailed: "Cao",
+  extra_high: "Rất cao",
 }
 
 const initialMessages: AdvisorMessage[] = [
   {
     id: "welcome",
     role: "assistant",
-    content: `## Chào bạn, mình là Cố vấn Hướng nghiệp
+    content: `### Chào bạn, mình là Cố vấn AI
 
-Mình giúp tìm hiểu ngành học, giải thích sở thích và học lực theo hồ sơ bạn đang xem. Điểm phù hợp chỉ là gợi ý tham khảo, không phải xác suất trúng tuyển.
-
-Bạn có thể hỏi nhanh để nhận câu trả lời ngắn gọn, hoặc yêu cầu so sánh/lập kế hoạch để nhận phân tích chi tiết.`,
+Hỏi mình về ngành học, điểm số, sở thích hoặc lộ trình học tập nhé.`,
   },
 ]
 
 const quickPrompts = [
-  "Cách sử dụng các tính năng trên AI CareerGuide?",
-  "Hồ sơ của mình còn thiếu dữ liệu gì để đối chiếu ngành học?",
-  "So sánh ngành Khoa học máy tính và Trí tuệ nhân tạo",
-  "Ngành An toàn thông tin học môn gì?",
+  "Cách dùng AI CareerGuide",
+  "Hồ sơ còn thiếu gì?",
+  "So sánh CNTT & AI",
+  "Ngành ATTT học gì?",
 ]
 
 const unavailableReply =
@@ -209,8 +199,9 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
   const [typing, setTyping] = useState(false)
   const [fullscreen, setFullscreen] = useState(false)
   const [context, setContext] = useState("")
-  const [lengthPreference, setLengthPreference] =
-    useState<ResponseLengthPreference>("auto")
+  const [effort, setEffort] = useState<ReasoningEffort>("auto")
+  const [effortMenuOpen, setEffortMenuOpen] = useState(false)
+  const [effortInfoOpen, setEffortInfoOpen] = useState(false)
 
   const [historyOpen, setHistoryOpen] = useState(false)
   const [sessions, setSessions] = useState<ChatSessionItem[]>([])
@@ -232,6 +223,14 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
   const probeBusy = useRef(false)
   const messageSequence = useRef(1)
   const endRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const effortMenuRef = useRef<HTMLDivElement | null>(null)
+
+  const focusInput = useCallback(() => {
+    window.requestAnimationFrame(() => {
+      inputRef.current?.focus({ preventScroll: true })
+    })
+  }, [])
 
   const [activePrompts, setActivePrompts] = useState<string[]>(quickPrompts)
   const [connection, setConnection] = useState<ConnectionState>({
@@ -332,6 +331,44 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
     }
   }, [open, loadSessions])
 
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    el.style.height = "auto"
+    el.style.height = `${Math.min(el.scrollHeight, 112)}px`
+  }, [input])
+
+  useEffect(() => {
+    if (open && !typing) {
+      focusInput()
+    }
+  }, [open, typing, focusInput])
+
+  useEffect(() => {
+    if (!effortMenuOpen) return
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        effortMenuRef.current &&
+        !effortMenuRef.current.contains(event.target as Node)
+      ) {
+        setEffortMenuOpen(false)
+        setEffortInfoOpen(false)
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setEffortMenuOpen(false)
+        setEffortInfoOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [effortMenuOpen])
+
   const startNewChat = () => {
     requestVersion.current += 1
     activeRequest.current?.abort()
@@ -343,6 +380,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
     setTyping(false)
     setConfirmClearAll(false)
     if (!fullscreen) setHistoryOpen(false)
+    focusInput()
   }
 
   const changeTopic = (code: string) => {
@@ -366,6 +404,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
           : initialMessages,
       )
       if (!fullscreen) setHistoryOpen(false)
+      focusInput()
       return
     }
 
@@ -387,6 +426,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
       }))
       setMessages(loaded.length > 0 ? loaded : initialMessages)
       if (!fullscreen) setHistoryOpen(false)
+      focusInput()
     } catch {
       // Keep current state if loading failed
     } finally {
@@ -466,6 +506,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
     setInput("")
     setTyping(true)
     chatBusy.current = true
+    focusInput()
     const version = ++requestVersion.current
     const controller = new AbortController()
     activeRequest.current = controller
@@ -501,7 +542,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
             session_id: isAuthenticated ? activeSessionId : null,
             history,
             connection_revision: connection.revisionToken,
-            response_length: lengthPreference,
+            response_length: effort,
           }),
         },
         CHAT_TIMEOUT_MS,
@@ -640,12 +681,17 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
       (prev) =>
         `${prev ? `${prev} ` : ""}Điểm số của mình: ${summary || "chưa có điểm được nhập"}`,
     )
+    focusInput()
   }
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
+    if (typing || chatBusy.current || connection.state !== "online") return
     void send(input)
   }
+
+  const currentEffortOption =
+    EFFORT_OPTIONS.find((item) => item.value === effort) || EFFORT_OPTIONS[0]
 
   const historySidebarContent = (
     <div className="flex h-full flex-col">
@@ -810,39 +856,34 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
             transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
           >
             {/* Header */}
-            <header className="border-b border-slate-200/80 bg-white/85 px-4 py-3.5 backdrop-blur-md sm:px-5">
+            <header className="border-b border-slate-200/80 bg-white/85 px-4 py-3 backdrop-blur-md sm:px-5">
               <div className="flex items-center justify-between gap-2">
-                <div className="flex min-w-0 items-center gap-3">
-                  <span className="grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm sm:size-11">
-                    <Bot size={21} />
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm sm:size-10 sm:rounded-2xl">
+                    <Bot size={20} />
                   </span>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="truncate text-sm font-bold text-slate-900 sm:text-base">
-                        Cố vấn AI Hướng nghiệp
-                      </h2>
-                      <span
-                        role="status"
-                        aria-live="polite"
-                        className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${connectionClass}`}
-                      >
-                        {connection.state === "checking" ? (
-                          <LoaderCircle
-                            size={12}
-                            className="animate-spin"
-                            aria-hidden="true"
-                          />
-                        ) : connection.state === "online" ? (
-                          <CircleCheck size={12} aria-hidden="true" />
-                        ) : (
-                          <CircleAlert size={12} aria-hidden="true" />
-                        )}
-                        {connectionLabel}
-                      </span>
-                    </div>
-                    <p className="truncate text-xs text-slate-500">
-                      Tư vấn chọn ngành, học tập và tự điều chỉnh độ dài theo câu hỏi
-                    </p>
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <h2 className="truncate text-sm font-bold text-slate-900 sm:text-base">
+                      Cố vấn AI
+                    </h2>
+                    <span
+                      role="status"
+                      aria-live="polite"
+                      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${connectionClass}`}
+                    >
+                      {connection.state === "checking" ? (
+                        <LoaderCircle
+                          size={12}
+                          className="animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : connection.state === "online" ? (
+                        <CircleCheck size={12} aria-hidden="true" />
+                      ) : (
+                        <CircleAlert size={12} aria-hidden="true" />
+                      )}
+                      {connectionLabel}
+                    </span>
                   </div>
                 </div>
 
@@ -901,7 +942,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
               {connection.state === "offline" && (
                 <div
                   role="status"
-                  className="mt-3 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800"
+                  className="mt-2.5 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800"
                 >
                   <span>{connection.message}</span>
                   <button
@@ -915,58 +956,31 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                 </div>
               )}
 
-              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_auto] sm:items-center">
-                <div className="flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-1.5 text-xs">
-                  <GraduationCap
-                    size={15}
-                    className="shrink-0 text-sky-600"
-                  />
-                  <span className="shrink-0 font-semibold text-slate-500">
-                    Ngành:
-                  </span>
-                  <select
-                    value={context}
-                    onChange={(e) => changeTopic(e.target.value)}
-                    aria-label="Ngành quan tâm"
-                    className="w-full min-w-0 bg-transparent font-bold text-slate-800 outline-none"
-                  >
-                    <option value="">
-                      Chưa chọn ngành / hỏi hướng nghiệp chung
-                    </option>
-                    {MOET_435_MAJORS.map((major) => (
-                      <option key={major.major_code} value={major.major_code}>
-                        {major.name_vi} · {major.major_code}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown size={14} className="shrink-0 text-slate-400" />
-                </div>
-
-                <div
-                  className="flex items-center gap-1 rounded-xl border border-slate-200/80 bg-slate-50/90 p-1"
-                  role="group"
-                  aria-label="Chế độ độ dài câu trả lời"
+              <div className="relative mt-2.5 flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-1.5 text-xs">
+                <GraduationCap
+                  size={15}
+                  className="shrink-0 text-sky-600"
+                />
+                <span className="shrink-0 font-semibold text-slate-500">
+                  Ngành:
+                </span>
+                <select
+                  value={context}
+                  onChange={(e) => changeTopic(e.target.value)}
+                  aria-label="Ngành quan tâm"
+                  className="w-full min-w-0 appearance-none bg-transparent pr-5 font-bold text-slate-800 outline-none"
                 >
-                  <span className="hidden items-center gap-1 pl-1.5 pr-1 text-[11px] font-semibold text-slate-500 md:inline-flex">
-                    <SlidersHorizontal size={12} className="text-sky-600" />
-                    Độ dài:
-                  </span>
-                  {LENGTH_OPTIONS.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      title={opt.hint}
-                      onClick={() => setLengthPreference(opt.value)}
-                      className={`rounded-lg px-2 py-1 text-[11px] font-semibold transition ${
-                        lengthPreference === opt.value
-                          ? "bg-sky-600 text-white shadow-2xs"
-                          : "text-slate-600 hover:bg-white hover:text-slate-900"
-                      }`}
-                    >
-                      {opt.label}
-                    </button>
+                  <option value="">Hướng nghiệp chung</option>
+                  {MOET_435_MAJORS.map((major) => (
+                    <option key={major.major_code} value={major.major_code}>
+                      {major.name_vi} · {major.major_code}
+                    </option>
                   ))}
-                </div>
+                </select>
+                <ChevronDown
+                  size={14}
+                  className="pointer-events-none shrink-0 text-slate-400"
+                />
               </div>
             </header>
 
@@ -1067,7 +1081,11 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                                     </span>
                                   )}
                                   {message.lengthMode && (
-                                    <span className="inline-flex items-center rounded-full border border-sky-200/80 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700">
+                                    <span
+                                      title="Mức độ suy luận"
+                                      className="inline-flex items-center gap-1 rounded-full border border-sky-200/80 bg-sky-50 px-2 py-0.5 text-[10px] font-semibold text-sky-700"
+                                    >
+                                      <Brain size={10} />
                                       {LENGTH_MODE_LABELS[message.lengthMode]}
                                     </span>
                                   )}
@@ -1144,18 +1162,18 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                 </div>
 
                 {/* Footer Input */}
-                <div className="border-t border-slate-200/80 bg-white/90 p-3 backdrop-blur-md sm:p-4">
+                <div className="border-t border-slate-200/80 bg-white/90 px-3 py-2.5 backdrop-blur-md sm:px-4 sm:py-3">
                   <div
                     className={`mx-auto ${fullscreen ? "max-w-4xl" : "max-w-2xl"}`}
                   >
-                    <div className="mb-2.5 flex gap-2 overflow-x-auto pb-1">
+                    <div className="mb-2 flex gap-1.5 overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                       {activePrompts.map((prompt) => (
                         <button
                           key={prompt}
                           type="button"
                           onClick={() => void send(prompt)}
                           disabled={connection.state !== "online" || typing}
-                          className="shrink-0 rounded-full border border-sky-200/80 bg-sky-50/70 px-3 py-1.5 text-xs font-semibold text-sky-800 transition hover:bg-sky-100 disabled:opacity-50"
+                          className="shrink-0 rounded-full border border-sky-200/80 bg-sky-50/70 px-3 py-1 text-xs font-semibold text-sky-800 transition hover:bg-sky-100 disabled:opacity-50"
                         >
                           {prompt}
                         </button>
@@ -1164,23 +1182,14 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
 
                     <form
                       onSubmit={submit}
-                      className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-white p-2 focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/15"
+                      className="rounded-2xl border border-slate-200 bg-white px-3 pt-2 pb-1.5 shadow-2xs transition focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/15"
                     >
-                      <button
-                        type="button"
-                        onClick={attachStudentProfile}
-                        disabled={connection.state !== "online" || typing}
-                        title="Đính kèm điểm học tập"
-                        className="grid size-10 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
-                      >
-                        <Paperclip size={18} />
-                      </button>
                       <textarea
+                        ref={inputRef}
                         rows={1}
                         maxLength={4000}
                         aria-label="Câu hỏi hướng nghiệp"
                         value={input}
-                        disabled={connection.state !== "online" || typing}
                         onChange={(e) => setInput(e.target.value)}
                         onKeyDown={(e) => {
                           if (
@@ -1189,37 +1198,156 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                             !e.nativeEvent.isComposing
                           ) {
                             e.preventDefault()
-                            void send(input)
+                            if (
+                              !typing &&
+                              !chatBusy.current &&
+                              connection.state === "online" &&
+                              input.trim()
+                            ) {
+                              void send(input)
+                            }
                           }
                         }}
-                        placeholder="Hỏi AI về ngành học, điểm số hoặc lộ trình..."
-                        className="max-h-28 min-h-10 flex-1 resize-none bg-transparent px-1 py-2 text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slate-400"
+                        placeholder="Nhập câu hỏi..."
+                        className="max-h-28 min-h-9 w-full resize-none bg-transparent px-1 py-1 text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slate-400"
                       />
-                      <button
-                        type="submit"
-                        disabled={
-                          !input.trim() ||
-                          typing ||
-                          connection.state !== "online"
-                        }
-                        className="grid size-10 shrink-0 place-items-center rounded-xl bg-sky-600 text-white transition hover:bg-sky-700 disabled:opacity-40"
-                        aria-label="Gửi tin nhắn"
-                      >
-                        <ArrowUp size={18} />
-                      </button>
-                    </form>
 
-                    <div className="mt-2 flex items-center justify-center gap-4 text-xs text-slate-400">
-                      <span className="flex items-center gap-1">
-                        <Check size={12} className="text-emerald-500" /> Thông tin tham khảo
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Brain size={12} className="text-sky-500" /> Giải thích theo hồ sơ
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Target size={12} className="text-cyan-500" /> Định hướng cá nhân
-                      </span>
-                    </div>
+                      <div className="mt-1 flex items-center justify-between gap-2 pt-1">
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={attachStudentProfile}
+                            title="Đính kèm điểm học tập"
+                            aria-label="Đính kèm điểm học tập"
+                            className="grid size-8 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
+                          >
+                            <Paperclip size={16} />
+                          </button>
+
+                          <div ref={effortMenuRef} className="relative">
+                            <AnimatePresence>
+                              {effortMenuOpen && (
+                                <motion.div
+                                  initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                                  exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                                  transition={{
+                                    duration: 0.15,
+                                    ease: [0.22, 1, 0.36, 1],
+                                  }}
+                                  role="menu"
+                                  aria-label="Mức độ suy luận"
+                                  className="absolute bottom-full left-0 z-30 mb-2 w-56 rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-xl ring-1 ring-slate-900/5"
+                                >
+                                  <div className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500">
+                                    <span>Mức độ suy luận</span>
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        setEffortInfoOpen((v) => !v)
+                                      }
+                                      aria-label="Thông tin mức độ suy luận"
+                                      className="grid size-5 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
+                                    >
+                                      <Info size={13} />
+                                    </button>
+                                  </div>
+                                  {effortInfoOpen && (
+                                    <p className="mx-1.5 mb-1.5 rounded-xl bg-sky-50 px-2.5 py-2 text-[11px] leading-relaxed text-sky-900">
+                                      Tự động điều chỉnh theo câu hỏi, hoặc chọn
+                                      cố định từ Thấp đến Rất cao.
+                                    </p>
+                                  )}
+                                  <div className="space-y-0.5">
+                                    {EFFORT_OPTIONS.map((opt) => {
+                                      const selected = effort === opt.value
+                                      return (
+                                        <button
+                                          key={opt.value}
+                                          type="button"
+                                          role="menuitemradio"
+                                          aria-checked={selected}
+                                          onClick={() => {
+                                            setEffort(opt.value)
+                                            setEffortMenuOpen(false)
+                                            setEffortInfoOpen(false)
+                                            focusInput()
+                                          }}
+                                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${
+                                            selected
+                                              ? "bg-sky-50/90 font-bold text-slate-900"
+                                              : "font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                          }`}
+                                        >
+                                          <span>{opt.label}</span>
+                                          {selected && (
+                                            <Check
+                                              size={15}
+                                              className="text-sky-600"
+                                            />
+                                          )}
+                                        </button>
+                                      )
+                                    })}
+                                  </div>
+                                </motion.div>
+                              )}
+                            </AnimatePresence>
+
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEffortMenuOpen((v) => !v)
+                                setEffortInfoOpen(false)
+                              }}
+                              aria-haspopup="menu"
+                              aria-expanded={effortMenuOpen}
+                              title="Mức độ suy luận của AI"
+                              className={`inline-flex h-8 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition ${
+                                effortMenuOpen
+                                  ? "border-sky-300 bg-sky-50 text-sky-800"
+                                  : "border-slate-200/90 bg-slate-50/80 text-slate-700 hover:border-sky-200 hover:bg-sky-50/60 hover:text-sky-800"
+                              }`}
+                            >
+                              <Brain size={14} className="text-sky-600" />
+                              <span>{currentEffortOption.label}</span>
+                              <ChevronDown
+                                size={13}
+                                className={`text-slate-400 transition-transform duration-150 ${
+                                  effortMenuOpen ? "rotate-180" : ""
+                                }`}
+                              />
+                            </button>
+                          </div>
+                        </div>
+
+                        <button
+                          type="submit"
+                          disabled={
+                            !input.trim() ||
+                            typing ||
+                            connection.state !== "online"
+                          }
+                          title={
+                            typing
+                              ? "Đang xử lý câu hỏi trước..."
+                              : "Gửi tin nhắn"
+                          }
+                          aria-label={
+                            typing
+                              ? "Đang xử lý câu hỏi trước"
+                              : "Gửi tin nhắn"
+                          }
+                          className="grid size-8 shrink-0 place-items-center rounded-xl bg-sky-600 text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-45"
+                        >
+                          {typing ? (
+                            <LoaderCircle size={16} className="animate-spin" />
+                          ) : (
+                            <ArrowUp size={17} />
+                          )}
+                        </button>
+                      </div>
+                    </form>
                   </div>
                 </div>
               </div>

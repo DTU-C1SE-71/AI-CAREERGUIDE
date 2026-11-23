@@ -128,8 +128,8 @@ class AIExplanationResponse(BaseModel):
     is_ai_generated: bool = True
 
 
-ResponseLengthPreference = Literal["auto", "short", "medium", "detailed"]
-ResponseLengthMode = Literal["short", "medium", "detailed"]
+ResponseLengthPreference = Literal["auto", "short", "medium", "detailed", "low", "high", "extra_high"]
+ResponseLengthMode = Literal["short", "medium", "detailed", "extra_high"]
 
 
 class AIChatMessage(BaseModel):

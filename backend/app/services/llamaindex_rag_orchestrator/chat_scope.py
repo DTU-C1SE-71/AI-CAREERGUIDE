@@ -6,7 +6,7 @@ import unicodedata
 from typing import Literal
 
 ScopeDecision = Literal["allow", "redirect", "clarify", "greeting"]
-ResponseLengthMode = Literal["short", "medium", "detailed"]
+ResponseLengthMode = Literal["short", "medium", "detailed", "extra_high"]
 
 _EXPLICIT_SHORT = re.compile(
     r"\b(ngan gon|tom tat|noi nhanh|tra loi ngan|ngan thoi|gon lai|1 cau|mot cau|"
@@ -276,10 +276,18 @@ def classify_response_length(
     preference: str = "auto",
     history=None,
 ) -> ResponseLengthMode:
-    """Deterministically choose short, medium, or detailed answer depth."""
+    """Deterministically choose short, medium, detailed, or extra_high answer depth."""
     pref = (preference or "auto").strip().lower()
-    if pref in ("short", "medium", "detailed"):
-        return pref  # type: ignore[return-value]
+    alias_map: dict[str, ResponseLengthMode] = {
+        "short": "short",
+        "low": "short",
+        "medium": "medium",
+        "detailed": "detailed",
+        "high": "detailed",
+        "extra_high": "extra_high",
+    }
+    if pref in alias_map:
+        return alias_map[pref]
 
     text = _fold(message)
     words = [w for w in text.split() if w]
@@ -312,23 +320,30 @@ def classify_response_length(
 
 
 def response_length_guidance(mode: ResponseLengthMode) -> tuple[str, int]:
-    """Return (system_prompt_directive, max_tokens_budget) for the chosen length mode."""
+    """Return (system_prompt_directive, max_tokens_budget) for the chosen reasoning/length mode."""
     if mode == "short":
         return (
-            "ĐỘ DÀI PHẢN HỒI — NGẮN GỌN: Đây là câu hỏi trực tiếp/tra cứu nhanh. "
+            "MỨC ĐỘ SUY LUẬN & ĐỘ DÀI PHẢN HỒI — THẤP / NGẮN GỌN: Đây là câu hỏi trực tiếp/tra cứu nhanh. "
             "Trả lời thẳng trọng tâm trong khoảng 2–4 câu hoặc tối đa 3 gạch đầu dòng ngắn (khoảng 50–120 từ). "
             "Không mở bài hay kết bài dài dòng, không lặp lại câu hỏi.",
             450,
         )
+    if mode == "extra_high":
+        return (
+            "MỨC ĐỘ SUY LUẬN & ĐỘ DÀI PHẢN HỒI — RẤT CAO / CHUYÊN SÂU TOÀN DIỆN: "
+            "Hãy suy luận kỹ lưỡng nhiều chiều trước khi kết luận. Trình bày có cấu trúc rõ ràng gồm phân tích chuyên sâu, "
+            "bảng so sánh (nếu có nhiều lựa chọn), đánh giá ưu/nhược điểm và rủi ro cần lưu ý, ví dụ thực tế và lộ trình hành động cụ thể theo từng bước.",
+            4800,
+        )
     if mode == "detailed":
         return (
-            "ĐỘ DÀI PHẢN HỒI — CHI TIẾT & CHUYÊN SÂU: Câu hỏi cần phân tích đầy đủ, so sánh hoặc hướng dẫn từng bước. "
+            "MỨC ĐỘ SUY LUẬN & ĐỘ DÀI PHẢN HỒI — CAO / CHI TIẾT: Câu hỏi cần phân tích đầy đủ, so sánh hoặc hướng dẫn từng bước. "
             "Hãy trình bày rõ ràng theo từng mục có tiêu đề/gạch đầu dòng (dùng bảng Markdown nếu so sánh nhiều lựa chọn), "
             "kèm ví dụ thực tế và gợi ý hành động cụ thể (~350–700 từ).",
             3200,
         )
     return (
-        "ĐỘ DÀI PHẢN HỒI — VỪA PHẢI: Trả lời cân đối, đủ ý chính nhưng súc tích (~150–280 từ, khoảng 3–5 gạch đầu dòng hoặc 2–3 đoạn ngắn dễ đọc).",
+        "MỨC ĐỘ SUY LUẬN & ĐỘ DÀI PHẢN HỒI — TRUNG BÌNH / VỪA PHẢI: Trả lời cân đối, đủ ý chính nhưng súc tích (~150–280 từ, khoảng 3–5 gạch đầu dòng hoặc 2–3 đoạn ngắn dễ đọc).",
         1100,
     )
 

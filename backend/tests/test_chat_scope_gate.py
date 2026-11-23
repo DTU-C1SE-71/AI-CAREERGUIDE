@@ -147,11 +147,20 @@ async def test_adaptive_response_length_selects_directive_and_budget(
 
 
 @pytest.mark.asyncio
-async def test_explicit_response_length_override_is_respected(connected_chat):
+@pytest.mark.parametrize("pref,expected_mode,expected_tokens", [
+    ("low", "short", 450),
+    ("medium", "medium", 1100),
+    ("high", "detailed", 3200),
+    ("detailed", "detailed", 3200),
+    ("extra_high", "extra_high", 4800),
+])
+async def test_explicit_response_length_override_is_respected(
+    connected_chat, pref, expected_mode, expected_tokens
+):
     reply = await guidance_rag.chat_with_career_counselor(None, AIChatRequest(
         message="Ngành CNTT là gì?",
         connection_revision="s" * 65,
-        response_length="detailed",
+        response_length=pref,
     ))
-    assert reply.response_length_mode == "detailed"
-    assert connected_chat.await_args.kwargs["max_tokens"] == 3200
+    assert reply.response_length_mode == expected_mode
+    assert connected_chat.await_args.kwargs["max_tokens"] == expected_tokens
