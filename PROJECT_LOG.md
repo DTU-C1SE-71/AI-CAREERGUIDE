@@ -104,7 +104,14 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-23
-- **`feat(auth): prompt student profile setup after Google login`**
+- **`feat(chat): add persistent AI chat history and adaptive response length`**
+  - **Vấn đề / Yêu cầu:** Cố vấn AI trước đây xóa sạch hội thoại khi chuyển trang/tải lại, chưa có ngăn xem lại lịch sử trò chuyện và luôn trả lời cùng một độ dài/ngân sách token cố định.
+  - **Thay đổi chính (`backend/app/models/chat.py`, `backend/app/models/__init__.py`, `backend/app/db/migrations.py`, `backend/app/schemas/rag.py`, `backend/app/services/llamaindex_rag_orchestrator/chat_scope.py`, `backend/app/services/llamaindex_rag_orchestrator/chat_history.py`, `backend/app/services/llamaindex_rag_orchestrator/guidance_rag.py`, `backend/app/services/llamaindex_rag_orchestrator/router.py`, `backend/tests/test_chat_scope_gate.py`, `frontend/src/pages/AIChatAdvisor.tsx`, `frontend/src/context/AuthContext.tsx`):**
+    - Thêm bảng `chat_sessions` & `chat_messages` (migration `20261123_006_chat_history`) cùng các API `GET /rag-governance/chat/sessions`, `GET /rag-governance/chat/sessions/{id}`, `DELETE /rag-governance/chat/sessions/{id}`, `DELETE /rag-governance/chat/sessions` có kiểm soát quyền sở hữu theo tài khoản; khách chưa đăng nhập tự động lưu tạm vào `localStorage` (và dọn sạch khi đăng xuất).
+    - Bổ sung `classify_response_length` + `response_length_guidance` tự động phân loại câu hỏi theo 3 mức (`short`: 450 tokens, `medium`: 1100 tokens, `detailed`: 3200 tokens) kèm chỉ dẫn prompt tương ứng và hỗ trợ người dùng chọn nhanh `Tự động / Ngắn gọn / Vừa phải / Chi tiết`.
+    - Nâng cấp `AIChatAdvisor.tsx`: thêm nút `Lịch sử` (sidebar khi toàn màn hình / drawer khi thu gọn), nút `Chat mới`, xóa từng phiên/xóa tất cả, giữ nguyên hội thoại khi học sinh chuyển trang và hiển thị nhãn độ dài phản hồi.
+  - **Kiểm chứng:** `python -m py_compile` (9 tệp, Pass); 13/13 ca kiểm thử `classify_response_length` (Pass); `npm run build` (`tsc -b && vite build`, Pass); `npm test` (12/12 pass).
+- **`6eff444` — `feat(auth): prompt student profile setup after Google login`**
   - **Vấn đề / Yêu cầu:** Sau khi học sinh đăng nhập bằng Google OAuth, hệ thống trước đây tự gán mặc định `"Nam"` / `"Lớp 12"` ở frontend và chuyển thẳng vào `/dashboard` mà không mở mục thiết lập hồ sơ.
   - **Thay đổi chính (`backend/app/schemas/identity.py`, `backend/app/services/identity/service.py`, `backend/tests/test_auth_security.py`, `frontend/src/components/profile/UserProfileModal.tsx`, `frontend/src/pages/Login.tsx`, `frontend/src/pages/GoogleCallback.tsx`, `frontend/src/components/layout/MainLayout.tsx`):**
     - Backend trả thêm cờ `needs_profile_setup` trong `TokenResponse` (true khi học sinh đăng nhập Google lần đầu hoặc còn thiếu `gender`/`grade_level`, và tự động chuyển `false` sau khi lưu hồ sơ qua `PUT /api/v1/identity/profile`).

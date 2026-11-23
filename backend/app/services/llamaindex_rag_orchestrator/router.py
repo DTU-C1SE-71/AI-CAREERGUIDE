@@ -25,8 +25,12 @@ from app.schemas.rag import (
     AIChatRequest,
     AIChatResponse,
     AIChatConnectionResponse,
+    ChatSessionSummary,
+    ChatSessionDetail,
+    ChatHistoryClearResponse,
 )
 from app.services.llamaindex_rag_orchestrator import service
+from app.services.llamaindex_rag_orchestrator import chat_history as chat_history_service
 
 router = APIRouter(prefix="/rag-governance", tags=["LlamaIndex Dual RAG & Governance"])
 
@@ -207,6 +211,47 @@ async def chat_with_counselor(
     """Locally gate scope before any conversational provider generation."""
     user_id = current_user.id if current_user else None
     return await service.chat_with_career_counselor(db, payload, user_id)
+
+
+@router.get("/chat/sessions", response_model=List[ChatSessionSummary])
+async def list_counselor_chat_sessions(
+    limit: int = Query(default=40, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trả về danh sách các phiên trò chuyện AI của người dùng hiện tại."""
+    return await chat_history_service.list_chat_sessions(db, current_user.id, limit=limit)
+
+
+@router.get("/chat/sessions/{session_id}", response_model=ChatSessionDetail)
+async def get_counselor_chat_session(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Đọc toàn bộ tin nhắn trong một phiên trò chuyện thuộc người dùng hiện tại."""
+    return await chat_history_service.get_chat_session_detail(db, current_user.id, session_id)
+
+
+@router.delete("/chat/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_counselor_chat_session(
+    session_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Xóa một phiên trò chuyện AI thuộc người dùng hiện tại."""
+    await chat_history_service.delete_chat_session(db, current_user.id, session_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.delete("/chat/sessions", response_model=ChatHistoryClearResponse)
+async def clear_counselor_chat_sessions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Xóa toàn bộ lịch sử trò chuyện AI của người dùng hiện tại."""
+    deleted = await chat_history_service.clear_chat_sessions(db, current_user.id)
+    return ChatHistoryClearResponse(deleted=deleted)
 
 
 # Alias quản trị dùng cùng DB profile/service với /admin/ai-config.

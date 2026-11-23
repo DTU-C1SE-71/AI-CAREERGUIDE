@@ -6,6 +6,31 @@ import unicodedata
 from typing import Literal
 
 ScopeDecision = Literal["allow", "redirect", "clarify", "greeting"]
+ResponseLengthMode = Literal["short", "medium", "detailed"]
+
+_EXPLICIT_SHORT = re.compile(
+    r"\b(ngan gon|tom tat|noi nhanh|tra loi ngan|ngan thoi|gon lai|1 cau|mot cau|"
+    r"y chinh|diem chinh|chot lai|tldr|tl;dr|briefly|brief|short answer|concise)\b"
+)
+_EXPLICIT_DETAILED = re.compile(
+    r"\b(chi tiet|phan tich ky|phan tich sau|phan tich ro|giai thich ky|giai thich ro|"
+    r"giai thich tung buoc|tung buoc|cu the hon|noi ro hon|day du|chuyen sau|"
+    r"toan dien|tu a den z|step by step|detailed|in depth|comprehensive)\b"
+)
+_DETAILED_INTENT = re.compile(
+    r"\b(lo trinh|ke hoach hoc|ke hoach on|ke hoach trai nghiem|chien luoc|"
+    r"so sanh|khac nhau|khac gi|giong va khac|uu nhuoc diem|uu va nhuoc diem|"
+    r"nen chon .{2,40} hay |viet cv|mau cv|viet code|"
+    r"code (?:python|java|javascript|typescript|c\+\+|c#|php|sql)|"
+    r"bai mau|vi du minh hoa|tu lop 10|tu lop 11|4 tuan|tuan 1)\b"
+)
+_SHORT_DIRECT_CUE = re.compile(
+    r"\b(la gi|bang may|bao nhieu|co can .{1,35} khong|co kho khong|co nen .{1,35} khong|"
+    r"co bat buoc|mat bao lau|may nam|ma nganh|to hop nao|khoi nao|mon nao|"
+    r"o dau|nut nao|tab nao|muc nao|diem san|muc luong|luong bao nhieu|"
+    r"luong khoi diem|dung khong|phai khong)\b"
+)
+_MULTI_PART_CUE = re.compile(r"\b(dong thoi|ngoai ra|voi lai|ben canh do|va cho biet|con .{2,30} thi sao)\b")
 
 
 def _fold(text: str) -> str:
@@ -244,6 +269,68 @@ def classify_chat_message(message: str, history=None) -> ScopeDecision:
             if not _FOLLOWUP.fullmatch(previous):
                 break
     return "clarify"
+
+
+def classify_response_length(
+    message: str,
+    preference: str = "auto",
+    history=None,
+) -> ResponseLengthMode:
+    """Deterministically choose short, medium, or detailed answer depth."""
+    pref = (preference or "auto").strip().lower()
+    if pref in ("short", "medium", "detailed"):
+        return pref  # type: ignore[return-value]
+
+    text = _fold(message)
+    words = [w for w in text.split() if w]
+    word_count = len(words)
+    question_marks = message.count("?")
+
+    if _EXPLICIT_SHORT.search(text):
+        return "short"
+    if _EXPLICIT_DETAILED.search(text) or _DETAILED_INTENT.search(text):
+        return "detailed"
+
+    # Multi-question or long compound prompt -> detailed response.
+    if word_count >= 24 or question_marks >= 2 or (word_count >= 16 and _MULTI_PART_CUE.search(text)):
+        return "detailed"
+
+    # Quick arithmetic / pure math notation (unless asking for steps/code).
+    expr = unicodedata.normalize("NFKC", text).translate(str.maketrans({
+        "×": "*", "÷": "/", "−": "-", "–": "-", "≤": "<=", "≥": ">=",
+    }))
+    expr = re.sub(r"^(?:giai|tinh|solve|calculate)(?:\s+(?:pt|phuong trinh))?\s+", "", expr)
+    expr = re.sub(r"\s*(?:bang (?:may|bao nhieu)|ra bao nhieu|la bao nhieu|=?\s*bao nhieu)[?!. ]*$", "", expr)
+    if _MATH_EXPRESSION.fullmatch(expr) and re.search(r"\d", expr) and re.search(r"[+*/^=:<>\-]", expr):
+        return "short"
+
+    # Short direct lookup / yes-no / single-concept question.
+    if word_count <= 13 and (_SHORT_DIRECT_CUE.search(text) or word_count <= 5):
+        return "short"
+
+    return "medium"
+
+
+def response_length_guidance(mode: ResponseLengthMode) -> tuple[str, int]:
+    """Return (system_prompt_directive, max_tokens_budget) for the chosen length mode."""
+    if mode == "short":
+        return (
+            "ĐỘ DÀI PHẢN HỒI — NGẮN GỌN: Đây là câu hỏi trực tiếp/tra cứu nhanh. "
+            "Trả lời thẳng trọng tâm trong khoảng 2–4 câu hoặc tối đa 3 gạch đầu dòng ngắn (khoảng 50–120 từ). "
+            "Không mở bài hay kết bài dài dòng, không lặp lại câu hỏi.",
+            450,
+        )
+    if mode == "detailed":
+        return (
+            "ĐỘ DÀI PHẢN HỒI — CHI TIẾT & CHUYÊN SÂU: Câu hỏi cần phân tích đầy đủ, so sánh hoặc hướng dẫn từng bước. "
+            "Hãy trình bày rõ ràng theo từng mục có tiêu đề/gạch đầu dòng (dùng bảng Markdown nếu so sánh nhiều lựa chọn), "
+            "kèm ví dụ thực tế và gợi ý hành động cụ thể (~350–700 từ).",
+            3200,
+        )
+    return (
+        "ĐỘ DÀI PHẢN HỒI — VỪA PHẢI: Trả lời cân đối, đủ ý chính nhưng súc tích (~150–280 từ, khoảng 3–5 gạch đầu dòng hoặc 2–3 đoạn ngắn dễ đọc).",
+        1100,
+    )
 
 
 def local_scope_reply(decision: ScopeDecision) -> str:

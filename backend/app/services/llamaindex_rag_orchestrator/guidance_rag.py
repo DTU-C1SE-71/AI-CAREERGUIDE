@@ -391,7 +391,16 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
     )
     from app.services.llamaindex_rag_orchestrator.counselor_connection import verify_receipt
     from app.services.llamaindex_rag_orchestrator.chat_scope import (
-        classify_chat_message, local_scope_reply, is_academic_question, is_system_help_question,
+        classify_chat_message,
+        classify_response_length,
+        local_scope_reply,
+        is_academic_question,
+        is_system_help_question,
+        response_length_guidance,
+    )
+    from app.services.llamaindex_rag_orchestrator.chat_history import (
+        persist_chat_turn,
+        verify_session_owner,
     )
     from app.services.llamaindex_rag_orchestrator.system_help import (
         SECURITY_REFUSAL,
@@ -405,6 +414,13 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
     resolve_profile_owner(payload.user_id, current_user_id)
     if payload.assessment_id and current_user_id is None:
         raise HTTPException(401, "Đăng nhập để xem bản đánh giá đã lưu.")
+    if payload.session_id and current_user_id is None:
+        raise HTTPException(401, "Đăng nhập để truy cập lịch sử trò chuyện đã lưu.")
+    if payload.session_id and current_user_id is not None and db is not None:
+        await verify_session_owner(db, current_user_id, payload.session_id)
+
+    length_mode = classify_response_length(payload.message, payload.response_length, payload.history)
+    length_directive, length_max_tokens = response_length_guidance(length_mode)
 
     connected = await verify_receipt(db, payload.connection_revision)
     if forbidden_request(payload.message):
@@ -414,6 +430,8 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
                 "Cách làm bài trắc nghiệm hướng nghiệp?",
                 "Chế độ Đề xuất ngành có AI dùng để làm gì?",
             ],
+            session_id=payload.session_id,
+            response_length_mode=length_mode,
             is_fallback=False,
             is_ai_generated=False,
             response_source="verified_guidance",
@@ -423,9 +441,22 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
 
     scope = classify_chat_message(payload.message, payload.history)
     if scope != "allow":
+        local_reply = REDIRECT if scope == "redirect" else local_scope_reply(scope)
+        saved_session_id, saved_title = await persist_chat_turn(
+            db,
+            current_user_id,
+            payload.session_id,
+            payload.message,
+            local_reply,
+            response_source="verified_guidance",
+            major_code=payload.major_code,
+        )
         return AIChatResponse(
-            reply=REDIRECT if scope == "redirect" else local_scope_reply(scope),
+            reply=local_reply,
             suggested_followups=["Tìm hiểu ngành An toàn thông tin", "Cách sử dụng hệ thống AI CareerGuide?"],
+            session_id=saved_session_id,
+            session_title=saved_title,
+            response_length_mode="short",
             is_fallback=False,
             is_ai_generated=False,
             response_source="verified_guidance",
@@ -468,21 +499,22 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
             )
 
             if system_help:
-                system_instruction = SYSTEM_HELP_PROMPT
+                system_instruction = f"{SYSTEM_HELP_PROMPT}\n\n{length_directive}"
             elif academic:
                 system_instruction = (
                     "Bạn là trợ giảng học tập trong AI CareerGuide, hỗ trợ kiến thức phổ thông và lập trình.\n"
-                    "Trả lời trực tiếp câu hỏi hiện tại bằng tiếng Việt, rõ ràng, ngắn gọn và đúng trình độ câu hỏi.\n"
+                    "Trả lời trực tiếp câu hỏi hiện tại bằng tiếng Việt, rõ ràng và đúng trình độ câu hỏi.\n"
                     "Với phép tính hoặc biểu thức ngắn, hãy giải hoặc tính kết quả; không bắt buộc người dùng phải nói từ 'học'.\n"
-                    "Với khái niệm, nêu định nghĩa dễ hiểu và một ví dụ. Với bài tập, trình bày các bước chính. "
-                    "Với lập trình, cung cấp mã đúng ngôn ngữ yêu cầu và giải thích ngắn; nếu thiếu dữ kiện, nêu giả định hoặc hỏi lại cụ thể.\n"
+                    "Với khái niệm, nêu định nghĩa dễ hiểu và ví dụ phù hợp. Với bài tập, trình bày các bước chính. "
+                    "Với lập trình, cung cấp mã đúng ngôn ngữ yêu cầu và giải thích phù hợp; nếu thiếu dữ kiện, nêu giả định hoặc hỏi lại cụ thể.\n"
                     "Không chuyển câu hỏi học tập sang tư vấn chọn ngành, không yêu cầu chọn ngành và không lặp lại "
                     "các lần từ chối nhầm trước đó. Không suy ra năng lực hay mức phù hợp nghề từ một câu hỏi kiến thức.\n"
                     "Không bịa dữ kiện thời sự, nguồn tài liệu hoặc thông tin chưa được cung cấp.\n\n"
+                    f"{length_directive}\n\n"
                     f"{SECURITY_BOUNDARIES_PROMPT}"
                 )
             else:
-                system_instruction += f"\n\n[DỮ LIỆU THAM CHIẾU HỆ THỐNG]:\n{static_reply}"
+                system_instruction += f"\n\n{length_directive}\n\n[DỮ LIỆU THAM CHIẾU HỆ THỐNG]:\n{static_reply}"
             messages = [{"role": "system", "content": system_instruction}]
 
             if payload.history:
@@ -507,16 +539,29 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
             ai_reply = await adapter.chat(
                 snapshot,
                 messages,
-                max_tokens=min(settings.LLM_MAX_TOKENS, 2048),
+                max_tokens=min(settings.LLM_MAX_TOKENS, length_max_tokens),
                 timeout=min(settings.LLM_TIMEOUT_SECONDS, 60.0),
             )
 
             if ai_reply and ai_reply.strip():
                 connected_after = await verify_receipt(db, payload.connection_revision)
+                cleaned_reply = ai_reply.strip()
+                saved_session_id, saved_title = await persist_chat_turn(
+                    db,
+                    current_user_id,
+                    payload.session_id,
+                    payload.message,
+                    cleaned_reply,
+                    response_source="ai_advisor",
+                    major_code=context,
+                )
                 return AIChatResponse(
-                    reply=ai_reply.strip(),
+                    reply=cleaned_reply,
                     suggested_followups=followups,
                     context_major_code=context,
+                    session_id=saved_session_id,
+                    session_title=saved_title,
+                    response_length_mode=length_mode,
                     is_fallback=False,
                     is_ai_generated=True,
                     response_source="ai_advisor",
@@ -528,13 +573,26 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
             generation_failed = True
             connected = False
 
+    fallback_source = "offline_guidance" if generation_failed else "verified_guidance"
+    saved_session_id, saved_title = await persist_chat_turn(
+        db,
+        current_user_id,
+        payload.session_id,
+        payload.message,
+        static_reply,
+        response_source=fallback_source,
+        major_code=context,
+    )
     return AIChatResponse(
         reply=static_reply,
         suggested_followups=followups,
         context_major_code=context,
+        session_id=saved_session_id,
+        session_title=saved_title,
+        response_length_mode=length_mode,
         is_fallback=generation_failed,
         is_ai_generated=False,
-        response_source="offline_guidance" if generation_failed else "verified_guidance",
+        response_source=fallback_source,
         connection_available=connected,
         connection_revision=payload.connection_revision if connected else None,
     )

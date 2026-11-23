@@ -1,6 +1,7 @@
 import uuid
+from datetime import datetime
 from typing import List, Optional, Dict, Any, Literal
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from app.schemas.roadmap import RoadmapMilestoneSchema, ReferenceMaterialSchema
 
 
@@ -127,6 +128,10 @@ class AIExplanationResponse(BaseModel):
     is_ai_generated: bool = True
 
 
+ResponseLengthPreference = Literal["auto", "short", "medium", "detailed"]
+ResponseLengthMode = Literal["short", "medium", "detailed"]
+
+
 class AIChatMessage(BaseModel):
     role: Literal["user", "assistant"]
     content: str = Field(max_length=4000)
@@ -135,20 +140,58 @@ class AIChatMessage(BaseModel):
 class AIChatRequest(GuidanceEvidenceRequest):
     message: str = Field(min_length=1, max_length=4000)
     major_code: Optional[str] = Field(default=None, pattern=r"^[0-9]{7}$")
+    session_id: Optional[uuid.UUID] = None
     history: Optional[List[AIChatMessage]] = Field(default=None, max_length=12)
     connection_revision: Optional[str] = Field(default=None, min_length=32, max_length=100, pattern=r"^[A-Za-z0-9_-]+$")
     weekly_hours_available: int = Field(default=6, ge=2, le=40)
+    response_length: ResponseLengthPreference = "auto"
 
 
 class AIChatResponse(BaseModel):
     reply: str
     suggested_followups: List[str] = Field(default_factory=list)
     context_major_code: Optional[str] = None
+    session_id: Optional[uuid.UUID] = None
+    session_title: Optional[str] = None
+    response_length_mode: Optional[ResponseLengthMode] = None
     is_fallback: bool = False
     is_ai_generated: bool = False
     response_source: Literal["verified_guidance", "ai_advisor", "offline_guidance"] = "verified_guidance"
     connection_available: bool = False
     connection_revision: Optional[str] = None
+
+
+class ChatMessageRecord(BaseModel):
+    id: uuid.UUID
+    role: Literal["user", "assistant"]
+    content: str
+    response_source: Optional[str] = None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChatSessionSummary(BaseModel):
+    id: uuid.UUID
+    title: str
+    major_code: Optional[str] = None
+    message_count: int = 0
+    last_message_preview: str = ""
+    created_at: datetime
+    updated_at: datetime
+
+
+class ChatSessionDetail(BaseModel):
+    id: uuid.UUID
+    title: str
+    major_code: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    messages: List[ChatMessageRecord] = Field(default_factory=list)
+
+
+class ChatHistoryClearResponse(BaseModel):
+    deleted: int
 
 
 class AIChatConnectionResponse(BaseModel):

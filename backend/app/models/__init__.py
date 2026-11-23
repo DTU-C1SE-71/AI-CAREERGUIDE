@@ -38,6 +38,7 @@ from app.models.roadmap import MajorRoadmap, StudentRoadmapProgress
 from app.models.insight import MajorInsight, StudentSkillInsight, MajorExplanationInsight
 from app.models.staging import StagingRecord, StagingStreamType, StagingStatus
 from app.models.vector import KnowledgeEmbedding
+from app.models.chat import ChatSession, ChatMessage
 
 __all__ = [
     "Base",
@@ -71,6 +72,8 @@ __all__ = [
     "StagingStreamType",
     "StagingStatus",
     "KnowledgeEmbedding",
+    "ChatSession",
+    "ChatMessage",
 ]
 
 from app.models.ai_config import AIRuntimeConfig, AIConfigAudit

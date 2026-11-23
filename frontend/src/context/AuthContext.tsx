@@ -42,6 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem("career-guide:profile:grade_level")
     localStorage.removeItem("career-guide:profile:gender")
     localStorage.removeItem("career-guide:saved-roadmaps")
+    localStorage.removeItem("career-guide:chat-history:guest")
     for (const key of Object.keys(localStorage)) {
       if (key.startsWith("career-guide:roadmap:guest") || key.startsWith("career-guide:roadmap:u:guest")) {
         localStorage.removeItem(key)

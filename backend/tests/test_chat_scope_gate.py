@@ -122,3 +122,36 @@ async def test_real_provider_failure_is_distinguished_from_local_filter(connecte
     assert reply.is_fallback is True
     assert reply.connection_available is False
     assert reply.response_source == "offline_guidance"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("message,expected_mode,expected_tokens", [
+    ("Ngành CNTT là gì?", "short", 450),
+    ("1+1 bằng mấy?", "short", 450),
+    ("Trả lời ngắn gọn ngành Kế toán học môn gì?", "short", 450),
+    ("Những kỹ năng nào cần tìm hiểu khi chọn nghề?", "medium", 1100),
+    ("So sánh chi tiết ngành Khoa học máy tính và Trí tuệ nhân tạo", "detailed", 3200),
+    ("Lập lộ trình ôn thi Toán và Tiếng Anh từ lớp 11 lên lớp 12", "detailed", 3200),
+])
+async def test_adaptive_response_length_selects_directive_and_budget(
+    connected_chat, message, expected_mode, expected_tokens
+):
+    reply = await guidance_rag.chat_with_career_counselor(None, AIChatRequest(
+        message=message, connection_revision="s" * 65,
+    ))
+    assert reply.is_ai_generated is True
+    assert reply.response_length_mode == expected_mode
+    assert connected_chat.await_args.kwargs["max_tokens"] == expected_tokens
+    system_prompt = connected_chat.await_args.args[1][0]["content"]
+    assert "ĐỘ DÀI PHẢN HỒI" in system_prompt
+
+
+@pytest.mark.asyncio
+async def test_explicit_response_length_override_is_respected(connected_chat):
+    reply = await guidance_rag.chat_with_career_counselor(None, AIChatRequest(
+        message="Ngành CNTT là gì?",
+        connection_revision="s" * 65,
+        response_length="detailed",
+    ))
+    assert reply.response_length_mode == "detailed"
+    assert connected_chat.await_args.kwargs["max_tokens"] == 3200
