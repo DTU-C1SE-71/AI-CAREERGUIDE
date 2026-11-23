@@ -104,7 +104,14 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-23
-- **`feat(chat): streamline AI chat UI, focus-safe composer and reasoning effort popover`**
+- **`feat(report): add Vietnamese PDF report export and simplify AI chat online dot`**
+  - **Vấn đề / Yêu cầu:** Trên `AIChatAdvisor`, thay nhãn chữ `"Đang hoạt động"` bằng dấu chấm xanh gọn gàng và bổ sung nút xuất file báo cáo PDF; đồng thời nâng cấp nút `Xuất PDF` ở `Dashboard` từ `window.print()` thành tải tệp báo cáo PDF A4 tiếng Việt hoàn chỉnh.
+  - **Thay đổi chính (`frontend/src/utils/pdfReport.ts`, `frontend/src/pages/Dashboard.tsx`, `frontend/src/pages/AIChatAdvisor.tsx`, `frontend/tests/pdf-report.test.ts`):**
+    - Xây dựng bộ kết xuất báo cáo PDF A4 tiếng Việt (`exportCareerReportPdf`, `exportChatReportPdf`) qua `<iframe>` tách biệt kết hợp `html2canvas` + `jsPDF` (lazy-load tách chunk riêng, dùng thuần màu HEX/RGBA Sky+Slate để tránh lỗi `oklch()` của Tailwind v4 khi chụp canvas, giữ nguyên dấu tiếng Việt qua Google Font `Be Vietnam Pro` và đánh số trang ở chân trang).
+    - Nâng cấp `Dashboard.tsx`: bấm `Xuất báo cáo PDF` tải thẳng tệp `Bao-cao-Huong-nghiep-<ten>-YYYY-MM-DD.pdf` gồm thông tin học sinh, hồ sơ RIASEC & tổ hợp điểm tốt nhất, Phễu 2 tầng (tối đa 8 ngành), phân tích kỹ năng, nguyện vọng và lưu ý minh bạch.
+    - Cập nhật `AIChatAdvisor.tsx`: thay pill `"Đang hoạt động"` thành chấm trạng thái (`bg-emerald-500` khi online, giữ `aria-label`/`title`), và thêm nút `Xuất báo cáo PDF` cạnh nút `Chat mới` để tải biên bản tư vấn `Tu-van-AI-<tieu-de>-YYYY-MM-DD.pdf`.
+  - **Kiểm chứng:** `npm run build` (`tsc -b && vite build`, Pass 994ms); `npm test` (17/17 pass, gồm 5 test mới tại `frontend/tests/pdf-report.test.ts`); `Select-String ... "indigo"` (0 khớp).
+- **`c46e3e7` — `feat(chat): streamline AI chat UI, focus-safe composer and reasoning effort popover`**
   - **Vấn đề / Yêu cầu:** Giao diện chat AI còn nhiều chữ mô tả ở tiêu đề, lời chào, chân trang và thanh chọn độ dài đặt ở header; khi AI đang xử lý prompt cũ, ô nhập bị khóa khiến học sinh không thể gõ trước câu tiếp theo; cần đưa bộ chọn mức độ suy luận xuống khung chat dạng popover danh sách dọc kèm dấu check và nút `(i)`.
   - **Thay đổi chính (`backend/app/schemas/rag.py`, `backend/app/services/llamaindex_rag_orchestrator/chat_scope.py`, `backend/tests/test_chat_scope_gate.py`, `frontend/src/pages/AIChatAdvisor.tsx`):**
     - Mở rộng `ResponseLengthPreference` / `ResponseLengthMode` hỗ trợ đầy đủ các mức suy luận `auto`, `low` (`short`: `450` tokens), `medium` (`1100` tokens), `high` (`detailed`: `3200` tokens) và `extra_high` (`4800` tokens) với chỉ dẫn phân tích đa chiều chuyên sâu.

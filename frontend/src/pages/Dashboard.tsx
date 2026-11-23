@@ -42,6 +42,7 @@ import type { AspirationAIAnalysis, StudentSkillAnalysis } from "../types/insigh
 import type { FunnelRecommendationData, Major } from "../types/major"
 import { formatBlockWithSubjects } from "../utils"
 import { buildEvaluateProfilePayload, getValidRiasecAnswer } from "../utils/assessmentPayload"
+import { exportCareerReportPdf } from "../utils/pdfReport"
 
 interface BestBlockStatsPayload {
   block: string
@@ -161,6 +162,8 @@ export function Dashboard() {
   const [isEvaluating, setIsEvaluating] = useState(false)
   const [isAnalyzingAspiration, setIsAnalyzingAspiration] = useState(false)
   const [evaluateError, setEvaluateError] = useState<string | null>(null)
+  const [exportingPdf, setExportingPdf] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false)
   const [recommendationMode, setRecommendationMode] = useState<"algorithm" | "ai">("algorithm")
@@ -531,8 +534,89 @@ export function Dashboard() {
 
   const activeFunnel: FunnelRecommendationData = data?.funnel ?? { tier1_fields: [], all_majors: [] }
 
-  const handleExportPdf = () => {
-    window.print()
+  const displayName = user?.name || data?.user_name || "Học sinh"
+
+  const handleExportPdf = async () => {
+    if (exportingPdf) return
+    setPdfError(null)
+    setExportingPdf(true)
+    try {
+      const funnelMajors =
+        activeFunnel.all_majors && activeFunnel.all_majors.length > 0
+          ? activeFunnel.all_majors
+          : activeFunnel.tier1_fields.flatMap((field) => field.majors || [])
+      const seenCodes = new Set<string>()
+      const topMajors = funnelMajors
+        .filter((major) => {
+          const key = major.code || major.id || major.name
+          if (seenCodes.has(key)) return false
+          seenCodes.add(key)
+          return true
+        })
+        .slice(0, 8)
+        .map((major) => ({
+          code: major.code,
+          name: major.name,
+          category: major.category,
+          match: major.match,
+          fit: major.fit,
+          best_matching_block: major.best_matching_block,
+          best_block_score: major.best_block_score,
+          benchmark_cutoff: major.benchmark_cutoff,
+          feasibility_label: major.feasibility_label,
+          is_trending: major.is_trending,
+          trend_label: major.trend_label,
+          explanation: major.explanation,
+          admission_advice: major.admission_advice,
+        }))
+
+      const attemptNum = history.length > 0 ? history.length - activeAttemptIndex : 1
+      await exportCareerReportPdf({
+        studentName: displayName,
+        studentEmail: user?.email,
+        gradeLevel: profileGradeLevel,
+        gender: profileGender,
+        schoolClass: user?.school_class,
+        schoolName: user?.school_name,
+        attemptLabel: `Lần #${attemptNum}`,
+        completedAt: activeAttempt?.createdAt || effectiveAssessment.completedAt,
+        hollandCode: hollandCodeBadge || "Chưa phân hóa",
+        archetypeTitle,
+        riasec: displayedRiasec
+          .filter(
+            (point): point is typeof point & { value: number } =>
+              typeof point.value === "number" && Number.isFinite(point.value),
+          )
+          .map((point) => ({
+            key: point.key,
+            label: point.label,
+            value: point.value,
+          })),
+        interestStatus: interestEvidence.status,
+        bestBlock: bestBlockStats,
+        scores: effectiveAssessment.scores || [],
+        horizonLabel: data?.horizon_label || activeFunnel.horizon_label,
+        weightsApplied: data?.weights_applied,
+        tier1Fields: (activeFunnel.tier1_fields || []).map((field) => ({
+          field_name: field.field_name,
+          match: field.match,
+          majors_count: field.majors_count,
+          eligible_count: field.eligible_count,
+        })),
+        topMajors,
+        skillAnalysis,
+        aspirationAnalysis: data?.aspirationAnalysis ?? null,
+        aspirationAiAnalysis,
+      })
+    } catch (error: unknown) {
+      setPdfError(
+        error instanceof Error && error.message
+          ? `Không thể xuất báo cáo PDF: ${error.message}`
+          : "Không thể xuất báo cáo PDF lúc này. Vui lòng thử lại.",
+      )
+    } finally {
+      setExportingPdf(false)
+    }
   }
 
   const handleRetakeAssessment = () => {
@@ -546,8 +630,6 @@ export function Dashboard() {
     setData(null)
     reportTopRef.current?.scrollIntoView({ behavior: "smooth" })
   }
-
-  const displayName = user?.name || data?.user_name || "Học sinh"
 
   return (
     <section className="py-4 sm:py-6 lg:py-8" ref={reportTopRef}>
@@ -590,13 +672,31 @@ export function Dashboard() {
               <Button
                 variant="secondary"
                 icon={Download}
-                onClick={handleExportPdf}
+                loading={exportingPdf}
+                disabled={exportingPdf}
+                onClick={() => void handleExportPdf()}
               >
-                Xuất PDF
+                {exportingPdf ? "Đang xuất PDF..." : "Xuất báo cáo PDF"}
               </Button>
             </div>
           )}
         </div>
+
+        {pdfError && (
+          <div
+            role="alert"
+            className="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
+          >
+            <span>{pdfError}</span>
+            <button
+              type="button"
+              onClick={() => setPdfError(null)}
+              className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100"
+            >
+              Đóng
+            </button>
+          </div>
+        )}
 
         {activeAttemptIndex === 0 && assessment.syncStatus === "LOCAL_ONLY" && <p role="status" className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Đã lưu trên thiết bị, chưa đồng bộ máy chủ. Bài làm vẫn được giữ trên trình duyệt này; hãy mở lại bài đánh giá và gửi lại khi kết nối hoạt động.</p>}
         {activeAttemptIndex === 0 && assessment.syncStatus === "SYNCED" && assessment.submissionId && <p role="status" className="mb-5 text-xs text-slate-600">Đã đồng bộ bài đánh giá với máy chủ.</p>}

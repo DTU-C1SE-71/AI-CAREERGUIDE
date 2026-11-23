@@ -5,9 +5,8 @@ import {
   Brain,
   Check,
   ChevronDown,
-  CircleAlert,
-  CircleCheck,
   Clock,
+  Download,
   GraduationCap,
   History,
   Info,
@@ -30,6 +29,7 @@ import { useAuth } from "../context/AuthContext"
 import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
 import { MOET_435_MAJORS } from "../data/moetMajors435"
 import { ApiError, requestJSON } from "../services/api"
+import { exportChatReportPdf } from "../utils/pdfReport"
 
 interface AIChatAdvisorProps {
   open: boolean
@@ -209,6 +209,8 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
   const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
   const [confirmClearAll, setConfirmClearAll] = useState(false)
+  const [exportingPdf, setExportingPdf] = useState(false)
+  const [pdfError, setPdfError] = useState<string | null>(null)
 
   const assessment = useSelectedAssessment()
   const { user, token } = useAuth()
@@ -665,12 +667,47 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
       : connection.state === "online"
         ? "Đang hoạt động"
         : "Chưa kết nối"
-  const connectionClass =
-    connection.state === "checking"
-      ? "bg-slate-100 text-slate-600"
-      : connection.state === "online"
-        ? "bg-emerald-50 text-emerald-700"
-        : "bg-rose-50 text-rose-700"
+
+  const exportableMessages = messages.filter((m) => m.id !== "welcome")
+
+  const handleExportChatPdf = async () => {
+    if (exportingPdf || exportableMessages.length === 0) return
+    setPdfError(null)
+    setExportingPdf(true)
+    try {
+      const currentSession = sessions.find((s) => s.id === activeSessionId)
+      const firstQuestion = exportableMessages.find((m) => m.role === "user")?.content
+      const selectedMajor = MOET_435_MAJORS.find((m) => m.major_code === context)
+      const title =
+        currentSession?.title ||
+        (firstQuestion ? makeTitle(firstQuestion) : "Cuộc trò chuyện hướng nghiệp")
+
+      await exportChatReportPdf({
+        title,
+        studentName: user?.name,
+        studentEmail: user?.email,
+        majorLabel: selectedMajor
+          ? `${selectedMajor.name_vi} (${selectedMajor.major_code})`
+          : undefined,
+        messages: exportableMessages.map((m) => ({
+          role: m.role,
+          content: m.content,
+          lengthLabel: m.lengthMode ? LENGTH_MODE_LABELS[m.lengthMode] : undefined,
+          sourceLabel:
+            m.source === "offline_guidance"
+              ? "Hướng dẫn có sẵn"
+              : m.source === "verified_guidance"
+                ? "Dữ liệu hệ thống"
+                : undefined,
+          createdAt: m.createdAt,
+        })),
+      })
+    } catch {
+      setPdfError("Không thể xuất báo cáo PDF lúc này. Vui lòng thử lại.")
+    } finally {
+      setExportingPdf(false)
+    }
+  }
 
   const attachStudentProfile = () => {
     const scores = assessment.scores || []
@@ -869,21 +906,16 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                     <span
                       role="status"
                       aria-live="polite"
-                      className={`inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${connectionClass}`}
-                    >
-                      {connection.state === "checking" ? (
-                        <LoaderCircle
-                          size={12}
-                          className="animate-spin"
-                          aria-hidden="true"
-                        />
-                      ) : connection.state === "online" ? (
-                        <CircleCheck size={12} aria-hidden="true" />
-                      ) : (
-                        <CircleAlert size={12} aria-hidden="true" />
-                      )}
-                      {connectionLabel}
-                    </span>
+                      aria-label={connectionLabel}
+                      title={connectionLabel}
+                      className={`inline-block size-2.5 shrink-0 rounded-full ${
+                        connection.state === "online"
+                          ? "bg-emerald-500 ring-4 ring-emerald-500/20"
+                          : connection.state === "checking"
+                            ? "animate-pulse bg-slate-400 ring-4 ring-slate-400/20"
+                            : "bg-rose-500 ring-4 ring-rose-500/20"
+                      }`}
+                    />
                   </div>
                 </div>
 
@@ -905,6 +937,20 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                       <span className="rounded-full bg-sky-100 px-1.5 py-0.2 text-[10px] font-bold text-sky-700">
                         {sessions.length}
                       </span>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void handleExportChatPdf()}
+                    disabled={exportingPdf || exportableMessages.length === 0}
+                    title="Xuất báo cáo PDF"
+                    aria-label="Xuất báo cáo PDF"
+                    className="sidebar-icon-button disabled:cursor-not-allowed disabled:opacity-40"
+                  >
+                    {exportingPdf ? (
+                      <LoaderCircle size={16} className="animate-spin" />
+                    ) : (
+                      <Download size={16} />
                     )}
                   </button>
                   <button
@@ -952,6 +998,22 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                     aria-label="Kiểm tra lại kết nối AI"
                   >
                     Kiểm tra lại
+                  </button>
+                </div>
+              )}
+
+              {pdfError && (
+                <div
+                  role="alert"
+                  className="mt-2.5 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800"
+                >
+                  <span>{pdfError}</span>
+                  <button
+                    type="button"
+                    onClick={() => setPdfError(null)}
+                    className="shrink-0 font-semibold underline underline-offset-2"
+                  >
+                    Đóng
                   </button>
                 </div>
               )}
