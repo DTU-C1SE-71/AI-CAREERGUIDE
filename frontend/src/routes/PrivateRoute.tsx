@@ -15,7 +15,8 @@ export function PrivateRoute({ children }: { children: ReactNode }) {
 
 export function StudentRoute({ children }: { children: ReactNode }) {
   const { user, checking } = useAuth()
+  const location = useLocation()
   if (checking) return <p role="status" className="p-8">Đang xác minh phiên đăng nhập…</p>
-  if (!user) return <Navigate to="/login" replace />
-  return user.role === "student" ? children : <Navigate to="/admin" replace />
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />
+  return children
 }

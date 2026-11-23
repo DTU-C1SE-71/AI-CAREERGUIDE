@@ -104,7 +104,11 @@
 ## 4. Nhật ký Thay đổi Dự án (Chronological Engineering Log)
 
 ### Ngày 2026-11-23
-- **`feat(report): add Vietnamese PDF report export and simplify AI chat online dot`**
+- **`fix(auth): allow admin users to open student menu pages instead of redirecting to admin`**
+  - **Vấn đề / Yêu cầu:** Khi đăng nhập với quyền Admin và bấm vào các mục menu (`Khám phá ngành`, `Danh mục ngành`, `Lộ trình học`), hệ thống tự động đẩy về `/admin` (`Quản trị hệ thống`).
+  - **Thay đổi chính (`frontend/src/routes/PrivateRoute.tsx`):** Cập nhật `StudentRoute` cho phép mọi tài khoản đã đăng nhập (`student` hoặc `admin`) truy cập các route hướng nghiệp thay vì redirect `user.role !== "student"` sang `/admin`, đồng thời vẫn giữ nguyên bảo vệ `AdminRoute` chặn tài khoản `student` vào `/admin/*` và chuyển hướng khách về `/login`.
+  - **Kiểm chứng:** `npm run build` (`tsc -b && vite build`) và `npm test` (17/17 pass).
+- **`8ee3b4f` — `feat(report): add Vietnamese PDF report export and simplify AI chat online dot`**
   - **Vấn đề / Yêu cầu:** Trên `AIChatAdvisor`, thay nhãn chữ `"Đang hoạt động"` bằng dấu chấm xanh gọn gàng và bổ sung nút xuất file báo cáo PDF; đồng thời nâng cấp nút `Xuất PDF` ở `Dashboard` từ `window.print()` thành tải tệp báo cáo PDF A4 tiếng Việt hoàn chỉnh.
   - **Thay đổi chính (`frontend/src/utils/pdfReport.ts`, `frontend/src/pages/Dashboard.tsx`, `frontend/src/pages/AIChatAdvisor.tsx`, `frontend/tests/pdf-report.test.ts`):**
     - Xây dựng bộ kết xuất báo cáo PDF A4 tiếng Việt (`exportCareerReportPdf`, `exportChatReportPdf`) qua `<iframe>` tách biệt kết hợp `html2canvas` + `jsPDF` (lazy-load tách chunk riêng, dùng thuần màu HEX/RGBA Sky+Slate để tránh lỗi `oklch()` của Tailwind v4 khi chụp canvas, giữ nguyên dấu tiếng Việt qua Google Font `Be Vietnam Pro` và đánh số trang ở chân trang).
