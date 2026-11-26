@@ -95,3 +95,14 @@ check_*.py
 .arena/
 .agents/
 scratch/
+
+# Local AI agent notes & internal project documents (kept locally, not tracked in Git)
+/agents-docs/
+/AGENTS.md
+/SOUL.md
+/HANDOFF.md
+/PROJECT_LOG.md
+/GIT_FLOW.md
+/C1SE.71_Phan_Chia_Source_Code_Git_5_Thanh_Vien.docx
+/document/
+/docs/AUDIT_AND_HANDOFF_REPORT.md
