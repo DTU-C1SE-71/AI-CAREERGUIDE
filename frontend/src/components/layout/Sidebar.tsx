@@ -6,7 +6,6 @@ import {
   GraduationCap,
   LogIn,
   LogOut,
-  Map,
   Menu,
   PanelLeftClose,
   PanelLeftOpen,
@@ -57,12 +56,6 @@ const mainLinks: Array<{
     label: "Danh mục ngành",
     href: "/majors",
     icon: Compass,
-  },
-  {
-    label: "Lộ trình học",
-    href: "/roadmap",
-    icon: Map,
-    badge: "Soon",
   },
 ]
 

@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,8 +9,6 @@ from app.schemas.staging import (
     StagingRecordCreate,
     StagingRecordUpdate,
     StagingRecordReview,
-    StreamAIngestResponse,
-    StreamBDiscoveryRequest,
 )
 from app.schemas.rag import (
     GuidancePersonalizationRequest,
@@ -19,15 +18,8 @@ from app.schemas.rag import (
 )
 
 # Modular Service Imports
-from app.services.llamaindex_rag_orchestrator.stream_a_ingest import (
-    ingest_moet_circular,
-    compute_bytes_sha256,
-)
-from app.services.llamaindex_rag_orchestrator.stream_b_discovery import (
-    discover_and_stage_roadmap,
-    is_url_whitelisted,
-)
 from app.services.llamaindex_rag_orchestrator.hitl_governance import (
+    is_url_whitelisted,
     list_staging_records,
     get_staging_record,
     update_staging_record,
@@ -50,7 +42,7 @@ def compute_content_sha256(content: str | bytes) -> str:
     """Computes SHA-256 checksum for string or binary content to guarantee deduplication."""
     if isinstance(content, str):
         content = content.encode("utf-8")
-    return compute_bytes_sha256(content)
+    return hashlib.sha256(content).hexdigest()
 
 
 async def create_staging_entry(

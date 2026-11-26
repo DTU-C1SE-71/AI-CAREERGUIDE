@@ -19,7 +19,6 @@ from app.models.staging import StagingRecord, StagingStatus, StagingStreamType
 from app.models.roadmap import MajorRoadmap
 from app.models.vector import KnowledgeEmbedding
 from app.schemas.staging import StagingRecordReview, StagingRecordUpdate
-from app.services.llamaindex_rag_orchestrator import stream_b_discovery as discovery
 from app.services.llamaindex_rag_orchestrator import hitl_governance as governance
 
 SOURCE = "https://hust.edu.vn/curriculum/test"
@@ -61,14 +60,6 @@ async def ingestion_db(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_no_tavily_key_never_invents_resources(monkeypatch):
-    monkeypatch.setattr(settings, "TAVILY_API_KEY", "")
-    with pytest.raises(HTTPException) as error:
-        await discovery.discover_academic_resources_via_tavily("7480201", "Công nghệ thông tin")
-    assert error.value.status_code == 503
-
-
-@pytest.mark.asyncio
 async def test_no_embedding_key_never_returns_fake_vector(ingestion_db):
     db, _, _, _ = ingestion_db
     with pytest.raises(HTTPException):
@@ -86,10 +77,9 @@ async def test_repeated_review_cannot_change_final_decision(ingestion_db):
 
 @pytest.mark.parametrize("url", ["http://hust.edu.vn/path", "ftp://hust.edu.vn/path", "https://user:password@hust.edu.vn/path", "https://hust.edu.vn.evil.example/path"])
 def test_source_url_rejects_unsafe_schemes_and_authority(url):
-    assert discovery.is_url_whitelisted(url, settings.WHITELISTED_SEARCH_DOMAINS) is False
+    assert governance.is_url_whitelisted(url, settings.WHITELISTED_SEARCH_DOMAINS) is False
 
 
-@pytest.mark.asyncio
 @pytest.mark.parametrize("change", [
     {"major_code": "9999999"},
     {"source_url": "https://mit.edu/invented"},
@@ -97,57 +87,11 @@ def test_source_url_rejects_unsafe_schemes_and_authority(url):
     {"source_page": "Trang không có trong nguồn"},
     {"milestones": []},
 ])
-async def test_extraction_rejects_untrusted_ids_and_sources(monkeypatch, change):
+def test_validate_evidence_rejects_untrusted_ids_and_sources(change):
     payload = {**roadmap(), **change}
-    monkeypatch.setattr(discovery.adapter, "chat", AsyncMock(return_value=json.dumps(payload)))
     with pytest.raises(HTTPException) as error:
-        await discovery.extract_roadmap_with_llm("7480201", "Công nghệ thông tin", "Đề cương tổng hợp", SOURCE, CONTENT, snapshot=snapshot())
+        governance.validate_roadmap_evidence(payload, "7480201", "Đề cương tổng hợp", SOURCE, CONTENT)
     assert error.value.status_code == 422
-
-
-@pytest.mark.asyncio
-async def test_extraction_provider_failure_never_creates_fallback(monkeypatch):
-    monkeypatch.setattr(discovery.adapter, "chat", AsyncMock(side_effect=AIConfigError("TIMEOUT", "synthetic timeout", 504)))
-    with pytest.raises(HTTPException) as error:
-        await discovery.extract_roadmap_with_llm("7480201", "Công nghệ thông tin", "Đề cương tổng hợp", SOURCE, CONTENT, snapshot=snapshot())
-    assert error.value.status_code == 504
-
-
-@pytest.mark.asyncio
-async def test_discovery_uses_one_snapshot_and_catalog_identity(ingestion_db, monkeypatch):
-    db, _, _, _ = ingestion_db
-    frozen = snapshot("task-start")
-    resolver = AsyncMock(return_value=frozen)
-    chat = AsyncMock(return_value=json.dumps(roadmap()))
-    monkeypatch.setattr(discovery, "resolve_snapshot", resolver)
-    monkeypatch.setattr(discovery.adapter, "chat", chat)
-    discover = AsyncMock(return_value=[{"title": "Đề cương tổng hợp", "url": SOURCE, "raw_content": CONTENT}])
-    monkeypatch.setattr(discovery, "discover_academic_resources_via_tavily", discover)
-    monkeypatch.setattr(discovery, "fetch_with_jina_reader", AsyncMock(return_value=CONTENT))
-    result = await discovery.discover_and_stage_roadmap(db, "7480201", "Tên bịa từ client")
-    assert result.status == StagingStatus.PENDING
-    assert result.extracted_payload["major_title"] == "Công nghệ thông tin"
-    resolver.assert_awaited_once_with(db)
-    assert chat.call_args.args[0] is frozen
-    assert discover.call_args.args[1] == "Công nghệ thông tin"
-    assert result.source_url == SOURCE and result.raw_content == CONTENT
-    with pytest.raises(HTTPException) as duplicate:
-        await discovery.discover_and_stage_roadmap(db, "7480201")
-    assert duplicate.value.status_code == 409
-
-
-@pytest.mark.asyncio
-async def test_inactive_major_is_rejected_before_outbound(ingestion_db, monkeypatch):
-    db, _, _, _ = ingestion_db
-    major = (await db.execute(select(Major))).scalar_one()
-    major.is_active = False
-    await db.commit()
-    resolver = AsyncMock(return_value=snapshot())
-    monkeypatch.setattr(discovery, "resolve_snapshot", resolver)
-    with pytest.raises(HTTPException) as error:
-        await discovery.discover_and_stage_roadmap(db, "7480201")
-    assert error.value.status_code == 404
-    resolver.assert_not_called()
 
 
 @pytest.mark.asyncio

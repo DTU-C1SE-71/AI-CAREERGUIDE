@@ -30,9 +30,9 @@ def test_grade_horizon_configuration_tau_and_deltas():
     assert c_grad["delta_reach_max"] == 1.0
 
 
-def test_gender_ergonomic_zero_penalty_and_affirmative_nudges():
-    # Female in Computer Science (STEM)
-    boost, adv, badge, ergo = compute_gender_ergonomic_adjustment(
+def test_gender_neutral_ergonomic_adjustment():
+    # Identical profile with gender="Nữ" vs gender="Nam" MUST yield identical boost, advisory, and no gender badge
+    boost_f, adv_f, badge_f, _ = compute_gender_ergonomic_adjustment(
         gender="Nữ",
         major_code="7480101",
         major_name="Khoa học máy tính",
@@ -42,25 +42,22 @@ def test_gender_ergonomic_zero_penalty_and_affirmative_nudges():
         riasec_dict={"I": 0.85, "R": 0.60, "A": 0.40, "S": 0.30, "E": 0.40, "C": 0.50},
         grade_level="Lớp 12",
     )
-    assert boost >= 0.0, "Zero-Penalty Invariant violated"
-    assert badge == "Khuyến khích Nữ sinh STEM & Công nghệ"
-
-    # Male in Nursing (Care)
     boost_m, adv_m, badge_m, _ = compute_gender_ergonomic_adjustment(
         gender="Nam",
-        major_code="7720301",
-        major_name="Điều dưỡng",
-        major_category="Sức khỏe",
-        score_riasec=0.75,
-        score_academic=0.70,
-        riasec_dict={"I": 0.40, "R": 0.30, "A": 0.30, "S": 0.80, "E": 0.40, "C": 0.50},
+        major_code="7480101",
+        major_name="Khoa học máy tính",
+        major_category="Máy tính và công nghệ thông tin",
+        score_riasec=0.85,
+        score_academic=0.80,
+        riasec_dict={"I": 0.85, "R": 0.60, "A": 0.40, "S": 0.30, "E": 0.40, "C": 0.50},
         grade_level="Lớp 12",
     )
-    assert boost_m >= 0.0
-    assert badge_m == "Khuyến khích Nam sinh Giáo dục & Y tế"
+    assert boost_f == boost_m >= 0.0
+    assert adv_f == adv_m
+    assert badge_f is None and badge_m is None
 
-    # Statutory Hazard: Mining Engineering (7520601)
-    boost_h, adv_h, badge_h, _ = compute_gender_ergonomic_adjustment(
+    # Statutory Hazard: Mining Engineering (7520601) — same universal advisory regardless of gender
+    _, adv_hf, _, _ = compute_gender_ergonomic_adjustment(
         gender="Nữ",
         major_code="7520601",
         major_name="Kỹ thuật Mỏ",
@@ -70,9 +67,18 @@ def test_gender_ergonomic_zero_penalty_and_affirmative_nudges():
         riasec_dict={"R": 0.70},
         grade_level="Lớp 12",
     )
-    assert adv_h is not None
-    assert "Thông tư 10/2020" in adv_h
-    assert "Thiết kế mỏ" in adv_h or "Trắc địa mỏ" in adv_h
+    _, adv_hm, _, _ = compute_gender_ergonomic_adjustment(
+        gender="Nam",
+        major_code="7520601",
+        major_name="Kỹ thuật Mỏ",
+        major_category="Kỹ thuật",
+        score_riasec=0.70,
+        score_academic=0.70,
+        riasec_dict={"R": 0.70},
+        grade_level="Lớp 12",
+    )
+    assert adv_hf is not None and adv_hf == adv_hm
+    assert "Thông tư 10/2020" in adv_hf
 
 
 def test_horizon_reranking_decoupled_gatekeeper_and_grade_adaptation():
@@ -188,8 +194,8 @@ async def test_dashboard_bundle_complete_profile_preserves_feasibility_and_horiz
     assert top_major_12.benchmark_cutoff is not None
     assert "Chưa đủ cơ sở đối chiếu" not in top_major_12.feasibility_label
     assert "Lớp 12" in top_major_12.explanation
-    assert any(
-        m.nudge_badge == "Khuyến khích Nữ sinh STEM & Công nghệ"
+    assert all(
+        m.nudge_badge not in ("Khuyến khích Nữ sinh STEM & Công nghệ", "Khuyến khích Nam sinh Giáo dục & Y tế")
         for m in res_12_female["majors"]
     )
 

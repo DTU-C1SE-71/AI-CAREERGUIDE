@@ -1,6 +1,6 @@
 import uuid
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File, Form, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -12,8 +12,6 @@ from app.schemas.staging import (
     StagingRecordUpdate,
     StagingRecordReview,
     StagingRecordResponse,
-    StreamAIngestResponse,
-    StreamBDiscoveryRequest,
 )
 from app.schemas.rag import (
     GuidancePersonalizationRequest,
@@ -106,53 +104,6 @@ async def review_staged_document(
     2. Chunks and inserts 1536-dim vector embeddings into knowledge_embeddings (pgvector).
     """
     return await service.review_staging_record(db, record_id, current_user, review_data)
-
-
-@router.post("/ingest/stream-a/upload", response_model=StreamAIngestResponse)
-async def upload_moet_circular_document(
-    file: UploadFile = File(..., description="PDF or Excel document of official MOET circular"),
-    source_title: str = Form(default="Thông tư 09/2022/TT-BGDĐT"),
-    source_url: str = Form(default="https://moet.gov.vn"),
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Stream A: Official MOET Circular PDF/Excel Ingestion (FR07, DF03, DF04).
-    Extracts Level-IV majors, admission subject blocks, checks SHA-256 deduplication,
-    and stages into staging_records (status = PENDING).
-    GUARDRAIL: Admin role only.
-    """
-    content = await file.read(10 * 1024 * 1024 + 1)
-    if len(content) > 10 * 1024 * 1024:
-        raise HTTPException(413, "Tệp vượt quá giới hạn 10 MB.")
-    return await service.ingest_moet_circular(
-        db=db,
-        file_bytes=content,
-        file_name=file.filename or "circular_document.pdf",
-        source_title=source_title,
-        source_url=source_url
-    )
-
-
-@router.post("/discover/stream-b", response_model=StagingRecordResponse)
-async def discover_roadmap_for_major(
-    request: StreamBDiscoveryRequest,
-    current_user: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db)
-):
-    """
-    Stream B: 5-Step Automated Roadmap Discovery & Reusable Caching (FR07, DF03, DF04).
-    Invokes Tavily Search API (restricted strictly to whitelisted educational domains)
-    and Jina Reader, extracts structured roadmap via LlamaIndex + gpt-4o-mini,
-    and stages into staging_records (status = PENDING).
-    GUARDRAIL: Admin role only. Students cannot trigger live web searches.
-    """
-    return await service.discover_and_stage_roadmap(
-        db=db,
-        major_code=request.major_code,
-        major_title=request.major_title,
-        custom_query=request.custom_query
-    )
 
 
 @router.post("/semantic-search", response_model=List[ChunkSearchResult])

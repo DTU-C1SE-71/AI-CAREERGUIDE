@@ -1,4 +1,4 @@
-import { AssessmentWizard, Login, GoogleCallback, MajorsCatalog, MajorDetail, RoadmapView, AdminGovernance, AdminCatalog, AdminImport, AdminTrends, AdminAI } from "./LazyPages"
+import { AssessmentWizard, Login, GoogleCallback, MajorsCatalog, MajorDetail, AdminGovernance, AdminCatalog, AdminImport, AdminTrends, AdminAI } from "./LazyPages"
 import { Suspense, type ReactNode } from "react"
 import { createBrowserRouter, Navigate } from "react-router"
 import { MainLayout } from "../components/layout/MainLayout"
@@ -25,7 +25,7 @@ export const router = createBrowserRouter([
     { path: "dashboard", element: <StudentRoute><RecommendationsRoute /></StudentRoute> },
     { path: "majors", element: <StudentRoute>{screen(<MajorsCatalog />)}</StudentRoute> },
     { path: "majors/:id", element: <StudentRoute>{screen(<MajorDetail />)}</StudentRoute> },
-    { path: "roadmap", element: <StudentRoute>{screen(<RoadmapView />)}</StudentRoute> },
+    { path: "roadmap", element: <Navigate to="/dashboard" replace /> },
     { path: "login", element: screen(<Login />) },
     { path: "login/callback", element: screen(<GoogleCallback />) },
     { path: "*", element: notFound },

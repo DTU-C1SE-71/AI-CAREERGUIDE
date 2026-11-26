@@ -1,6 +1,7 @@
 import confetti from "canvas-confetti"
 import { AnimatePresence, motion, useMotionValue, useTransform } from "framer-motion"
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   Check,
@@ -45,6 +46,7 @@ import {
 import { useAssessment } from "../hooks/useAssessment"
 import { apiRequest, currentToken } from "../services/api"
 import type { CareerAspirationInput } from "../types/assessment"
+import { evaluateAssessmentCompleteness } from "../utils/assessmentEvidence"
 import { getValidRiasecAnswer } from "../utils/assessmentPayload"
 
 export interface QuestionItem {
@@ -113,7 +115,13 @@ export function AssessmentWizard() {
   )
   const submittingRef = useRef(false)
   const [submitting, setSubmitting] = useState(false)
-  const [step, setStep] = useState<number>(() => Math.min(assessment.step || 1, 3))
+  const [step, setStep] = useState<number>(() => {
+    const paramStep = Number(searchParams.get("step"))
+    if (Number.isInteger(paramStep) && paramStep >= 1 && paramStep <= 3) {
+      return paramStep
+    }
+    return Math.min(Math.max(1, assessment.step || 1), 3)
+  })
   const [scores, setScores] = useState<Record<string, number>>(() => {
     const mapped = Object.fromEntries(
       assessment.scores.map((s) => [s.subject, s.score])
@@ -372,19 +380,25 @@ export function AssessmentWizard() {
     [assessment.aspiration]
   )
 
-  const allRiasecGroupsCovered = useMemo(() => {
-    return (
-      totalRiasecAnswered === 30 &&
-      RIASEC_ORDER.every((dim) => riasecGroupCounts[dim] === 5)
-    )
-  }, [totalRiasecAnswered, riasecGroupCounts])
-
   const totalCognitiveAnswered = useMemo(() => {
     return cognitiveQuestions.filter((q, idx) => {
       const v = assessment.cognitive[q.code] ?? assessment.cognitive[`2-${idx}`]
       return v !== undefined && v !== null && String(v).trim() !== ""
     }).length
   }, [assessment.cognitive, cognitiveQuestions])
+
+  const completeness = useMemo(
+    () =>
+      evaluateAssessmentCompleteness(
+        {
+          answers: assessment.answers,
+          cognitive: assessment.cognitive,
+          scores,
+        },
+        cognitiveQuestions,
+      ),
+    [assessment.answers, assessment.cognitive, scores, cognitiveQuestions],
+  )
 
   const currentCog = cognitiveQuestions[cogIndex] || cognitiveQuestions[0]
   const currentCogValue =
@@ -493,6 +507,7 @@ export function AssessmentWizard() {
 
   const resetAllAnswers = () => {
     reset()
+    setScores({})
     setCardIndex(0)
     setCogIndex(0)
     setStep(1)
@@ -500,6 +515,15 @@ export function AssessmentWizard() {
 
   const handleCompleteAssessment = async (skipAspiration = false) => {
     if (submittingRef.current) return
+    if (!completeness.isComplete) {
+      const firstMissing = completeness.missingSteps[0]
+      if (firstMissing) {
+        setStep(firstMissing)
+        update({ step: firstMissing })
+        window.scrollTo({ top: 0, behavior: "smooth" })
+      }
+      return
+    }
     if (Object.values(scores).some(value => !Number.isFinite(value) || value < 0 || value > 10)) { setStep(3); return }
     submittingRef.current = true
     setSubmitting(true)
@@ -671,6 +695,14 @@ export function AssessmentWizard() {
                   if (!assessment.completed && history[0]) {
                     selectHistoryAttempt(history[0].id)
                   }
+                  const sourceScores = !assessment.completed && history[0] ? history[0].scores : assessment.scores
+                  const nextScores: Record<string, number> = {}
+                  sourceScores.forEach((item) => {
+                    if (item.subject && typeof item.score === "number" && Number.isFinite(item.score)) {
+                      nextScores[item.subject] = item.score
+                    }
+                  })
+                  setScores(nextScores)
                   setIsReviewMode(true)
                   setStep(1)
                   setCardIndex(0)
@@ -700,6 +732,7 @@ export function AssessmentWizard() {
                 type="button"
                 onClick={() => {
                   reset()
+                  setScores({})
                   setStep(1)
                   setCardIndex(0)
                   setCogIndex(0)
@@ -779,18 +812,25 @@ export function AssessmentWizard() {
           {/* 3 Main Steps */}
           <div className="flex flex-wrap items-center gap-1.5">
             {[
-              { id: 1, label: "1. Sở thích", done: allRiasecGroupsCovered },
+              {
+                id: 1,
+                label: "1. Sở thích",
+                done: completeness.riasecComplete,
+                hint: `${completeness.riasecAnswered}/${completeness.riasecTotal}`,
+              },
               {
                 id: 2,
                 label: "2. Tư duy",
-                done: totalCognitiveAnswered >= cognitiveQuestions.length,
+                done: completeness.cognitiveComplete,
+                hint: `${completeness.cognitiveAnswered}/${completeness.cognitiveTotal}`,
               },
               {
                 id: 3,
                 label: "3. Điểm số",
-                done:
-                  Object.values(scores).filter((v) => typeof v === "number")
-                    .length >= 3 || assessment.completed,
+                done: completeness.scoresComplete,
+                hint: completeness.hasInvalidScores
+                  ? "Lỗi điểm"
+                  : `${completeness.completeBlocks.length} khối`,
               },
             ].map((s) => {
               const active = step === s.id
@@ -799,12 +839,11 @@ export function AssessmentWizard() {
                   key={s.id}
                   type="button"
                   onClick={() => {
-                    if (s.id === 1 || allRiasecGroupsCovered || isReviewMode) {
-                      setStep(s.id)
-                      update({ step: s.id })
-                    }
+                    setStep(s.id)
+                    update({ step: s.id })
+                    window.scrollTo({ top: 0, behavior: "smooth" })
                   }}
-                  className={`relative flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-extrabold transition ${
+                  className={`relative flex items-center gap-1.5 rounded-xl px-3.5 py-2 text-xs sm:text-sm font-extrabold transition cursor-pointer ${
                     active
                       ? "bg-gradient-to-r from-sky-500 to-cyan-500 text-white shadow-[0_6px_16px_rgba(14,165,233,0.28)]"
                       : s.done
@@ -816,6 +855,17 @@ export function AssessmentWizard() {
                     <Check className="size-3.5 text-sky-600" />
                   )}
                   <span>{s.label}</span>
+                  {!s.done && (
+                    <span
+                      className={`rounded-md px-1.5 py-0.5 text-[10px] font-bold tabular-nums ${
+                        active
+                          ? "bg-white/20 text-white"
+                          : "bg-slate-200/70 text-slate-600"
+                      }`}
+                    >
+                      {s.hint}
+                    </span>
+                  )}
                 </button>
               )
             })}
@@ -1173,18 +1223,68 @@ export function AssessmentWizard() {
 
         {/* ==================== STEP 3: ACADEMIC SCORES (10 HIGH SCHOOL SUBJECTS) ==================== */}
         {step === 3 && (
-          <div className="rounded-3xl border border-white/90 bg-white/65 p-5 sm:p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl">
-            <AcademicInputForm
-              scores={scores}
-              onChange={(subject, value) =>
-                setScores(prev => {
-                  const next = { ...prev }
+          <div className="space-y-3">
+            <div className="rounded-3xl border border-white/90 bg-white/65 p-5 sm:p-6 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl">
+              <AcademicInputForm
+                scores={scores}
+                onChange={(subject, value) => {
+                  const next = { ...scores }
                   if (value === undefined) delete next[subject]
                   else next[subject] = value
-                  return next
-                })
-              }
-            />
+                  setScores(next)
+                  const persistedScores: SubjectGrade[] = Object.entries(next)
+                    .filter(([, score]) => Number.isFinite(score) && score >= 0 && score <= 10)
+                    .map(([subj, score]) => ({ subject: subj, score, zScore: null }))
+                  update({ scores: persistedScores })
+                }}
+              />
+            </div>
+
+            {!isReviewMode && !completeness.isComplete && (
+              <div
+                role="status"
+                className="rounded-2xl border border-amber-200 bg-amber-50/95 p-4 sm:p-5 text-amber-900 shadow-xs backdrop-blur-md"
+              >
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-sm sm:text-base font-extrabold text-amber-950">
+                      Chưa đủ dữ liệu để phân tích ngành phù hợp
+                    </h3>
+                    <p className="mt-1 text-xs sm:text-sm font-medium text-amber-800">
+                      Bạn vẫn có thể xem tự do cả 3 phần trắc nghiệm, nhưng cần hoàn thành đủ các yêu cầu sau trước khi hệ thống phân tích ngành học:
+                    </p>
+                    <ul className="mt-3 space-y-2">
+                      {completeness.missingItems.map((item) => (
+                        <li
+                          key={item.step}
+                          className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-200/80 bg-white/80 px-3.5 py-2 text-xs sm:text-sm"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <span className="font-extrabold text-slate-900">{item.label}:</span>{" "}
+                            <span className="font-medium text-slate-700">{item.detail}</span>
+                          </div>
+                          {item.step !== 3 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setStep(item.step)
+                                update({ step: item.step })
+                                window.scrollTo({ top: 0, behavior: "smooth" })
+                              }}
+                              className="inline-flex shrink-0 items-center gap-1 rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-extrabold text-white transition hover:bg-amber-700 cursor-pointer"
+                            >
+                              <span>Làm phần này</span>
+                              <ArrowRight className="size-3.5" />
+                            </button>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1217,14 +1317,17 @@ export function AssessmentWizard() {
               <Button
                 icon={ArrowRight}
                 className="text-sm sm:text-base px-5 py-2.5"
-                disabled={!isReviewMode && !allRiasecGroupsCovered}
                 onClick={() => {
                   update({ step: 2 })
                   setStep(2)
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
               >
-                {isReviewMode ? "Xem tiếp: Tư duy nhận thức" : "Tiếp tục"}
+                {isReviewMode
+                  ? "Xem tiếp: Tư duy nhận thức"
+                  : completeness.riasecComplete
+                    ? "Tiếp tục"
+                    : "Xem phần Tư duy"}
               </Button>
             )}
 
@@ -1232,14 +1335,17 @@ export function AssessmentWizard() {
               <Button
                 icon={ArrowRight}
                 className="text-sm sm:text-base px-5 py-2.5"
-                disabled={!isReviewMode && totalCognitiveAnswered < cognitiveQuestions.length}
                 onClick={() => {
                   setStep(3)
                   update({ step: 3 })
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 }}
               >
-                {isReviewMode ? "Xem tiếp: Điểm số học tập" : "Tiếp tục"}
+                {isReviewMode
+                  ? "Xem tiếp: Điểm số học tập"
+                  : completeness.cognitiveComplete
+                    ? "Tiếp tục"
+                    : "Xem phần Điểm số"}
               </Button>
             )}
 
@@ -1266,15 +1372,15 @@ export function AssessmentWizard() {
                   <Button
                     icon={Check}
                     className="px-5 py-2.5 text-xs font-extrabold sm:text-sm"
-                    disabled={
-                      submitting ||
-                      Object.values(scores).some(
-                        (value) => !Number.isFinite(value) || value < 0 || value > 10,
-                      )
+                    disabled={submitting || !completeness.isComplete}
+                    title={
+                      !completeness.isComplete
+                        ? "Cần hoàn thành đủ 3 phần trắc nghiệm trước khi phân tích ngành"
+                        : undefined
                     }
                     onClick={() => handleCompleteAssessment(false)}
                   >
-                    {submitting ? "Đang đồng bộ…" : "Hoàn tất & Xem kết quả"}
+                    {submitting ? "Đang đồng bộ…" : "Hoàn tất & Phân tích ngành"}
                   </Button>
                 )}
               </div>

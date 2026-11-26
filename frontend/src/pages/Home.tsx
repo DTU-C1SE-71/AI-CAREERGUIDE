@@ -76,8 +76,8 @@ const capabilities = [
   },
   {
     icon: BookOpenCheck,
-    title: "Lộ trình 4 tuần hành động",
-    desc: "Kế hoạch tuần tự từ củng cố học lực môn thi đến tích lũy kỹ năng thực tế cần thiết cho ngành mục tiêu.",
+    title: "Cố vấn AI & Xuất báo cáo PDF",
+    desc: "Đối chiếu nghề mơ ước với hồ sơ năng lực, hỏi đáp cùng cố vấn AI và tải báo cáo hướng nghiệp A4 hoàn chỉnh.",
   },
   {
     icon: GraduationCap,
@@ -122,8 +122,8 @@ export function Home() {
 
             <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">
               Kết nối sở thích nghề nghiệp, học lực chuẩn hóa và phong cách tư
-              duy để định vị chính xác ngành học tương thích cùng lộ trình hành
-              động rõ ràng.
+              duy để định vị chính xác ngành học tương thích cùng phân tích năng
+              lực rõ ràng.
             </p>
 
             <div className="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
@@ -323,8 +323,8 @@ export function Home() {
 
                 <p className="mt-4 text-base leading-relaxed text-slate-600">
                   Không hộp đen phán đoán, không thiên vị cảm tính. Từng đề xuất
-                  ngành học đều giải trình rõ lý do, đối chiếu điểm chuẩn thực
-                  tế và lộ trình học tập cụ thể để bạn tự tin ra quyết định.
+                  ngành học đều giải trình rõ lý do, đối chiếu tổ hợp điểm thực
+                  tế và phân tích kỹ năng cụ thể để bạn tự tin ra quyết định.
                 </p>
 
                 <div className="mt-8">

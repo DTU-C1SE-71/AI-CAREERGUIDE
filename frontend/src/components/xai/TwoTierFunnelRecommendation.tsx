@@ -32,7 +32,6 @@ export function TwoTierFunnelRecommendation({
   funnelData,
   isLoading = false,
   activeGradeLevel,
-  activeGender,
   weightsApplied,
 }: TwoTierFunnelProps) {
   const fields = funnelData.tier1_fields || []
@@ -115,7 +114,6 @@ export function TwoTierFunnelRecommendation({
       : [fields[selectedFieldIndex] || fields[0]].filter(Boolean)
 
   const grade = activeGradeLevel?.trim() || ""
-  const gender = activeGender?.trim() || ""
   const stage = grade.includes("10")
     ? { label: "Định hướng sớm & tích lũy — Lớp 10", reason: "khám phá nhiều hướng ngành, tìm hiểu sở thích và xây nền tảng môn học; bạn còn thời gian trải nghiệm trước khi chốt lựa chọn tuyển sinh" }
     : grade.includes("11")
@@ -126,15 +124,8 @@ export function TwoTierFunnelRecommendation({
           ? { label: "Hướng học tập & nghề nghiệp thực tế", reason: "đối chiếu học lực hiện có với các chương trình đào tạo và hướng ứng dụng, thực hành phù hợp mục tiêu nghề nghiệp" }
           : null
   const profileIntroduction = stage
-    ? `Vì bạn ${/tốt nghiệp|tot nghiep/i.test(grade) ? "đã tốt nghiệp THPT" : `đang học ${grade.toLocaleLowerCase("vi-VN")}`}${gender ? ` và hồ sơ ghi nhận giới tính ${gender.toLocaleLowerCase("vi-VN")}` : ""}, hệ thống ưu tiên đề xuất để ${stage.reason}.`
-    : `Hồ sơ chưa có khối lớp${gender ? ` (giới tính đã ghi nhận: ${gender})` : " và giới tính"}. Bạn hãy cập nhật hồ sơ cá nhân để hệ thống giải thích đề xuất theo đúng thông tin của bạn.`
-  const genderExplanation = gender === "Nam"
-    ? "Với thông tin giới tính nam, hệ thống có thể bổ sung gợi ý khám phá Giáo dục/Y tế khi phù hợp sở thích của bạn."
-    : gender === "Nữ"
-      ? "Với thông tin giới tính nữ, hệ thống có thể mở rộng gợi ý STEM/Công nghệ khi phù hợp sở thích hoặc học lực của bạn."
-      : gender
-        ? "Thông tin giới tính được dùng để bổ sung góc nhìn về cơ hội khám phá và môi trường học tập đa dạng."
-        : stage ? "Hồ sơ chưa có giới tính; bạn có thể bổ sung trong hồ sơ cá nhân. Hệ thống chưa áp dụng gợi ý mở rộng theo giới tính." : ""
+    ? `Vì bạn ${/tốt nghiệp|tot nghiep/i.test(grade) ? "đã tốt nghiệp THPT" : `đang học ${grade.toLocaleLowerCase("vi-VN")}`}, hệ thống ưu tiên đề xuất để ${stage.reason}.`
+    : "Hồ sơ chưa có khối lớp. Bạn hãy cập nhật hồ sơ cá nhân để hệ thống giải thích đề xuất theo đúng giai đoạn học tập của bạn."
   const hasAppliedWeights = stage && [weightsApplied?.w_riasec, weightsApplied?.w_academic, weightsApplied?.w_preference]
     .every(value => typeof value === "number" && Number.isFinite(value))
   const percent = (value: number | undefined) => ((value || 0) * 100).toLocaleString("vi-VN", { maximumFractionDigits: 1 })
@@ -151,7 +142,6 @@ export function TwoTierFunnelRecommendation({
             {stage && <span className="text-xs font-bold text-slate-800">{stage.label}</span>}
           </div>
           <p className="text-sm leading-relaxed text-slate-700">{profileIntroduction}</p>
-          {genderExplanation && <p className="text-xs leading-relaxed text-slate-600">{genderExplanation} Giới tính không giới hạn ngành học hay quyết định năng lực của bạn.</p>}
           {hasAppliedWeights && (
             <p className="text-xs text-slate-600">
               Trọng số đang áp dụng: <strong className="font-semibold text-sky-700">{percent(weightsApplied?.w_riasec)}% Sở thích</strong>

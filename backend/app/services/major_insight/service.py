@@ -312,7 +312,7 @@ def build_deterministic_skill_analysis(
                "Các nội dung dưới đây là gợi ý kiểm tra/ôn tập, không kết luận đủ điều kiện tuyển sinh.")
     if not grades and evidence["status"] != "COMPLETE":
         summary = "Chưa đủ bằng chứng để phân tích cá nhân" + subject_text + ". Hãy bổ sung điểm hoặc hoàn thành bài sở thích; không suy ra điểm mạnh/yếu từ phần bỏ trống."
-    else:
+    elif major_name:
         aspiration = payload.aspiration if isinstance(payload.aspiration, dict) else {}
         dream_job = str(aspiration.get("dream_job") or aspiration.get("dreamJob") or "").strip()
         if dream_job:
@@ -326,7 +326,7 @@ _ASPIRATION_FIT_LABELS = {
     "LOW": "Chưa phù hợp",
     "UNKNOWN": "Cần cân nhắc thêm",
 }
-_SKILL_POLICY_VERSION = "evidence-skills-v4"
+_SKILL_POLICY_VERSION = "evidence-skills-v5"
 _ASPIRATION_AI_MAJOR_CODE = "ASPIRATION_AI"
 _ASPIRATION_POLICY_VERSION = "aspiration-ai-v1"
 
@@ -477,19 +477,23 @@ async def analyze_student_skills(
     payload: StudentSkillAnalysisRequest,
     user_id: Optional[uuid.UUID] = None,
 ) -> StudentSkillAnalysisResponse:
-    """Phân tích ưu/nhược điểm kỹ năng theo hồ sơ với Smart DB Cache (evidence-skills-v4)."""
-    user_id, payload, eff_grade, eff_gender = await _resolve_enriched_payload(db, payload, user_id)
+    """Phân tích ưu/nhược điểm kỹ năng theo hồ sơ với Smart DB Cache (evidence-skills-v5)."""
+    user_id, payload, eff_grade, _ = await _resolve_enriched_payload(db, payload, user_id)
     major_code = (payload.major_code or "").strip()
     major_name = None
     ctx = {}
     if major_code:
         ctx = await _load_major_context(db, major_code)
         major_name = ctx["name"]
+    hash_payload = (
+        payload.model_copy(update={"aspiration": None, "gender": None})
+        if not major_code
+        else payload.model_copy(update={"gender": None})
+    )
     profile_hash = hashlib.sha256(json.dumps({
         "owner": str(user_id or "guest"),
-        "profile": _profile_hash(payload),
+        "profile": _profile_hash(hash_payload),
         "grade_level": (eff_grade or "").lower(),
-        "gender": (eff_gender or "").lower(),
         "catalog_context": ctx,
         "policy": _SKILL_POLICY_VERSION,
     }, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
@@ -511,7 +515,7 @@ async def analyze_student_skills(
         is_ai = False
         has_any_evidence = bool(payload.grades_by_subject or payload.riasec_scores or payload.riasec_answers)
 
-        if db is not None and major_name and has_any_evidence:
+        if db is not None and has_any_evidence:
             try:
                 from app.services.ai_config.service import resolve_snapshot
                 from app.services.ai_config import adapter
@@ -521,50 +525,79 @@ async def analyze_student_skills(
                 snapshot = await resolve_snapshot(db)
                 scores_text = ", ".join(f"{k}: {v}" for k, v in (payload.grades_by_subject or {}).items()) or "Chưa nhập điểm cụ thể"
                 riasec_text, _ = _format_riasec_summary_from_payload(payload)
-                context_bits = []
-                if eff_grade:
-                    context_bits.append(f"Khối lớp: {eff_grade}")
-                if eff_gender:
-                    context_bits.append(f"Giới tính: {eff_gender}")
-                context_line = f"- Bối cảnh học sinh: {', '.join(context_bits)}\n" if context_bits else ""
-                aspiration = payload.aspiration if isinstance(payload.aspiration, dict) else {}
-                raw_dream = str(aspiration.get("dream_job") or aspiration.get("dreamJob") or "").strip()
-                dream_job = sanitize_pii(raw_dream)[:120] if raw_dream else ""
-                score_strategy = str(aspiration.get("score_strategy") or aspiration.get("scoreStrategy") or "").strip()
-                aspiration_line = (
-                    f"- Nguyện vọng nghề nghiệp mơ ước của học sinh: {dream_job} (Chiến lược: {score_strategy or 'Linh hoạt'})\n"
-                    if dream_job
-                    else ""
-                )
-                aspiration_instruction = (
-                    f" Đặc biệt nhận xét trực tiếp mức độ khớp/lệch giữa hồ sơ hiện tại (điểm số, sở thích) với nghề mơ ước '{dream_job}' và ngành '{major_name}', cùng môn học hoặc kỹ năng cần ưu tiên cải thiện để tiến gần mục tiêu."
-                    if dream_job
-                    else ""
-                )
+                context_line = f"- Khối lớp hiện tại: {eff_grade}\n" if eff_grade else ""
+                cog = payload.cognitive_preferences if isinstance(payload.cognitive_preferences, dict) else {}
+                cog_text = ", ".join(f"{k}: {v}" for k, v in cog.items() if v) if cog else ""
+                cog_line = f"- Phong cách tư duy & học tập tự khai: {sanitize_pii(cog_text)[:240]}\n" if cog_text else ""
 
-                system_prompt = (
-                    "Bạn là Chuyên gia Cố vấn Kỹ năng & Lộ trình Học tập của hệ thống AI CareerGuide.\n"
-                    f"Nhiệm vụ: Phân tích kỹ năng và khoảng trống năng lực của học sinh đối với ngành **{major_name}**.\n"
-                    f"{context_line}"
-                    f"{aspiration_line}"
-                    f"- Dữ liệu điểm học lực: {scores_text}\n"
-                    f"- Dữ liệu sở thích Holland: {riasec_text}\n"
-                    f"{aspiration_instruction}\n\n"
-                    "Hãy trả về JSON object thuần túy theo đúng cấu trúc sau:\n"
-                    "{\n"
-                    '  "summary": "Tóm tắt 2-3 câu ngắn gọn về thế mạnh, mức độ phù hợp với ngành/nguyện vọng và trọng tâm cần ưu tiên.",\n'
-                    '  "strengths": [{"title": "Tên điểm mạnh nổi bật", "detail": "Giải thích ngắn gọn"}],\n'
-                    '  "weaknesses": [{"title": "Môn học hoặc điểm cần ôn tập", "detail": "Giải thích ngắn gọn"}],\n'
-                    '  "skill_gaps": [\n'
-                    '    {"skill": "Tên kỹ năng chuyên môn cốt lõi cần rèn luyện cho ngành này", "why": "Lý do kỹ năng này cần thiết", "how_to_improve": ["Cách tự rèn luyện 1", "Cách tự học 2"], "priority": "HIGH"}\n'
-                    '  ]\n'
-                    "}"
-                )
+                if major_name:
+                    aspiration = payload.aspiration if isinstance(payload.aspiration, dict) else {}
+                    raw_dream = str(aspiration.get("dream_job") or aspiration.get("dreamJob") or "").strip()
+                    dream_job = sanitize_pii(raw_dream)[:120] if raw_dream else ""
+                    score_strategy = str(aspiration.get("score_strategy") or aspiration.get("scoreStrategy") or "").strip()
+                    aspiration_line = (
+                        f"- Nguyện vọng nghề nghiệp mơ ước của học sinh: {dream_job} (Chiến lược: {score_strategy or 'Linh hoạt'})\n"
+                        if dream_job
+                        else ""
+                    )
+                    aspiration_instruction = (
+                        f" Đặc biệt nhận xét trực tiếp mức độ khớp/lệch giữa hồ sơ hiện tại (điểm số, sở thích) với nghề mơ ước '{dream_job}' và ngành '{major_name}', cùng môn học hoặc kỹ năng cần ưu tiên cải thiện để tiến gần mục tiêu."
+                        if dream_job
+                        else ""
+                    )
+
+                    system_prompt = (
+                        "Bạn là Chuyên gia Cố vấn Kỹ năng & Lộ trình Học tập của hệ thống AI CareerGuide.\n"
+                        f"Nhiệm vụ: Phân tích kỹ năng và khoảng trống năng lực của học sinh đối với ngành **{major_name}**.\n"
+                        f"{context_line}"
+                        f"{cog_line}"
+                        f"{aspiration_line}"
+                        f"- Dữ liệu điểm học lực: {scores_text}\n"
+                        f"- Dữ liệu sở thích Holland: {riasec_text}\n"
+                        f"{aspiration_instruction}\n\n"
+                        "Hãy trả về JSON object thuần túy theo đúng cấu trúc sau:\n"
+                        "{\n"
+                        '  "summary": "Tóm tắt 2-3 câu ngắn gọn về thế mạnh, mức độ phù hợp với ngành/nguyện vọng và trọng tâm cần ưu tiên.",\n'
+                        '  "strengths": [{"title": "Tên điểm mạnh nổi bật", "detail": "Giải thích ngắn gọn"}],\n'
+                        '  "weaknesses": [{"title": "Môn học hoặc điểm cần ôn tập", "detail": "Giải thích ngắn gọn"}],\n'
+                        '  "skill_gaps": [\n'
+                        '    {"skill": "Tên kỹ năng chuyên môn cốt lõi cần rèn luyện cho ngành này", "why": "Lý do kỹ năng này cần thiết", "how_to_improve": ["Cách tự rèn luyện 1", "Cách tự học 2"], "priority": "HIGH"}\n'
+                        '  ]\n'
+                        "}"
+                    )
+                    user_content = f"Hãy phân tích kỹ năng và gợi ý rèn luyện cho tôi với ngành {major_name}."
+                else:
+                    system_prompt = (
+                        "Bạn là Chuyên gia Phân tích Hồ sơ & Năng lực Học sinh của hệ thống AI CareerGuide.\n"
+                        "Nhiệm vụ: Thực hiện phân tích TỔNG QUAN toàn bộ hồ sơ học tập, sở thích Holland RIASEC và phong cách tư duy của học sinh.\n"
+                        f"{context_line}"
+                        f"{cog_line}"
+                        f"- Dữ liệu điểm học lực: {scores_text}\n"
+                        f"- Dữ liệu sở thích Holland: {riasec_text}\n\n"
+                        "RÀNG BUỘC BẮT BUỘC:\n"
+                        "1. Phân tích TỔNG QUAN toàn hồ sơ; TUYỆT ĐỐI KHÔNG tự chọn, không bám vào và không nêu tên một ngành đào tạo đại học cụ thể nào (cũng không nhắc tới nghề mơ ước cụ thể vì đã có tab riêng).\n"
+                        "2. Tập trung đánh giá bức tranh năng lực chung (khối môn thế mạnh, nhóm sở thích nổi trội, điểm cần củng cố) và các kỹ năng nền tảng / kỹ năng chuyển đổi cốt lõi (core/transferable skills) như: tư duy phân tích, giải quyết vấn đề, ngoại ngữ học thuật, kỹ năng nghiên cứu & tự học, giao tiếp & làm việc nhóm...\n"
+                        "3. Chỉ dựa trên dữ liệu đã cung cấp, không bịa điểm hay suy diễn vượt quá bằng chứng.\n\n"
+                        "Hãy trả về JSON object thuần túy theo đúng cấu trúc sau:\n"
+                        "{\n"
+                        '  "summary": "Tóm tắt 2-3 câu về bức tranh tổng quan thế mạnh học tập, thiên hướng sở thích nổi bật và định hướng bồi dưỡng nền tảng chung.",\n'
+                        '  "strengths": [{"title": "Tên thế mạnh nổi bật (tối đa 3 mục)", "detail": "Giải thích dựa trên môn điểm cao hoặc nhóm Holland trội"}],\n'
+                        '  "weaknesses": [{"title": "Điểm cần bồi dưỡng (tối đa 3 mục)", "detail": "Môn học hoặc khía cạnh tư duy/ngoại ngữ cần củng cố chung"}],\n'
+                        '  "skill_gaps": [\n'
+                        '    {"skill": "Tên kỹ năng nền tảng / chuyển đổi cần rèn luyện (2-4 mục)", "why": "Lý do kỹ năng này giúp nâng tầm toàn bộ hồ sơ học sinh", "how_to_improve": ["Cách tự rèn luyện cụ thể cho học sinh THPT 1", "Cách tự rèn luyện 2"], "priority": "HIGH"}\n'
+                        '  ]\n'
+                        "}"
+                    )
+                    user_content = (
+                        "Hãy phân tích tổng quan điểm mạnh, điểm cần bồi dưỡng và kỹ năng nền tảng cần rèn luyện "
+                        "dựa trên toàn bộ hồ sơ học tập và sở thích của tôi (không giới hạn vào một ngành cụ thể nào)."
+                    )
+
                 raw = await adapter.chat(
                     snapshot,
                     [
                         {"role": "system", "content": system_prompt},
-                        {"role": "user", "content": f"Hãy phân tích kỹ năng và gợi ý rèn luyện cho tôi với ngành {major_name}."},
+                        {"role": "user", "content": user_content},
                     ],
                     max_tokens=min(settings.LLM_MAX_TOKENS, 1500),
                     timeout=min(settings.LLM_TIMEOUT_SECONDS, 45.0),
@@ -575,12 +608,17 @@ async def analyze_student_skills(
                 ai_strengths = [InsightPoint(title=str(p.get("title") or "")[:80], detail=str(p.get("detail") or "")[:200]) for p in ai_data.get("strengths", []) if isinstance(p, dict) and p.get("title")][:3]
                 ai_weaknesses = [InsightPoint(title=str(p.get("title") or "")[:80], detail=str(p.get("detail") or "")[:200]) for p in ai_data.get("weaknesses", []) if isinstance(p, dict) and p.get("title")][:3]
                 ai_gaps = []
+                default_why = (
+                    f"Kỹ năng quan trọng cho ngành {major_name}"
+                    if major_name
+                    else "Kỹ năng nền tảng quan trọng giúp phát triển toàn diện theo hồ sơ của bạn"
+                )
                 for g in ai_data.get("skill_gaps", []):
                     if isinstance(g, dict) and g.get("skill"):
                         ai_gaps.append(SkillGapItem(
                             skill=str(g["skill"])[:100],
-                            why=str(g.get("why") or f"Kỹ năng quan trọng cho ngành {major_name}")[:250],
-                            how_to_improve=[str(h) for h in g.get("how_to_improve", []) if str(h).strip()][:3] or ["Tìm hiểu tài liệu chuyên ngành", "Thực hành bài tập thực tế"],
+                            why=str(g.get("why") or default_why)[:250],
+                            how_to_improve=[str(h) for h in g.get("how_to_improve", []) if str(h).strip()][:3] or ["Tìm hiểu tài liệu chuyên đề", "Thực hành bài tập thực tế"],
                             priority=g.get("priority") if g.get("priority") in {"HIGH", "MEDIUM", "LOW"} else "HIGH",
                         ))
                 if ai_summary and (ai_strengths or ai_gaps):
@@ -590,7 +628,7 @@ async def analyze_student_skills(
                     gaps = ai_gaps or gaps
                     is_ai = True
             except Exception as exc:
-                logger.warning("[SkillAgent] AI skill analysis failed for %s: %s", major_name, exc)
+                logger.warning("[SkillAgent] AI skill analysis failed for %s: %s", major_name or "PROFILE_OVERVIEW", exc)
 
         if db is None:
             return StudentSkillAnalysisResponse(

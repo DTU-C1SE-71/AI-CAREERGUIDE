@@ -107,7 +107,7 @@ class PublishMajorsPayload(BaseModel):
 async def download_standard_excel_template():
     """
     Downloads the official standardized MOET Major Excel Template (.xlsx)
-    containing 19 standard columns with field descriptions, CIP/RIASEC group reference, and AI prompt guide.
+    containing 20 standard columns with field descriptions, CIP/RIASEC group reference, and AI prompt guide.
     """
     from pathlib import Path
     seeds_dir = Path(__file__).resolve().parent.parent.parent / "db" / "seeds"

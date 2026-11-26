@@ -1,4 +1,5 @@
 import { Calculator } from "lucide-react"
+import { completeTranscriptBlocks } from "../../utils/assessmentEvidence"
 
 export interface SubjectGrade {
   subject: string
@@ -32,9 +33,14 @@ export function AcademicInputForm({
   scores: Record<string, number>
   onChange: (subject: string, value: number | undefined) => void
 }) {
-  const values = HIGH_SCHOOL_SUBJECTS.map((s) => scores[s.name]).filter(
-    (v): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 10
-  )
+  const validScoreItems = HIGH_SCHOOL_SUBJECTS
+    .map((s) => ({ subject: s.name, score: scores[s.name], zScore: null }))
+    .filter(
+      (item): item is { subject: string; score: number; zScore: null } =>
+        typeof item.score === "number" && Number.isFinite(item.score) && item.score >= 0 && item.score <= 10,
+    )
+  const completeBlocks = completeTranscriptBlocks(validScoreItems)
+  const values = validScoreItems.map((item) => item.score)
   const average = values.length
     ? values.reduce((a, b) => a + b, 0) / values.length
     : 0
@@ -144,9 +150,15 @@ export function AcademicInputForm({
             </p>
           </div>
         </div>
-        <span className="rounded-xl border border-sky-200 bg-white px-4 py-2 text-sm font-semibold tabular-nums text-sky-900 sm:text-base">
-          Chưa quy đổi sang điểm thi hoặc Z-Score
-        </span>
+        {completeBlocks.length > 0 ? (
+          <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold tabular-nums text-emerald-800 sm:text-sm">
+            Đủ {completeBlocks.length} tổ hợp ({completeBlocks.slice(0, 3).map((b) => b.code).join(", ")}{completeBlocks.length > 3 ? "…" : ""}) · Chưa quy đổi Z-Score
+          </span>
+        ) : (
+          <span className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-bold tabular-nums text-amber-800 sm:text-sm">
+            Chưa đủ tổ hợp 3 môn (cần ít nhất 1 khối như A00, A01, D01, C00)
+          </span>
+        )}
       </div>
     </div>
   )

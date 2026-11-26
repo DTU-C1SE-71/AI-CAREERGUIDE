@@ -24,19 +24,8 @@ from app.schemas.rag import (
     SemanticSearchRequest
 )
 
-from app.services.llamaindex_rag_orchestrator.stream_a_ingest import (
-    compute_bytes_sha256,
-    extract_majors_from_text,
-    ingest_moet_circular
-)
-from app.services.llamaindex_rag_orchestrator.stream_b_discovery import (
-    is_url_whitelisted,
-    discover_academic_resources_via_tavily,
-    fetch_with_jina_reader,
-    extract_roadmap_with_llm,
-    discover_and_stage_roadmap
-)
 from app.services.llamaindex_rag_orchestrator.hitl_governance import (
+    is_url_whitelisted,
     generate_deterministic_embedding,
     get_text_embedding,
     list_staging_records,
@@ -138,79 +127,10 @@ class TestPIISanitization:
 
 
 # =========================================================================
-# 2. STREAM A: MOET CIRCULAR INGESTION (PDF / EXCEL / DEDUPLICATION)
+# 2. DOMAIN WHITELIST GUARDRAIL (HITL GOVERNANCE)
 # =========================================================================
 
-class TestStreamAIngestion:
-    def test_extract_majors_from_raw_moet_text(self):
-        moet_sample = """
-        DANH MỤC GIÁO DỤC ĐÀO TẠO CẤP IV
-        7480201  Công nghệ thông tin  A00, A01, D01
-        7480101  Khoa học máy tính    A00, A01
-        7340101  Quản trị kinh doanh  A00, A01, D01, D07
-        """
-        majors = extract_majors_from_text(moet_sample)
-        assert len(majors) == 3
-        codes = [m["major_code"] for m in majors]
-        assert "7480201" in codes
-        assert "7480101" in codes
-        assert "7340101" in codes
-        
-        cntt = next(m for m in majors if m["major_code"] == "7480201")
-        assert "Công nghệ thông tin" in cntt["major_name"]
-        assert "A00" in cntt["admission_blocks"]
-
-    def test_sha256_file_hash_computation(self):
-        data = b"MOET Circular 09/2022/TT-BGDDT Official Table"
-        expected_hash = hashlib.sha256(data).hexdigest()
-        assert compute_bytes_sha256(data) == expected_hash
-
-    @pytest.mark.anyio
-    async def test_stream_a_duplicate_document_triggers_409(self):
-        db = AsyncMock()
-        file_bytes = b"Sample Duplicate PDF Content 7480201"
-        file_hash = hashlib.sha256(file_bytes).hexdigest()
-
-        # Mock database returning existing staging record
-        existing_record = StagingRecord(
-            content_hash=file_hash,
-            stream_type=StagingStreamType.STREAM_A_MOET,
-            status=StagingStatus.PENDING,
-            source_title="Thông tư 09"
-        )
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = existing_record
-        db.execute.return_value = mock_result
-
-        with pytest.raises(HTTPException) as exc_info:
-            await ingest_moet_circular(db, file_bytes, "moet_09.pdf")
-        
-        assert exc_info.value.status_code == status.HTTP_409_CONFLICT
-        assert "Duplicate document detected" in exc_info.value.detail
-
-    @pytest.mark.anyio
-    async def test_stream_a_successful_ingestion(self):
-        db = AsyncMock()
-        db.add = MagicMock()
-        file_bytes = b"7480201 Cong nghe thong tin A00 A01\n7480101 Khoa hoc may tinh A00"
-        
-        # Mock database returning no duplicates
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        db.execute.return_value = mock_result
-
-        response = await ingest_moet_circular(db, file_bytes, "circular_sample.txt")
-        assert response.total_parsed == 2
-        assert response.records_staged >= 2
-        assert db.add.called
-        assert db.commit.called
-
-
-# =========================================================================
-# 3. STREAM B: AUTOMATED ROADMAP DISCOVERY (TAVILY, JINA, LLM EXTRACTION)
-# =========================================================================
-
-class TestStreamBDiscovery:
+class TestDomainWhitelisting:
     def test_domain_whitelisting_guardrail(self):
         # Whitelisted academic domains
         assert is_url_whitelisted("https://hust.edu.vn/ctdt/cntt", settings.WHITELISTED_SEARCH_DOMAINS) is True
@@ -223,48 +143,6 @@ class TestStreamBDiscovery:
         assert is_url_whitelisted("https://unverified-blog.com/it-guide", settings.WHITELISTED_SEARCH_DOMAINS) is False
         assert is_url_whitelisted("https://buy-cheap-diploma.xyz/degree", settings.WHITELISTED_SEARCH_DOMAINS) is False
         assert is_url_whitelisted("https://social-network.org/post/123", settings.WHITELISTED_SEARCH_DOMAINS) is False
-
-    @pytest.mark.asyncio
-    async def test_missing_tavily_key_never_invents_fallback_source(self, monkeypatch):
-        monkeypatch.setattr(settings, "TAVILY_API_KEY", "")
-        with pytest.raises(HTTPException) as exc:
-            await discover_academic_resources_via_tavily("7480201", "Công nghệ thông tin")
-        assert exc.value.status_code == 503
-        assert "Chưa cấu hình Tavily" in exc.value.detail
-
-    @pytest.mark.asyncio
-    async def test_extract_roadmap_structure_matches_pydantic_schema(self, ai_runtime_db, stubs, monkeypatch):
-        db = ai_runtime_db
-        a, _ = stubs
-        snapshot = await configured_snapshot(db, a.url, monkeypatch)
-        evidence = roadmap_payload()
-        a.payload = {"choices": [{"message": {"content": json.dumps(evidence)}, "finish_reason": "stop"}]}
-        payload = await extract_roadmap_with_llm("7480201", "Công nghệ thông tin", SOURCE_TITLE, SOURCE_URL, SOURCE_TEXT, snapshot=snapshot, db=db)
-        assert isinstance(payload, ExtractedRoadmapPayload)
-        assert payload.major_code == "7480201"
-        assert len(payload.prerequisite_knowledge) >= 2
-        assert len(payload.target_skills) >= 2
-        assert len(payload.milestones) >= 3
-        for idx, milestone in enumerate(payload.milestones, start=1):
-            assert milestone.step == idx
-            assert milestone.actions and milestone.learning_objectives
-        assert a.received[0]["body"]["model"] == snapshot.model
-
-    @pytest.mark.asyncio
-    async def test_stream_b_duplicate_staged_roadmap_triggers_409(self, ai_runtime_db, stubs, monkeypatch):
-        db = ai_runtime_db
-        a, _ = stubs
-        await seed_major(db)
-        await configured_snapshot(db, a.url, monkeypatch)
-        a.payload = {"choices": [{"message": {"content": json.dumps(roadmap_payload())}, "finish_reason": "stop"}]}
-        with patch("app.services.llamaindex_rag_orchestrator.stream_b_discovery.discover_academic_resources_via_tavily", new=AsyncMock(return_value=[{"title": SOURCE_TITLE, "url": SOURCE_URL, "raw_content": SOURCE_TEXT}])):
-            with patch("app.services.llamaindex_rag_orchestrator.stream_b_discovery.fetch_with_jina_reader", new=AsyncMock(return_value=SOURCE_TEXT)):
-                first = await discover_and_stage_roadmap(db, "7480201", "Công nghệ thông tin")
-                assert first.status == StagingStatus.PENDING
-                with pytest.raises(HTTPException) as exc:
-                    await discover_and_stage_roadmap(db, "7480201", "Công nghệ thông tin")
-                assert exc.value.status_code == 409
-        assert len((await db.execute(select(StagingRecord))).scalars().all()) == 1
 
 
 # =========================================================================

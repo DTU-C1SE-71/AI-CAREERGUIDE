@@ -287,6 +287,68 @@ class TestStudentSkillAgent:
         finally:
             await engine.dispose()
 
+    @pytest.mark.anyio
+    async def test_profile_overview_without_major_code_runs_ai_and_caches(self, tmp_path, monkeypatch):
+        import json
+        from unittest.mock import AsyncMock
+        from app.services.ai_config import adapter as ai_adapter, service as ai_cfg_service
+
+        captured_messages = []
+
+        async def _fake_resolve_snapshot(_db):
+            return object()
+
+        async def _fake_chat(_snapshot, messages, **_kwargs):
+            captured_messages.append(messages)
+            return json.dumps({
+                "summary": "Học sinh nổi trội ở Toán và nhóm Nghiên cứu (I), cần tăng cường ngoại ngữ và kỹ năng tự học.",
+                "strengths": [{"title": "Tư duy logic & Toán", "detail": "Điểm Toán 8.5 kết hợp nhóm Nghiên cứu (I) cao."}],
+                "weaknesses": [{"title": "Củng cố Vật lý & Tiếng Anh", "detail": "Vật lý 5.0 và Tiếng Anh 6.0 cần bồi dưỡng thêm."}],
+                "skill_gaps": [
+                    {
+                        "skill": "Ngoại ngữ học thuật & đọc hiểu tài liệu",
+                        "why": "Giúp mở rộng nguồn tự học ở mọi lĩnh vực.",
+                        "how_to_improve": ["Đọc 1 bài ngắn song ngữ mỗi ngày"],
+                        "priority": "HIGH",
+                    }
+                ],
+            }, ensure_ascii=False)
+
+        monkeypatch.setattr(ai_cfg_service, "resolve_snapshot", AsyncMock(side_effect=_fake_resolve_snapshot))
+        monkeypatch.setattr(ai_adapter, "chat", AsyncMock(side_effect=_fake_chat))
+
+        engine, session_factory = await _sqlite_session(tmp_path)
+        try:
+            async with session_factory() as db:
+                overview_req = StudentSkillAnalysisRequest(
+                    major_code=None,
+                    riasec_scores={"R": 0.7, "I": 0.9, "A": 0.4, "S": 0.5, "E": 0.5, "C": 0.6},
+                    grades_by_subject={"Toán": 8.5, "Vật lý": 5.0, "Tiếng Anh": 6.0},
+                    cognitive_preferences={"learning_style": "LEARN_VISUAL_SPATIAL"},
+                    aspiration={"dream_job": "Kỹ sư AI"},
+                    grade_level="Lớp 11",
+                    gender="Nữ",
+                )
+                first = await service.analyze_student_skills(db, overview_req, None)
+                assert first.major_code == ""
+                assert first.is_ai_generated is True
+                assert first.cached is False
+                assert len(captured_messages) == 1
+                sys_prompt = captured_messages[0][0]["content"]
+                assert "TỔNG QUAN" in sys_prompt
+                assert "không nêu tên một ngành đào tạo đại học cụ thể nào" in sys_prompt
+                assert "Giới tính" not in sys_prompt
+                assert "Kỹ sư AI" not in sys_prompt
+
+                # Cache hit even if dream_job or gender changes, because overview is independent
+                second_req = overview_req.model_copy(update={"aspiration": {"dream_job": "Kiến trúc sư"}, "gender": "Nam"})
+                second = await service.analyze_student_skills(db, second_req, None)
+                assert second.cached is True
+                assert second.profile_hash == first.profile_hash
+                assert len(captured_messages) == 1
+        finally:
+            await engine.dispose()
+
 
 # =========================================================================
 # 3. QUYỀN ADMIN CHO CACHE NỘI DUNG ĐÀO TẠO

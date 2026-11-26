@@ -1,4 +1,7 @@
-import { completeTranscriptBlocks } from "../utils/assessmentEvidence"
+import {
+  completeTranscriptBlocks,
+  evaluateAssessmentCompleteness,
+} from "../utils/assessmentEvidence"
 import {
   ArrowRight,
   CheckCircle2,
@@ -98,12 +101,6 @@ function formatDateTimeVi(iso?: string): string {
   }
 }
 
-function hasUsableAssessmentData(state: Pick<AssessmentState, "answers" | "scores">): boolean {
-  const hasAnswers = Object.keys(state.answers || {}).length >= 3
-  const hasScores = (state.scores || []).length >= 2
-  return hasAnswers || hasScores
-}
-
 export function Dashboard() {
   const { user } = useAuth()
   const {
@@ -129,7 +126,11 @@ export function Dashboard() {
   const activeAttempt = history[activeAttemptIndex] || null
 
   const effectiveAssessment = useMemo<AssessmentState>(() => {
-    if (activeAttemptIndex > 0 && activeAttempt) {
+    if (
+      activeAttemptIndex > 0 &&
+      activeAttempt &&
+      evaluateAssessmentCompleteness(activeAttempt).isComplete
+    ) {
       return {
         step: 4,
         answers: activeAttempt.answers || {},
@@ -140,10 +141,10 @@ export function Dashboard() {
         completedAt: activeAttempt.createdAt,
       }
     }
-    if (assessment.completed && hasUsableAssessmentData(assessment)) {
+    if (assessment.completed && evaluateAssessmentCompleteness(assessment).isComplete) {
       return assessment
     }
-    if (history[0] && hasUsableAssessmentData(history[0])) {
+    if (history[0] && evaluateAssessmentCompleteness(history[0]).isComplete) {
       return {
         step: 4,
         answers: history[0].answers || {},
@@ -183,12 +184,18 @@ export function Dashboard() {
   useEffect(() => { profileRef.current = effectiveAssessment }, [effectiveAssessment])
   const reportTopRef = useRef<HTMLDivElement>(null)
 
-  const hasUsableData = useMemo(
-    () => hasUsableAssessmentData(effectiveAssessment),
+  const draftCompleteness = useMemo(
+    () => evaluateAssessmentCompleteness(effectiveAssessment),
     [effectiveAssessment],
   )
-  const hasCompletedAssessment = Boolean(hasUsableData)
-  const isDraftPreview = Boolean(hasUsableData && !effectiveAssessment.completed)
+  const hasCompletedAssessment = Boolean(
+    effectiveAssessment.completed && draftCompleteness.isComplete,
+  )
+  const hasPartialProgress =
+    draftCompleteness.riasecAnswered > 0 ||
+    draftCompleteness.cognitiveAnswered > 0 ||
+    draftCompleteness.validSubjectCount > 0 ||
+    draftCompleteness.hasInvalidScores
 
   useEffect(() => {
     let mounted = true
@@ -252,29 +259,20 @@ export function Dashboard() {
     reloadNonce,
   ])
 
-  // Khóa vân tay theo toàn bộ yếu tố ảnh hưởng thuật toán đề xuất (điểm, lớp, giới tính, RIASEC, nhận thức, nguyện vọng, top ngành).
+  // Khóa vân tay theo hồ sơ tổng quan (điểm, lớp, RIASEC, nhận thức) — tách bạch khỏi ngành đề xuất đầu bảng và nguyện vọng.
   // Chỉ khi vân tay này đổi thì mới cho phép gọi lại AI; ngược lại luôn lấy từ cache/CSDL.
-  const topRecommendedMajorCode = data?.majors?.[0]?.code ?? ""
   const aiProfileFingerprint = useMemo(
     () =>
       JSON.stringify({
         answers: effectiveAssessment.answers || {},
         cognitive: effectiveAssessment.cognitive || {},
         scores: effectiveAssessment.scores || [],
-        aspiration: effectiveAssessment.aspiration || null,
         grade: profileGradeLevel || "",
-        gender: profileGender || "",
-        topMajor: topRecommendedMajorCode,
       }),
-    [
-      effectiveAssessment,
-      profileGradeLevel,
-      profileGender,
-      topRecommendedMajorCode,
-    ],
+    [effectiveAssessment, profileGradeLevel],
   )
 
-  // Khi hồ sơ / điểm / lớp / giới tính đổi -> hiển thị cache kỹ năng tương ứng ngay nếu có.
+  // Khi hồ sơ / điểm / lớp đổi -> hiển thị cache kỹ năng tương ứng ngay nếu có.
   useEffect(() => {
     const cached = skillCacheRef.current[aiProfileFingerprint] ?? null
     setSkillAnalysis(cached)
@@ -283,7 +281,7 @@ export function Dashboard() {
     }
   }, [aiProfileFingerprint])
 
-  // Tab 1 ("Đề xuất theo hồ sơ"): phân tích kỹ năng sau khi /recommender/evaluate trả top ngành; dùng Smart DB Cache nếu hồ sơ không đổi.
+  // Tab 1 ("Đề xuất theo hồ sơ"): phân tích kỹ năng tổng quan toàn hồ sơ (không gắn 1 ngành cụ thể); dùng Smart DB Cache nếu hồ sơ không đổi.
   useEffect(() => {
     if (!hasCompletedAssessment || recommendationMode !== "algorithm" || isEvaluating || !data) {
       return
@@ -301,10 +299,11 @@ export function Dashboard() {
     let mounted = true
     const fingerprintAtStart = aiProfileFingerprint
     inFlightAiFingerprintRef.current = fingerprintAtStart
-    const skillPayload = buildEvaluateProfilePayload(effectiveAssessment, undefined, {
-      gender: profileGender,
-      grade_level: profileGradeLevel,
-    })
+    const { aspiration: _ignoredAspiration, ...skillPayload } = buildEvaluateProfilePayload(
+      { ...effectiveAssessment, aspiration: undefined },
+      undefined,
+      { grade_level: profileGradeLevel },
+    )
 
     setSkillLoading(true)
     apiRequest<StudentSkillAnalysis | null>(
@@ -312,10 +311,7 @@ export function Dashboard() {
       null,
       {
         method: "POST",
-        body: JSON.stringify({
-          ...skillPayload,
-          major_code: topRecommendedMajorCode || undefined,
-        }),
+        body: JSON.stringify(skillPayload),
       },
     )
       .then((res) => {
@@ -344,9 +340,7 @@ export function Dashboard() {
     data,
     aiProfileFingerprint,
     effectiveAssessment,
-    profileGender,
     profileGradeLevel,
-    topRecommendedMajorCode,
   ])
 
   const aspirationAiFingerprint = useMemo(
@@ -449,6 +443,7 @@ export function Dashboard() {
   }
 
   const handleUpdateAspiration = async (nextAspiration: CareerAspirationInput) => {
+    if (!hasCompletedAssessment) throw new Error("Chưa đủ dữ liệu trắc nghiệm để phân tích")
     if (activeAttemptIndex > 0) throw new Error("Không sửa bản xem lại")
     const snapshot = effectiveAssessment
     const request = ++aspirationRequest.current
@@ -720,70 +715,116 @@ export function Dashboard() {
             <div className="relative mx-auto max-w-2xl text-center">
               <span className="mx-auto inline-flex items-center gap-2 rounded-full border border-white/80 bg-white/60 px-4 py-1.5 text-xs font-extrabold tracking-wide text-sky-700 shadow-2xs backdrop-blur-md">
                 <ClipboardCheck size={14} />
-                Chưa có dữ liệu trắc nghiệm
+                {hasPartialProgress
+                  ? "Chưa đủ dữ liệu để phân tích"
+                  : "Chưa có dữ liệu trắc nghiệm"}
               </span>
 
               <h2 className="mt-5 text-2xl font-black tracking-tight text-slate-900 sm:text-3xl">
-                Làm bài đánh giá để mở khóa đề xuất từ 435 ngành
+                {hasPartialProgress
+                  ? "Hoàn thành đủ yêu cầu bài trắc nghiệm để phân tích ngành phù hợp"
+                  : "Làm bài đánh giá để mở khóa đề xuất từ 435 ngành"}
               </h2>
 
-              <div className="mt-8 grid gap-3.5 sm:grid-cols-3 sm:gap-4">
-                {[
-                  { title: "Sở thích RIASEC", desc: "Thiên hướng 6 nhóm nghề nghiệp" },
-                  { title: "Học lực & Tổ hợp", desc: "Đối chiếu chuẩn tuyển sinh" },
-                  { title: "Phong cách nhận thức", desc: "Thói quen học tập & tư duy" },
-                ].map((pillar) => (
-                  <div
-                    key={pillar.title}
-                    className="rounded-3xl border border-white/80 bg-white/50 p-4 text-center shadow-[0_8px_30px_rgba(14,165,233,0.07)] backdrop-blur-xl sm:p-5"
-                  >
-                    <h3 className="text-sm font-extrabold text-sky-700 sm:text-base">
-                      {pillar.title}
-                    </h3>
-                    <p className="mt-1.5 text-xs font-medium leading-relaxed text-slate-600">
-                      {pillar.desc}
-                    </p>
+              {hasPartialProgress ? (
+                <>
+                  <p className="mt-3 text-sm font-medium text-slate-600">
+                    Hệ thống cần đầy đủ dữ liệu ở cả 3 phần để phân tích chính xác ngành học phù hợp cho bạn.
+                  </p>
+
+                  <div className="mt-6 space-y-2.5 text-left">
+                    {[
+                      {
+                        step: 1,
+                        title: `1. Sở thích: ${draftCompleteness.riasecAnswered}/${draftCompleteness.riasecTotal} câu`,
+                        done: draftCompleteness.riasecComplete,
+                      },
+                      {
+                        step: 2,
+                        title: `2. Tư duy: ${draftCompleteness.cognitiveAnswered}/${draftCompleteness.cognitiveTotal} câu`,
+                        done: draftCompleteness.cognitiveComplete,
+                      },
+                      {
+                        step: 3,
+                        title: draftCompleteness.hasInvalidScores
+                          ? "3. Điểm số: Có điểm không hợp lệ (cần trong khoảng 0 - 10)"
+                          : `3. Điểm số: ${draftCompleteness.completeBlocks.length} tổ hợp hợp lệ`,
+                        done: draftCompleteness.scoresComplete,
+                      },
+                    ].map((item) => (
+                      <div
+                        key={item.step}
+                        className="flex items-center justify-between gap-3 rounded-2xl border border-white/85 bg-white/75 px-4 py-3 shadow-xs backdrop-blur-md"
+                      >
+                        <span className="text-sm font-bold text-slate-800">
+                          {item.title}
+                        </span>
+                        <span
+                          className={`shrink-0 rounded-full px-3 py-1 text-xs font-extrabold ${
+                            item.done
+                              ? "border border-emerald-200 bg-emerald-50 text-emerald-700"
+                              : "border border-amber-200 bg-amber-50 text-amber-800"
+                          }`}
+                        >
+                          {item.done ? "Đủ" : "Còn thiếu"}
+                        </span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              <p className="mt-4 text-xs font-medium text-slate-500">
-                Hệ số trọng số tự động điều chỉnh linh hoạt theo khối lớp và dữ liệu hồ sơ của bạn.
-              </p>
+                  <div className="mt-8 flex justify-center">
+                    <Link to={`/assessment?step=${draftCompleteness.missingSteps[0] || 1}`}>
+                      <Button
+                        icon={ArrowRight}
+                        className="rounded-2xl px-8 py-3.5 text-sm shadow-lg shadow-sky-500/20"
+                      >
+                        Tiếp tục hoàn thành trắc nghiệm
+                      </Button>
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="mt-8 grid gap-3.5 sm:grid-cols-3 sm:gap-4">
+                    {[
+                      { title: "Sở thích RIASEC", desc: "Thiên hướng 6 nhóm nghề nghiệp" },
+                      { title: "Học lực & Tổ hợp", desc: "Đối chiếu chuẩn tuyển sinh" },
+                      { title: "Phong cách nhận thức", desc: "Thói quen học tập & tư duy" },
+                    ].map((pillar) => (
+                      <div
+                        key={pillar.title}
+                        className="rounded-3xl border border-white/80 bg-white/50 p-4 text-center shadow-[0_8px_30px_rgba(14,165,233,0.07)] backdrop-blur-xl sm:p-5"
+                      >
+                        <h3 className="text-sm font-extrabold text-sky-700 sm:text-base">
+                          {pillar.title}
+                        </h3>
+                        <p className="mt-1.5 text-xs font-medium leading-relaxed text-slate-600">
+                          {pillar.desc}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
 
-              <div className="mt-9 flex justify-center">
-                <Link to="/assessment">
-                  <Button
-                    icon={ArrowRight}
-                    className="rounded-2xl px-8 py-3.5 text-sm shadow-lg shadow-sky-500/20"
-                  >
-                    Bắt đầu đánh giá ngay
-                  </Button>
-                </Link>
-              </div>
+                  <p className="mt-4 text-xs font-medium text-slate-500">
+                    Hệ số trọng số tự động điều chỉnh linh hoạt theo khối lớp và dữ liệu hồ sơ của bạn.
+                  </p>
+
+                  <div className="mt-9 flex justify-center">
+                    <Link to="/assessment">
+                      <Button
+                        icon={ArrowRight}
+                        className="rounded-2xl px-8 py-3.5 text-sm shadow-lg shadow-sky-500/20"
+                      >
+                        Bắt đầu đánh giá ngay
+                      </Button>
+                    </Link>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         ) : (
           <>
-            {isDraftPreview && (
-              <div
-                role="status"
-                className="mb-5 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/90 px-4 py-3 text-xs sm:text-sm text-amber-900"
-              >
-                <span>
-                  Bạn đang xem đề xuất tạm từ bài làm chưa bấm hoàn tất. Hãy mở mục{" "}
-                  <strong>Trắc nghiệm</strong> và bấm <strong>Hoàn tất</strong> ở bước cuối để lưu chính thức lên máy chủ.
-                </span>
-                <Link
-                  to="/assessment"
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-amber-600 px-3.5 py-1.5 text-xs font-extrabold text-white transition hover:bg-amber-700"
-                >
-                  Hoàn tất trắc nghiệm
-                  <ArrowRight size={13} />
-                </Link>
-              </div>
-            )}
-
             {/* Collapsible History Drawer (only visible when user clicks "Lịch sử" or has multiple attempts) */}
             {(showHistoryDrawer || history.length > 1) && (
               <div className="mb-6 min-w-0 rounded-2xl border border-white/80 bg-white/50 p-3.5 shadow-[0_10px_35px_rgba(14,165,233,0.08)] backdrop-blur-xl sm:rounded-3xl sm:p-4">

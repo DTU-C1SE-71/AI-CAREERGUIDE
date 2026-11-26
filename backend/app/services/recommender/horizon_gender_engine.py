@@ -178,45 +178,15 @@ def compute_gender_ergonomic_adjustment(
     delta_ergo = round(max(0.0, 0.01 * (s_ergo_match - 0.70)), 4)
     delta_boost += delta_ergo
 
-    # 2. Cảnh báo an toàn lao động Thông tư 10/2020 hoặc môi trường nặng nhọc/phơi nhiễm
+    # 2. Cảnh báo an toàn lao động Thông tư 10/2020 hoặc môi trường nặng nhọc/phơi nhiễm (trung lập giới tính)
     if major_code in STATUTORY_HEAVY_HAZARDS:
         haz_info = STATUTORY_HEAVY_HAZARDS[major_code]
-        if g == "Nữ":
-            advisory_note = f"{haz_info['universal_advisory']} {haz_info['female_pathway']}"
-        else:
-            advisory_note = haz_info["universal_advisory"]
+        advisory_note = haz_info["universal_advisory"]
     elif e_haz >= 0.4 or e_mob >= 0.5:
         advisory_note = f"Môi trường nghề nghiệp có cường độ di chuyển ({e_mob:.1f}) hoặc phơi nhiễm hiện trường ({e_haz:.1f}), yêu cầu thể lực và tính chủ động cao."
 
-    # 3. Tính toán Nudge công thái học & Bình đẳng cơ hội
+    # 3. Trung lập giới tính hoàn toàn: không cộng/trừ điểm hay gắn nhãn theo giới tính
     delta_affirmative = 0.0
-    if g == "Nữ":
-        if (
-            stem_gender_gap > 0.2
-            or norm_cat in STEM_BROAD_CATEGORIES
-            or code_prefix in ("748", "752", "751", "746")
-            or any(k in norm_name for k in STEM_KEYWORDS)
-        ):
-            if score_riasec >= 0.60 or score_academic >= 0.60:
-                affinity = 0.70 * score_riasec + 0.30 * score_academic
-                delta_affirmative = round(min(0.04, 0.04 * affinity), 4)
-                nudge_badge = "Khuyến khích Nữ sinh STEM & Công nghệ"
-    elif g == "Nam":
-        if (
-            stem_gender_gap < -0.2
-            or norm_cat in CARE_BROAD_CATEGORIES
-            or code_prefix in ("714", "772", "776")
-            or any(k in norm_name for k in CARE_KEYWORDS)
-        ):
-            if score_riasec >= 0.60:
-                affinity = score_riasec
-                delta_affirmative = round(min(0.04, 0.04 * affinity), 4)
-                nudge_badge = "Khuyến khích Nam sinh Giáo dục & Y tế"
-    elif g == "Khác":
-        delta_affirmative = 0.02
-        nudge_badge = "Môi trường Đa dạng & Cởi mở"
-
-    delta_boost += delta_affirmative
 
     # 4. Ưu tiên Thực hành cho Thí sinh Đã tốt nghiệp cấp 3
     is_applied_track = (
@@ -535,77 +505,7 @@ def apply_horizon_gender_reranking(
                 if replaceable_idx is not None:
                     _replace_item(assembled, replaceable_idx, trend_cand, seen_codes, category_counts)
 
-    # 5. RÀO CHẮN ĐẠO ĐỨC BÌNH ĐẲNG CƠ HỘI (Affirmative Nudge with Atomic Replacement)
-    if student_riasec_dict and assembled:
-        i_score = float(student_riasec_dict.get("I", 0.5))
-        r_score = float(student_riasec_dict.get("R", 0.5))
-        s_score = float(student_riasec_dict.get("S", 0.5))
-
-        if gender == "Nữ" and (i_score >= 0.60 or r_score >= 0.60):
-            stem_in_top = sum(
-                1 for it in assembled
-                if it.major_code[:3] in ("748", "752", "751", "746") or (it.category or "") in STEM_BROAD_CATEGORIES
-            )
-            if stem_in_top == 0:
-                for cand in all_searchable_pool:
-                    if (
-                        cand.major_code[:3] in ("748", "752", "751", "746")
-                        or (cand.category or "") in STEM_BROAD_CATEGORIES
-                    ) and cand.major_code not in seen_codes and cand.major_code not in unrealistic_codes:
-                        cand_cat = cand.category or "Khác"
-                        rep_idx = None
-                        for idx in range(len(assembled) - 1, -1, -1):
-                            item_at = assembled[idx]
-                            old_cat = item_at.category or "Khác"
-                            if getattr(item_at, "is_trending", False):
-                                continue
-                            if item_at.feasibility_tier == "SAFETY" and target_k_safety > 0:
-                                safety_in_assembled = sum(1 for x in assembled if x.feasibility_tier == "SAFETY")
-                                if safety_in_assembled <= target_k_safety:
-                                    continue
-                            cap_to_check = max_per_category_top5 if idx < 5 else max_per_category_top10
-                            projected_count = category_counts.get(cand_cat, 0) + (1 if cand_cat != old_cat else 0)
-                            if projected_count <= cap_to_check:
-                                rep_idx = idx
-                                break
-
-                        if rep_idx is not None:
-                            _replace_item(assembled, rep_idx, cand, seen_codes, category_counts)
-                            break
-
-        elif gender == "Nam" and s_score >= 0.60:
-            care_in_top = sum(
-                1 for it in assembled
-                if it.major_code[:3] in ("714", "772", "776") or (it.category or "") in CARE_BROAD_CATEGORIES
-            )
-            if care_in_top == 0:
-                for cand in all_searchable_pool:
-                    if (
-                        cand.major_code[:3] in ("714", "772", "776")
-                        or (cand.category or "") in CARE_BROAD_CATEGORIES
-                    ) and cand.major_code not in seen_codes and cand.major_code not in unrealistic_codes:
-                        cand_cat = cand.category or "Khác"
-                        rep_idx = None
-                        for idx in range(len(assembled) - 1, -1, -1):
-                            item_at = assembled[idx]
-                            old_cat = item_at.category or "Khác"
-                            if getattr(item_at, "is_trending", False):
-                                continue
-                            if item_at.feasibility_tier == "SAFETY" and target_k_safety > 0:
-                                safety_in_assembled = sum(1 for x in assembled if x.feasibility_tier == "SAFETY")
-                                if safety_in_assembled <= target_k_safety:
-                                    continue
-                            cap_to_check = max_per_category_top5 if idx < 5 else max_per_category_top10
-                            projected_count = category_counts.get(cand_cat, 0) + (1 if cand_cat != old_cat else 0)
-                            if projected_count <= cap_to_check:
-                                rep_idx = idx
-                                break
-
-                        if rep_idx is not None:
-                            _replace_item(assembled, rep_idx, cand, seen_codes, category_counts)
-                            break
-
-    # 6. Gán thứ hạng Rank 1-based
+    # 5. Gán thứ hạng Rank 1-based (trung lập giới tính hoàn toàn)
     for rank_idx, item in enumerate(assembled[:top_k], start=1):
         item.rank = rank_idx
 
@@ -666,14 +566,7 @@ def build_horizon_gender_xai_explanation(
 
     if major_code in STATUTORY_HEAVY_HAZARDS:
         haz_info = STATUTORY_HEAVY_HAZARDS[major_code]
-        if g == "Nữ":
-            c2_env = f"đặc biệt lưu ý {haz_info['female_pathway']}"
-        else:
-            c2_env = f"đặc biệt lưu ý {haz_info['universal_advisory']}"
-    elif g == "Nữ" and is_stem:
-        c2_env = "đây là ngành công nghệ trọng điểm đang có nhiều chính sách thu hút và học bổng dành riêng cho nữ sinh tài năng"
-    elif g == "Nam" and is_care:
-        c2_env = "môi trường làm việc nhân văn đang mở rộng cơ hội cho nhân sự nam có năng lực giao tiếp và quản lý"
+        c2_env = f"đặc biệt lưu ý {haz_info['universal_advisory']}"
     else:
         c2_env = "môi trường học tập và phát triển nghề nghiệp rất năng động"
 

@@ -18,10 +18,27 @@ interface ImportPreview {
   total?: number
 }
 const PAGE_SIZE = 25
-const EXTRACTION_PROMPT = `Đọc tài liệu danh mục ngành được cung cấp và điền vào file Excel mẫu đính kèm.
-Giữ nguyên tên và thứ tự các cột trong mẫu. Mỗi dòng là một ngành có trong tài liệu, ghi đúng mã ngành, tên ngành và nguồn.
-Không tự tạo ngành, tổ hợp, điểm chuẩn hay điểm RIASEC. Trường không được nguồn xác nhận phải để trống và ghi chú dữ liệu còn thiếu.
-Đối chiếu lại mã ngành, trạng thái hoạt động và các dòng trùng trước khi xuất file .xlsx. Kết quả cần được người quản trị rà soát trước khi nhập vào hệ thống.`
+const EXTRACTION_PROMPT = `Bạn là chuyên gia chuẩn hóa dữ liệu giáo dục đại học Việt Nam. Tôi đính kèm tài liệu Thông tư danh mục ngành đào tạo của Bộ GD&ĐT (PDF/DOCX) và file Excel mẫu (MOET_Major_Import_Template_Standard.xlsx).
+
+Hãy trích xuất TOÀN BỘ danh mục ngành đào tạo trong tài liệu nguồn và điền vào sheet 'MAU_NHAP_NGANH_CHUAN' theo đúng quy tắc sau:
+1. Giữ nguyên CHÍNH XÁC tên và thứ tự 20 cột kỹ thuật ở Dòng 1:
+   field_code, field_name, group_code, group_name, major_code, major_name, legacy_tt09_codes, degree_levels, circular_note, is_active, cip_code, holland_code, riasec_r, riasec_i, riasec_a, riasec_s, riasec_e, riasec_c, subject_blocks, career_paths.
+2. Giữ nguyên Dòng 2 (mô tả cột), XÓA 2 dòng ví dụ mẫu (Dòng 3–4) và điền dữ liệu ngành thực tế bắt đầu từ Dòng 3.
+3. Nhóm cột BẮT BUỘC (trích xuất nguyên văn từ tài liệu nguồn):
+   - field_code (2 chữ số), field_name (tên lĩnh vực cấp II)
+   - group_code (4 chữ số), group_name (tên nhóm ngành cấp III)
+   - major_code (đúng 6 chữ số theo Thông tư mới hoặc 7 chữ số bắt đầu bằng 7/8/9; DUY NHẤT, không trùng lặp; không đưa dòng tiêu đề 2 số hoặc 4 số vào cột này)
+   - major_name (tên ngành chính thức theo văn bản, 2–255 ký tự)
+4. Nhóm cột Thông tin Thông tư (điền đúng theo tài liệu nguồn, không có thì để trống):
+   - legacy_tt09_codes (mã ngành cũ 7 chữ số từ bảng chuyển đổi, cách nhau dấu phẩy nếu nhiều)
+   - degree_levels (7 = Đại học, 8 = Thạc sĩ, 9 = Tiến sĩ; VD: 789)
+   - circular_note (ghi rõ số hiệu Thông tư nguồn và ghi chú hiệu lực/chuyển đổi nếu có)
+   - is_active (TRUE nếu ngành còn hiệu lực, FALSE nếu đã bãi bỏ; mặc định TRUE)
+5. Nguyên tắc CHỐNG BỊA DỮ LIỆU cho 10 cột tùy chọn (cip_code, holland_code, riasec_r..c, subject_blocks, career_paths):
+   - Tuyệt đối KHÔNG tự tạo ngành ngoài tài liệu nguồn, không tự bịa điểm chuẩn, tổ hợp môn hay điểm RIASEC nếu tài liệu không nêu.
+   - Nếu tài liệu nguồn không có các trường này, hãy ĐỂ TRỐNG để hệ thống AI CareerGuide tự động ánh xạ tất định theo chuẩn nhóm ngành (sheet BANG_TRA_CUU_CIP_RIASEC) khi nhập file.
+6. Định dạng tất cả các cột mã (field_code, group_code, major_code, legacy_tt09_codes, degree_levels, cip_code) là Text để không bị mất chữ số 0 ở đầu.
+7. Đối chiếu lại toàn bộ danh sách (không trùng major_code, không sót ngành, đúng trạng thái is_active) rồi xuất file .xlsx hoàn chỉnh để quản trị viên rà soát trên bản xem trước trước khi lưu vào hệ thống.`
 
 export function AdminImportPage() {
   const { notify } = useAdmin()
@@ -111,14 +128,14 @@ export function AdminImportPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 id="import-template-title" className="text-lg font-semibold">Chuẩn bị tệp dữ liệu</h2>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600">Dùng đúng cấu trúc cột trong mẫu Excel. Hệ thống hỗ trợ .xlsx và .csv; dữ liệu thiếu cần được kiểm tra, không điền số ước lượng.</p>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">Dùng đúng cấu trúc 20 cột trong mẫu Excel (6 cột bắt buộc <code>field_code</code> → <code>major_name</code>, 4 cột thông tư và 10 cột tùy chọn tự ánh xạ khi bỏ trống). Hỗ trợ .xlsx và .csv; không điền số ước lượng.</p>
           </div>
           <a className="admin-button" href="/MOET_Major_Import_Template_Standard.xlsx" download><Download size={17} aria-hidden="true" />Tải mẫu Excel</a>
         </div>
         <details className="mt-5 border-t border-slate-200 pt-4">
           <summary className="min-h-10 cursor-pointer font-semibold">Hướng dẫn trích xuất từ tài liệu bằng AI</summary>
-          <p className="mt-3 text-sm text-slate-600">Nếu dùng AI hỗ trợ chuyển PDF sang Excel, hãy gửi kèm tài liệu nguồn và mẫu. Kiểm tra lại nội dung trước khi tải lên.</p>
-          <pre className="my-4 whitespace-pre-wrap rounded-md bg-slate-50 p-4 font-sans text-sm leading-relaxed text-slate-700">{EXTRACTION_PROMPT}</pre>
+          <p className="mt-3 text-sm text-slate-600">Nếu dùng AI hỗ trợ chuyển PDF sang Excel, hãy gửi kèm tài liệu nguồn và file mẫu. Kiểm tra kỹ bản xem trước trước khi lưu.</p>
+          <pre className="my-4 max-h-[420px] overflow-y-auto whitespace-pre-wrap rounded-md border border-slate-200 bg-slate-50 p-4 font-sans text-sm leading-relaxed text-slate-700">{EXTRACTION_PROMPT}</pre>
           <button type="button" className="admin-button" onClick={() => void copyPrompt()}>{copied ? <Check size={17} aria-hidden="true" /> : <Copy size={17} aria-hidden="true" />}{copied ? "Đã sao chép hướng dẫn" : "Sao chép hướng dẫn"}</button>
         </details>
       </section>

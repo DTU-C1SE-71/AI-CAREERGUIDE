@@ -2,16 +2,12 @@ import { motion } from "framer-motion"
 import {
   AlertTriangle,
   ArrowLeft,
-  ArrowRight,
   Bookmark,
   BookmarkCheck,
-  CircleCheck,
-  Compass,
   Loader2,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Link, useLocation, useParams } from "react-router"
-import { Button } from "../components/common/Button"
 import { Card } from "../components/common/Card"
 import { PageContainer } from "../components/layout/PageContainer"
 import { ExplanationBox } from "../components/xai/ExplanationBox"
@@ -28,6 +24,7 @@ import { readStorage, writeStorage } from "../services/storage"
 import type { MajorInsight, StudentSkillAnalysis } from "../types/insight"
 import type { Major } from "../types/major"
 import { formatBlockWithSubjects } from "../utils"
+import { evaluateAssessmentCompleteness } from "../utils/assessmentEvidence"
 import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
 
 interface TaxonomyMajorDetail {
@@ -80,6 +77,13 @@ export function MajorDetail() {
   const fromCatalog = location.state?.from === "/majors"
   const assessment = useSelectedAssessment()
   const { user } = useAuth()
+  const assessmentCompleteness = useMemo(
+    () => evaluateAssessmentCompleteness(assessment),
+    [assessment],
+  )
+  const hasCompleteAssessment = Boolean(
+    assessment.completed && assessmentCompleteness.isComplete,
+  )
   const [major, setMajor] = useState<Major>(() => catalogMajor(id))
   const [hasEvaluation, setHasEvaluation] = useState(false)
   const [taxDetail, setTaxDetail] = useState<TaxonomyMajorDetail | null>(null)
@@ -101,7 +105,7 @@ export function MajorDetail() {
     if (!id) return
     let mounted = true
     setLoading(true)
-    setAiExplaining(true)
+    setAiExplaining(hasCompleteAssessment)
     setAiExplanationText(null)
     setMajorInsight(null)
     setSkillAnalysis(null)
@@ -117,16 +121,14 @@ export function MajorDetail() {
       gender: user?.gender,
       grade_level: user?.grade_level,
     })
-    const hasUserAssessment =
-      Object.keys(evalPayload.riasec_answers).length > 0 ||
-      Object.keys(evalPayload.grades_by_subject).length > 0 ||
-      Object.keys(evalPayload.cognitive_answers).length > 0
 
-    // 1. Fetch Major Taxonomy & Deterministic 435-major Constraint Evaluation
+    // 1. Fetch Major Taxonomy & Deterministic 435-major Constraint Evaluation (only when complete)
     Promise.all([
-      apiRequest<{ majors?: Major[]; blocked_goals?: Major[] } | null>("/recommender/evaluate", null, {
-        method: "POST", body: JSON.stringify(evalPayload),
-      }),
+      hasCompleteAssessment
+        ? apiRequest<{ majors?: Major[]; blocked_goals?: Major[] } | null>("/recommender/evaluate", null, {
+            method: "POST", body: JSON.stringify(evalPayload),
+          })
+        : Promise.resolve(null),
       apiRequest<TaxonomyMajorDetail | null>(
         `/taxonomy/majors/${codeToLookup}`,
         null,
@@ -201,7 +203,7 @@ export function MajorDetail() {
     }
 
     // 3. Agent "Phân tích kỹ năng": ưu/nhược điểm học tập + kỹ năng cần bổ sung
-    if (hasUserAssessment) {
+    if (hasCompleteAssessment) {
       setSkillLoading(true)
       apiRequest<StudentSkillAnalysis | null>(
         "/major-insights/student-skills",
@@ -220,83 +222,87 @@ export function MajorDetail() {
         })
     }
 
-    // 4. Automatically call AI Explanation API on page entry (session-cached for instant 0-token navigation)
-    const explanationCacheKey = `careerguide:ai_explanation:${codeToLookup}:${user?.id || "guest"}:${JSON.stringify(evalPayload.riasec_answers || {})}:${JSON.stringify(evalPayload.grades_by_subject || {})}`
-    const cachedExplanation = sessionStorage.getItem(explanationCacheKey)
-    if (cachedExplanation) {
-      setAiExplanationText(cachedExplanation)
+    // 4. Automatically call AI Explanation API on page entry (only when assessment is complete)
+    if (!hasCompleteAssessment) {
       setAiExplaining(false)
     } else {
-      apiRequest<AIExplanationApiPayload | null>(
-        "/rag-governance/explain-recommendation",
-        null,
-        {
-          method: "POST",
-          body: JSON.stringify({ ...evalPayload, major_code: codeToLookup }),
-        },
-      )
-        .then((aiRes) => {
-          if (!mounted || !aiRes) return
-          let cleanDetail = (aiRes.detailed_explanation || "").trim()
-          if (cleanDetail.startsWith("{")) {
+      const explanationCacheKey = `careerguide:ai_explanation:${codeToLookup}:${user?.id || "guest"}:${JSON.stringify(evalPayload.riasec_answers || {})}:${JSON.stringify(evalPayload.grades_by_subject || {})}`
+      const cachedExplanation = sessionStorage.getItem(explanationCacheKey)
+      if (cachedExplanation) {
+        setAiExplanationText(cachedExplanation)
+        setAiExplaining(false)
+      } else {
+        apiRequest<AIExplanationApiPayload | null>(
+          "/rag-governance/explain-recommendation",
+          null,
+          {
+            method: "POST",
+            body: JSON.stringify({ ...evalPayload, major_code: codeToLookup }),
+          },
+        )
+          .then((aiRes) => {
+            if (!mounted || !aiRes) return
+            let cleanDetail = (aiRes.detailed_explanation || "").trim()
+            if (cleanDetail.startsWith("{")) {
+              try {
+                const parsed = JSON.parse(cleanDetail)
+                if (parsed.detailed_explanation) {
+                  cleanDetail = String(parsed.detailed_explanation)
+                }
+              } catch {
+                const match = cleanDetail.match(
+                  /"detailed_explanation"\s*:\s*"((?:\\"|[^"])*)"/,
+                )
+                if (match?.[1]) {
+                  cleanDetail = match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"')
+                }
+              }
+            }
+
+            const lines: string[] = []
+            if (cleanDetail) {
+              lines.push(cleanDetail)
+            }
+            if (!aiRes.is_ai_generated) {
+              if (!cleanDetail.includes("###") && !cleanDetail.includes("##")) {
+                lines.unshift("### Đối chiếu hồ sơ và ngành học", "")
+              }
+              if (aiRes.riasec_alignment) {
+                lines.push(`- **Sở thích nghề nghiệp:** ${aiRes.riasec_alignment}`)
+              }
+              if (aiRes.academic_alignment) {
+                lines.push(`- **Năng lực học tập:** ${aiRes.academic_alignment}`)
+              }
+              if (aiRes.strengths && aiRes.strengths.length > 0) {
+                lines.push(
+                  `- **Điểm mạnh nổi bật:** ${aiRes.strengths.join(" · ")}`,
+                )
+              }
+            }
+            const formattedText = lines.join("\n\n")
+            setAiExplanationText(formattedText)
             try {
-              const parsed = JSON.parse(cleanDetail)
-              if (parsed.detailed_explanation) {
-                cleanDetail = String(parsed.detailed_explanation)
-              }
-            } catch {
-              const match = cleanDetail.match(
-                /"detailed_explanation"\s*:\s*"((?:\\"|[^"])*)"/,
-              )
-              if (match?.[1]) {
-                cleanDetail = match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"')
-              }
-            }
-          }
+              sessionStorage.setItem(explanationCacheKey, formattedText)
+            } catch {}
 
-          const lines: string[] = []
-          if (cleanDetail) {
-            lines.push(cleanDetail)
-          }
-          if (!aiRes.is_ai_generated) {
-            if (!cleanDetail.includes("###") && !cleanDetail.includes("##")) {
-              lines.unshift("### Đối chiếu hồ sơ và ngành học", "")
+            if (
+              aiRes.recommended_focus_areas &&
+              aiRes.recommended_focus_areas.length > 0
+            ) {
+              setMajor((prev) => ({
+                ...prev,
+                gaps:
+                  prev.gaps && prev.gaps.length > 0
+                    ? prev.gaps
+                    : aiRes.recommended_focus_areas!,
+              }))
             }
-            if (aiRes.riasec_alignment) {
-              lines.push(`- **Sở thích nghề nghiệp:** ${aiRes.riasec_alignment}`)
-            }
-            if (aiRes.academic_alignment) {
-              lines.push(`- **Năng lực học tập:** ${aiRes.academic_alignment}`)
-            }
-            if (aiRes.strengths && aiRes.strengths.length > 0) {
-              lines.push(
-                `- **Điểm mạnh nổi bật:** ${aiRes.strengths.join(" · ")}`,
-              )
-            }
-          }
-          const formattedText = lines.join("\n\n")
-          setAiExplanationText(formattedText)
-          try {
-            sessionStorage.setItem(explanationCacheKey, formattedText)
-          } catch {}
-
-          if (
-            aiRes.recommended_focus_areas &&
-            aiRes.recommended_focus_areas.length > 0
-          ) {
-            setMajor((prev) => ({
-              ...prev,
-              gaps:
-                prev.gaps && prev.gaps.length > 0
-                  ? prev.gaps
-                  : aiRes.recommended_focus_areas!,
-            }))
-          }
-        })
-        .catch(() => {})
-        .finally(() => {
-          if (mounted) setAiExplaining(false)
-        })
+          })
+          .catch(() => {})
+          .finally(() => {
+            if (mounted) setAiExplaining(false)
+          })
+      }
     }
 
     return () => {
@@ -308,6 +314,7 @@ export function MajorDetail() {
     assessment.answers,
     assessment.scores,
     assessment.cognitive,
+    hasCompleteAssessment,
     user?.gender,
     user?.grade_level,
   ])
@@ -378,14 +385,6 @@ export function MajorDetail() {
               )}
               {isSaved ? "Đã lưu vào danh mục" : "Lưu ngành học"}
             </button>
-
-            <Link
-              to={`/roadmap?major=${major.code}&name=${encodeURIComponent(major.name)}`}
-              className="inline-flex items-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 py-2 text-xs font-bold text-sky-700 transition hover:bg-sky-100"
-            >
-              <Compass size={14} />
-              <span>Lộ trình 4 tuần · Coming Soon</span>
-            </Link>
           </div>
         </div>
 
@@ -481,7 +480,14 @@ export function MajorDetail() {
           {/* Main Column: Explanation, Competency Gaps & Skill Analysis (8 cols on xl, 7 cols on lg) */}
           <div className="lg:col-span-7 xl:col-span-8 space-y-6">
             <ExplanationBox
-              content={aiExplanationText || (hasEvaluation ? major.explanation : "Chưa có kết quả đối chiếu hồ sơ. Hãy thử lại khi dịch vụ hoạt động.")}
+              content={
+                !hasCompleteAssessment
+                  ? "Chưa đủ dữ liệu trắc nghiệm để phân tích mức độ phù hợp với ngành này. Hãy hoàn thành đủ 3 phần trắc nghiệm (30 câu Sở thích, 8 câu Tư duy và ít nhất 1 tổ hợp 3 môn hợp lệ) để mở khóa chức năng phân tích."
+                  : aiExplanationText ||
+                    (hasEvaluation
+                      ? major.explanation
+                      : "Chưa có kết quả đối chiếu hồ sơ. Hãy thử lại khi dịch vụ hoạt động.")
+              }
               loading={aiExplaining}
             />
 
@@ -494,7 +500,7 @@ export function MajorDetail() {
             )}
           </div>
 
-          {/* Sticky Career/Curriculum Info Cards + Roadmap Launcher (4 cols on xl, 5 cols on lg) */}
+          {/* Sticky Career/Curriculum Info Cards (4 cols on xl, 5 cols on lg) */}
           <div className="lg:col-span-5 xl:col-span-4 space-y-6 lg:sticky lg:top-20">
             <MajorInfoCards
               training={majorInsight?.training_content || null}
@@ -502,36 +508,6 @@ export function MajorDetail() {
               subjectBlocks={blockText}
               loading={insightLoading}
             />
-
-            {/* Quick 4-Week Roadmap Coming Soon Card */}
-            <Card className="rounded-3xl border border-sky-100 bg-gradient-to-br from-white/95 to-sky-50/50 p-6 shadow-xs">
-              <div className="flex items-start gap-3.5">
-                <div className="grid size-10 shrink-0 place-items-center rounded-2xl bg-sky-600 text-white shadow-sm">
-                  <CircleCheck size={20} />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h3 className="text-sm font-extrabold text-slate-900">
-                      Lộ trình 4 tuần
-                    </h3>
-                    <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-sky-700">
-                      Coming Soon
-                    </span>
-                  </div>
-                  <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
-                    Tính năng lộ trình hành động 4 tuần theo ngành {major.name} đang được phát triển và sẽ sớm ra mắt.
-                  </p>
-                </div>
-              </div>
-              <Link
-                to={`/roadmap?major=${major.code}&name=${encodeURIComponent(major.name)}`}
-                className="mt-4 block"
-              >
-                <Button variant="secondary" icon={ArrowRight} className="w-full justify-center text-xs">
-                  Lộ trình 4 tuần · Coming Soon
-                </Button>
-              </Link>
-            </Card>
           </div>
         </div>
       </PageContainer>

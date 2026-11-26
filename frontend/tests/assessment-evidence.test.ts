@@ -1,6 +1,12 @@
 import { test } from "node:test"
 import assert from "node:assert/strict"
-import { completeTranscriptBlocks, getValidRiasecAnswer, summarizeAssessmentAttempt } from "../src/utils/assessmentEvidence.ts"
+import {
+  CANONICAL_COGNITIVE_SLOTS,
+  completeTranscriptBlocks,
+  evaluateAssessmentCompleteness,
+  getValidRiasecAnswer,
+  summarizeAssessmentAttempt,
+} from "../src/utils/assessmentEvidence.ts"
 
 const complete = (value: number) => Object.fromEntries("RIASEC".split("").flatMap(code => Array.from({ length: 5 }, (_, index) => [`${code}${index + 1}`, value])))
 test("hồ sơ rỗng không sinh điểm phù hợp hay ngành giả", () => {
@@ -39,4 +45,92 @@ test("đủ ba môn đúng tổ hợp mới tính tổng, giữ độ chính xá
 test("điểm môn mâu thuẫn không tạo ra tổ hợp hợp lệ", () => {
   const scores = [ ["Toán", 8], ["Toán", 9], ["Vật lý", 8], ["Hóa học", 8] ].map(([subject, score]) => ({ subject: String(subject), score: Number(score), zScore: 0 }))
   assert.deepEqual(completeTranscriptBlocks(scores), [])
+})
+
+const fullCognitiveByCode = () =>
+  Object.fromEntries(CANONICAL_COGNITIVE_SLOTS.map((slot) => [slot.code, "A"]))
+
+const blockA00Scores = { "Toán": 8, "Vật lý": 7.5, "Hóa học": 7 }
+
+test("hồ sơ rỗng bị chặn phân tích và báo thiếu cả 3 phần", () => {
+  const res = evaluateAssessmentCompleteness({ answers: {}, cognitive: {}, scores: {} })
+  assert.equal(res.isComplete, false)
+  assert.deepEqual(res.missingSteps, [1, 2, 3])
+  assert.equal(res.missingItems.length, 3)
+})
+
+test("thiếu 1 câu RIASEC (29/30) vẫn bị chặn phân tích dù đủ Tư duy và Điểm", () => {
+  const answers = complete(4)
+  delete answers.C5
+  const res = evaluateAssessmentCompleteness({
+    answers,
+    cognitive: fullCognitiveByCode(),
+    scores: blockA00Scores,
+  })
+  assert.equal(res.riasecAnswered, 29)
+  assert.equal(res.riasecComplete, false)
+  assert.equal(res.isComplete, false)
+  assert.deepEqual(res.missingSteps, [1])
+})
+
+test("thiếu 1 câu Tư duy (7/8) bị chặn phân tích dù đủ RIASEC và Điểm", () => {
+  const cognitive = fullCognitiveByCode()
+  delete cognitive.COG_8
+  const res = evaluateAssessmentCompleteness({
+    answers: complete(4),
+    cognitive,
+    scores: blockA00Scores,
+  })
+  assert.equal(res.cognitiveAnswered, 7)
+  assert.equal(res.cognitiveComplete, false)
+  assert.equal(res.isComplete, false)
+  assert.deepEqual(res.missingSteps, [2])
+})
+
+test("nhập 2 môn chưa đủ tổ hợp 3 môn bị chặn phân tích ở bước Điểm số", () => {
+  const res = evaluateAssessmentCompleteness({
+    answers: complete(4),
+    cognitive: fullCognitiveByCode(),
+    scores: { "Toán": 8, "Vật lý": 8 },
+  })
+  assert.equal(res.completeBlocks.length, 0)
+  assert.equal(res.scoresComplete, false)
+  assert.equal(res.isComplete, false)
+  assert.deepEqual(res.missingSteps, [3])
+})
+
+test("có điểm ngoài khoảng 0-10 bị chặn dù đã đủ 1 tổ hợp hợp lệ", () => {
+  const res = evaluateAssessmentCompleteness({
+    answers: complete(4),
+    cognitive: fullCognitiveByCode(),
+    scores: { ...blockA00Scores, "Tiếng Anh": 11 },
+  })
+  assert.equal(res.hasInvalidScores, true)
+  assert.equal(res.scoresComplete, false)
+  assert.equal(res.isComplete, false)
+  assert.deepEqual(res.missingSteps, [3])
+})
+
+test("đủ 30 câu RIASEC, 8 câu Tư duy theo nhiều dạng khóa và 1 tổ hợp hợp lệ (C03/D01) cho phép phân tích", () => {
+  const cognitiveByIndex = Object.fromEntries(
+    CANONICAL_COGNITIVE_SLOTS.map((_, idx) => [`2-${idx}`, "B"]),
+  )
+  const cognitiveByDim = Object.fromEntries(
+    CANONICAL_COGNITIVE_SLOTS.map((slot) => [slot.dimension, "C"]),
+  )
+  for (const cog of [fullCognitiveByCode(), cognitiveByIndex, cognitiveByDim]) {
+    const resC03 = evaluateAssessmentCompleteness({
+      answers: complete(4),
+      cognitive: cog,
+      scores: [
+        { subject: "Ngữ văn", score: 8, zScore: null },
+        { subject: "Toán", score: 8.5, zScore: null },
+        { subject: "Lịch sử", score: 7.5, zScore: null },
+      ],
+    })
+    assert.equal(resC03.isComplete, true)
+    assert.deepEqual(resC03.missingSteps, [])
+    assert.deepEqual(resC03.missingItems, [])
+    assert.equal(resC03.completeBlocks[0].code, "C03")
+  }
 })

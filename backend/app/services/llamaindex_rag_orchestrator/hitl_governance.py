@@ -7,8 +7,10 @@ import uuid
 from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Optional
+from urllib.parse import urlsplit
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 from sqlalchemy import select, update, delete
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -20,10 +22,52 @@ from app.models.roadmap import MajorRoadmap
 from app.models.vector import KnowledgeEmbedding
 from app.models.identity import User, UserRole
 from app.models.taxonomy import Major, SubjectBlock, MajorSubjectBlock
+from app.schemas.rag import ExtractedRoadmapPayload
 from app.schemas.staging import StagingRecordUpdate, StagingRecordReview
 from app.services.ai_config import adapter
 from app.services.ai_config.service import resolve_snapshot
-from app.services.llamaindex_rag_orchestrator.stream_b_discovery import is_url_whitelisted, validate_roadmap_evidence
+
+
+def is_url_whitelisted(url: str, whitelisted_domains: list[str]) -> bool:
+    """Chỉ nhận URL HTTPS của miền học thuật, không có userinfo hay fragment."""
+    if not isinstance(url, str) or len(url) > 1000 or re.search(r"[\\\s\x00-\x1f]", url):
+        return False
+    try:
+        parsed = urlsplit(url)
+        if parsed.scheme != "https" or parsed.username is not None or parsed.password is not None or parsed.fragment or parsed.port not in (None, 443):
+            return False
+        host = (parsed.hostname or "").encode("idna").decode("ascii").lower()
+        return any(host == domain.lower() or host.endswith("." + domain.lower()) for domain in whitelisted_domains)
+    except (ValueError, UnicodeError):
+        return False
+
+
+def validate_roadmap_evidence(data: dict, major_code: str, source_title: str, source_url: str, source_content: str) -> ExtractedRoadmapPayload:
+    """Kiểm tra schema/ID và chỉ chấp nhận citation có trong nguồn đã cung cấp."""
+    try:
+        parsed = ExtractedRoadmapPayload.model_validate(data, strict=True)
+    except (ValidationError, TypeError):
+        raise HTTPException(422, "Lộ trình trích xuất chưa đúng schema; cần kiểm tra lại nguồn.") from None
+    if not re.fullmatch(r"[0-9]{7}", major_code) or parsed.major_code != major_code:
+        raise HTTPException(422, "Mã ngành trích xuất không khớp ngành đang xử lý.")
+    if not is_url_whitelisted(source_url, settings.WHITELISTED_SEARCH_DOMAINS) or parsed.source_url != source_url or parsed.source_title != source_title:
+        raise HTTPException(422, "Nguồn trích xuất không khớp tài liệu đã cung cấp.")
+    if not source_content or len(source_content.strip()) < 50:
+        raise HTTPException(422, "Chưa có đủ nội dung nguồn để kiểm chứng lộ trình.")
+    if not 1 <= len(parsed.milestones) <= 12 or len(parsed.prerequisite_knowledge) > 50 or len(parsed.target_skills) > 50 or len(parsed.reference_materials) > 20:
+        raise HTTPException(422, "Kích thước lộ trình vượt giới hạn hoặc không có mốc học tập.")
+    if [milestone.step for milestone in parsed.milestones] != list(range(1, len(parsed.milestones) + 1)):
+        raise HTTPException(422, "Thứ tự mốc học tập phải liên tục từ 1.")
+    allowed_urls = {source_url}
+    allowed_urls.update(url.rstrip(".,;:") for url in re.findall(r'https://[^\s<>"\)]+', source_content))
+    for reference in parsed.reference_materials:
+        if reference.url not in allowed_urls or not is_url_whitelisted(reference.url, settings.WHITELISTED_SEARCH_DOMAINS):
+            raise HTTPException(422, "Lộ trình chứa tài liệu tham khảo không có trong nguồn.")
+    if parsed.source_page and parsed.source_page not in source_content:
+        raise HTTPException(422, "Không tìm thấy trang hoặc mục được trích dẫn trong nội dung nguồn.")
+    if len(parsed.model_dump_json()) > 48000:
+        raise HTTPException(422, "Nội dung lộ trình vượt giới hạn.")
+    return parsed
 
 
 def generate_deterministic_embedding(text: str, dimension: int = 1536) -> list[float]:
