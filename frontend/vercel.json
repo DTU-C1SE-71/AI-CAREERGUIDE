@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/(.*)",
-      "destination": "https://ai-careerguide-bny3.onrender.com/api/$1"
+      "destination": "https://ai-careerguide-backend-production.up.railway.app/api/$1"
     },
     {
       "source": "/((?!api/).*)",
