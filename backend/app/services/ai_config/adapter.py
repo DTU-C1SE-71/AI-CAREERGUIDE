@@ -8,7 +8,7 @@ import random
 import threading
 import time
 import weakref
-from typing import Callable, TypeVar
+from typing import AsyncIterator, Callable, TypeVar
 from urllib.parse import quote, urlsplit
 import httpx
 from app.core.ai_runtime import AIConfigError, ConfigSnapshot, canonical_target, resolve_target_addresses, validate_model, validate_credential
@@ -346,6 +346,83 @@ async def chat(snapshot: ConfigSnapshot, messages: list[dict], *, max_tokens: in
         timeout=timeout,
         post_process=lambda payload: _chat_text(payload, allow_empty_retry=True),
     )
+
+
+async def chat_stream(
+    snapshot: ConfigSnapshot,
+    messages: list[dict],
+    *,
+    max_tokens: int = 1024,
+    timeout: float = 90,
+) -> AsyncIterator[str]:
+    """Stream chat completion text deltas over OpenAI-compatible SSE with DNS pinning & secret redaction."""
+    _validate_snapshot(snapshot)
+    req_data = _chat_body(snapshot, messages, max_tokens, None)
+    req_data["stream"] = True
+    body = _body(req_data)
+    read_timeout = min(max(timeout, 5.0), 120.0)
+
+    async with _semaphore():
+        addresses = await asyncio.to_thread(resolve_target_addresses, snapshot.base_url, snapshot.binding)
+        url, headers, extensions = _pinned_request(snapshot, addresses[0], "/chat/completions")
+        headers["Accept"] = "text/event-stream"
+        http_timeout = httpx.Timeout(connect=15.0, read=read_timeout, write=30.0, pool=15.0)
+        try:
+            async with httpx.AsyncClient(timeout=http_timeout, follow_redirects=False, trust_env=False) as client:
+                async with client.stream("POST", url, headers=headers, content=body, extensions=extensions) as response:
+                    if 300 <= response.status_code < 400:
+                        _safe_json(b"{}", response.status_code)
+                    if response.status_code >= 400:
+                        err_chunks = bytearray()
+                        async for raw_chunk in response.aiter_bytes():
+                            err_chunks.extend(raw_chunk)
+                            if len(err_chunks) > 65536:
+                                break
+                        _safe_json(bytes(err_chunks), response.status_code)
+
+                    total_bytes = 0
+                    yielded_any = False
+                    async for raw_line in response.aiter_lines():
+                        line = raw_line.strip()
+                        if not line or line.startswith(":"):
+                            continue
+                        if not line.startswith("data:"):
+                            continue
+                        payload_str = line[5:].strip()
+                        if not payload_str:
+                            continue
+                        if payload_str == "[DONE]":
+                            break
+                        try:
+                            event = json.loads(payload_str)
+                        except ValueError:
+                            continue
+                        if not isinstance(event, dict):
+                            continue
+                        if event.get("error"):
+                            _safe_json(payload_str.encode("utf-8"), 502)
+                        choices = event.get("choices")
+                        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+                            continue
+                        delta = choices[0].get("delta")
+                        if not isinstance(delta, dict):
+                            continue
+                        content = delta.get("content")
+                        if not isinstance(content, str) or not content:
+                            continue
+                        safe_piece = _redact(content, snapshot.credential)
+                        total_bytes += len(safe_piece.encode("utf-8"))
+                        if total_bytes > _MAX_RESPONSE_BYTES:
+                            raise AIConfigError("RESPONSE_LIMIT", "Phản hồi provider vượt giới hạn.", 502)
+                        yielded_any = True
+                        yield safe_piece
+
+                    if not yielded_any:
+                        raise AIConfigError("PROTOCOL_ERROR", "Provider không trả nội dung chat hợp lệ.", 502)
+        except (asyncio.TimeoutError, httpx.TimeoutException):
+            raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ.", 504) from None
+        except httpx.RequestError:
+            raise AIConfigError("NETWORK_ERROR", "Không kết nối được máy chủ AI.", 503) from None
 
 
 def chat_sync(snapshot: ConfigSnapshot, messages: list[dict], *, max_tokens: int = 1024, timeout: float = 20, response_format: dict | None = None) -> str:

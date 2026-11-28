@@ -1,6 +1,8 @@
+import json
 import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -162,6 +164,45 @@ async def chat_with_counselor(
 ):
     """Locally gate scope before any conversational provider generation (requires login)."""
     return await service.chat_with_career_counselor(db, payload, current_user.id)
+
+
+@router.post("/chat/stream")
+async def chat_with_counselor_stream(
+    payload: AIChatRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Real-time SSE streaming endpoint for AI career counselor chat (requires login)."""
+    await service.validate_chat_access(db, payload, current_user.id)
+
+    async def event_generator():
+        try:
+            async for event in service.stream_chat_with_career_counselor(db, payload, current_user.id):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except HTTPException as exc:
+            err_payload = {
+                "type": "error",
+                "status": exc.status_code,
+                "message": str(exc.detail) if isinstance(exc.detail, str) else "Không thể xử lý yêu cầu.",
+            }
+            yield f"data: {json.dumps(err_payload, ensure_ascii=False)}\n\n"
+        except Exception:
+            err_payload = {
+                "type": "error",
+                "status": 500,
+                "message": "Đã xảy ra lỗi khi truyền phản hồi AI.",
+            }
+            yield f"data: {json.dumps(err_payload, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/chat/sessions", response_model=List[ChatSessionSummary])

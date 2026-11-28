@@ -32,6 +32,8 @@ from app.services.llamaindex_rag_orchestrator.guidance_rag import (
     semantic_search_chunks,
     explain_recommendation_with_ai,
     chat_with_career_counselor,
+    validate_chat_access,
+    stream_chat_with_career_counselor,
     get_llm_status,
 )
 

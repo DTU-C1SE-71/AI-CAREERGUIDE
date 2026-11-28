@@ -603,6 +603,264 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
     )
 
 
+async def validate_chat_access(db, payload: AIChatRequest, current_user_id=None) -> None:
+    """Preflight ownership & authorization checks before starting an SSE stream."""
+    from app.services.llamaindex_rag_orchestrator.guidance_boundary import resolve_profile_owner
+    from app.services.llamaindex_rag_orchestrator.chat_history import verify_session_owner
+
+    resolve_profile_owner(payload.user_id, current_user_id)
+    if payload.assessment_id and current_user_id is None:
+        raise HTTPException(401, "Đăng nhập để xem bản đánh giá đã lưu.")
+    if payload.session_id and current_user_id is None:
+        raise HTTPException(401, "Đăng nhập để truy cập lịch sử trò chuyện đã lưu.")
+    if payload.session_id and current_user_id is not None and db is not None:
+        await verify_session_owner(db, current_user_id, payload.session_id)
+
+
+async def stream_chat_with_career_counselor(db, payload: AIChatRequest, current_user_id=None):
+    """Streams real-time SSE events (`delta`, `done`) for AI career counselor chat."""
+    from app.services.llamaindex_rag_orchestrator.guidance_boundary import (
+        guidance_facts, render_chat, forbidden_request, REDIRECT,
+    )
+    from app.services.llamaindex_rag_orchestrator.counselor_connection import verify_receipt
+    from app.services.llamaindex_rag_orchestrator.chat_scope import (
+        classify_chat_message,
+        classify_response_length,
+        local_scope_reply,
+        is_academic_question,
+        is_system_help_question,
+        response_length_guidance,
+    )
+    from app.services.llamaindex_rag_orchestrator.chat_history import persist_chat_turn
+    from app.services.llamaindex_rag_orchestrator.system_help import (
+        SECURITY_REFUSAL,
+        SECURITY_BOUNDARIES_PROMPT,
+        SYSTEM_HELP_PROMPT,
+        build_static_system_help_reply,
+    )
+    from app.services.ai_config.service import resolve_snapshot
+    from app.services.ai_config import adapter
+
+    length_mode = classify_response_length(payload.message, payload.response_length, payload.history)
+    length_directive, length_max_tokens = response_length_guidance(length_mode)
+
+    connected = await verify_receipt(db, payload.connection_revision)
+    if forbidden_request(payload.message):
+        resp = AIChatResponse(
+            reply=SECURITY_REFUSAL,
+            suggested_followups=[
+                "Cách làm bài trắc nghiệm hướng nghiệp?",
+                "Chế độ Đề xuất ngành có AI dùng để làm gì?",
+            ],
+            session_id=payload.session_id,
+            response_length_mode=length_mode,
+            is_fallback=False,
+            is_ai_generated=False,
+            response_source="verified_guidance",
+            connection_available=connected,
+            connection_revision=payload.connection_revision if connected else None,
+        )
+        yield {"type": "delta", "content": resp.reply}
+        yield {"type": "done", "data": resp.model_dump(mode="json")}
+        return
+
+    scope = classify_chat_message(payload.message, payload.history)
+    if scope != "allow":
+        local_reply = REDIRECT if scope == "redirect" else local_scope_reply(scope)
+        saved_session_id, saved_title = await persist_chat_turn(
+            db,
+            current_user_id,
+            payload.session_id,
+            payload.message,
+            local_reply,
+            response_source="verified_guidance",
+            major_code=payload.major_code,
+        )
+        resp = AIChatResponse(
+            reply=local_reply,
+            suggested_followups=["Tìm hiểu ngành An toàn thông tin", "Cách sử dụng hệ thống AI CareerGuide?"],
+            session_id=saved_session_id,
+            session_title=saved_title,
+            response_length_mode="short",
+            is_fallback=False,
+            is_ai_generated=False,
+            response_source="verified_guidance",
+            connection_available=connected,
+            connection_revision=payload.connection_revision if connected else None,
+        )
+        yield {"type": "delta", "content": resp.reply}
+        yield {"type": "done", "data": resp.model_dump(mode="json")}
+        return
+
+    system_help = is_system_help_question(payload.message, payload.history)
+    academic = (not system_help) and is_academic_question(payload.message, payload.history)
+    if system_help:
+        static_reply, followups = build_static_system_help_reply(payload.message)
+        context = None
+    elif academic:
+        static_reply = "Đây là câu hỏi học tập phù hợp. Hiện thầy/cô chưa nhận được lời giải từ AI; em có thể kiểm tra kết nối rồi gửi lại câu hỏi nhé."
+        context = payload.major_code
+        followups = ["Cho em một ví dụ dễ hiểu", "Giải thích từng bước"]
+    else:
+        facts = await guidance_facts(db, payload, current_user_id)
+        static_reply, context, followups = render_chat(payload, facts)
+    connected = await verify_receipt(db, payload.connection_revision)
+
+    generation_failed = False
+    streamed_chunks: list[str] = []
+    if connected and static_reply != REDIRECT:
+        try:
+            snapshot = await resolve_snapshot(db)
+            system_instruction = (
+                "Thầy/cô là Giáo viên Cố vấn Hướng nghiệp tận tâm của hệ thống AI CareerGuide, đồng hành cùng học sinh THPT.\n"
+                "Nhiệm vụ: Tư vấn, giải đáp câu hỏi của em học sinh về định hướng nghề nghiệp, các ngành học, "
+                "mức độ phù hợp với sở thích/năng lực, phương pháp học tập, cách sử dụng hệ thống và mục tiêu tương lai.\n\n"
+                "Quy tắc phản hồi:\n"
+                "1. Luôn tự xưng là \"thầy/cô\" và gọi học sinh là \"em\" một cách nhất quán, tự nhiên, ấm áp, có cấu trúc rõ ràng và mang tính khích lệ sư phạm.\n"
+                "2. Sử dụng thông tin từ [DỮ LIỆU THAM CHIẾU HỆ THỐNG] dưới đây làm căn cứ chuẩn xác "
+                "(về tên ngành, mã ngành, chuẩn đầu ra, điểm tham chiếu tuyển sinh, kết quả sở thích Holland nếu có). "
+                "Tuyệt đối KHÔNG tự bịa đặt điểm chuẩn hay hứa hẹn/cam kết đỗ tuyển sinh.\n"
+                "3. Trả lời trực tiếp vào trọng tâm câu hỏi của em (ví dụ: giải thích ngắn gọn bản chất ngành nghề, so sánh các ngành liên quan, hoặc hướng dẫn lộ trình từng bước), "
+                "tránh lặp lại nguyên văn tiêu đề kỹ thuật hay khuôn mẫu khô cứng của hệ thống.\n"
+                "4. Định dạng Markdown rõ ràng (dùng gạch đầu dòng, in đậm tên ngành hoặc từ khóa quan trọng) để em dễ đọc.\n"
+                "5. Nếu câu trả lời làm rõ của em thực chất nằm ngoài phạm vi học tập, hướng nghiệp, chọn ngành hoặc hướng dẫn AI CareerGuide, hãy lịch sự từ chối và hướng em quay lại đúng phạm vi hỗ trợ.\n\n"
+                f"{SECURITY_BOUNDARIES_PROMPT}"
+            )
+
+            if system_help:
+                system_instruction = f"{SYSTEM_HELP_PROMPT}\n\n{length_directive}"
+            elif academic:
+                system_instruction = (
+                    "Thầy/cô là Giáo viên Cố vấn Học tập trong AI CareerGuide, hỗ trợ kiến thức phổ thông và lập trình cho học sinh.\n"
+                    "Luôn tự xưng \"thầy/cô\" và gọi học sinh là \"em\" một cách nhất quán, gần gũi và sư phạm.\n"
+                    "Trả lời trực tiếp câu hỏi hiện tại bằng tiếng Việt, rõ ràng và đúng trình độ của em.\n"
+                    "Với phép tính hoặc biểu thức ngắn, hãy giải hoặc tính kết quả; không bắt buộc em phải nói từ 'học'.\n"
+                    "Với khái niệm, nêu định nghĩa dễ hiểu và ví dụ phù hợp. Với bài tập, trình bày các bước chính. "
+                    "Với lập trình, cung cấp mã đúng ngôn ngữ yêu cầu và giải thích phù hợp; nếu thiếu dữ kiện, nêu giả định hoặc hỏi lại em cụ thể.\n"
+                    "Không chuyển câu hỏi học tập sang tư vấn chọn ngành, không yêu cầu chọn ngành và không lặp lại "
+                    "các lần từ chối nhầm trước đó. Không suy ra năng lực hay mức phù hợp nghề từ một câu hỏi kiến thức.\n"
+                    "Không bịa dữ kiện thời sự, nguồn tài liệu hoặc thông tin chưa được cung cấp.\n"
+                    "Nếu câu trả lời làm rõ của em thực chất nằm ngoài phạm vi học tập, hướng nghiệp, chọn ngành hoặc hướng dẫn AI CareerGuide, hãy lịch sự từ chối và hướng em quay lại đúng phạm vi hỗ trợ.\n\n"
+                    f"{length_directive}\n\n"
+                    f"{SECURITY_BOUNDARIES_PROMPT}"
+                )
+            else:
+                system_instruction += f"\n\n{length_directive}\n\n[DỮ LIỆU THAM CHIẾU HỆ THỐNG]:\n{static_reply}"
+            messages = [{"role": "system", "content": system_instruction}]
+
+            if payload.history:
+                related_history = []
+                last_user_allowed = False
+                for entry in payload.history[-6:]:
+                    if entry.role == "user":
+                        last_user_allowed = (not forbidden_request(entry.content) and
+                                             classify_chat_message(entry.content, related_history) == "allow" and
+                                             (not academic or is_academic_question(entry.content, related_history)))
+                    if not last_user_allowed:
+                        continue
+                    if entry.content and entry.role in {"user", "assistant"}:
+                        clean_content = sanitize_pii(entry.content)
+                        if clean_content.strip():
+                            messages.append({"role": entry.role, "content": clean_content[:1500]})
+                            related_history.append(entry)
+
+            user_msg = sanitize_pii(payload.message).strip()
+            messages.append({"role": "user", "content": user_msg})
+
+            async for chunk in adapter.chat_stream(
+                snapshot,
+                messages,
+                max_tokens=min(settings.LLM_MAX_TOKENS, length_max_tokens),
+                timeout=min(settings.LLM_TIMEOUT_SECONDS, 90.0),
+            ):
+                streamed_chunks.append(chunk)
+                yield {"type": "delta", "content": chunk}
+
+            cleaned_reply = "".join(streamed_chunks).strip()
+            if cleaned_reply:
+                connected_after = await verify_receipt(db, payload.connection_revision)
+                saved_session_id, saved_title = await persist_chat_turn(
+                    db,
+                    current_user_id,
+                    payload.session_id,
+                    payload.message,
+                    cleaned_reply,
+                    response_source="ai_advisor",
+                    major_code=context,
+                )
+                resp = AIChatResponse(
+                    reply=cleaned_reply,
+                    suggested_followups=followups,
+                    context_major_code=context,
+                    session_id=saved_session_id,
+                    session_title=saved_title,
+                    response_length_mode=length_mode,
+                    is_fallback=False,
+                    is_ai_generated=True,
+                    response_source="ai_advisor",
+                    connection_available=connected_after,
+                    connection_revision=payload.connection_revision if connected_after else None,
+                )
+                yield {"type": "done", "data": resp.model_dump(mode="json")}
+                return
+        except Exception as exc:
+            logger.warning("LLM streaming failed in career chat: %s", exc)
+            partial_reply = "".join(streamed_chunks).strip()
+            if partial_reply:
+                saved_session_id, saved_title = await persist_chat_turn(
+                    db,
+                    current_user_id,
+                    payload.session_id,
+                    payload.message,
+                    partial_reply,
+                    response_source="ai_advisor",
+                    major_code=context,
+                )
+                resp = AIChatResponse(
+                    reply=partial_reply,
+                    suggested_followups=followups,
+                    context_major_code=context,
+                    session_id=saved_session_id,
+                    session_title=saved_title,
+                    response_length_mode=length_mode,
+                    is_fallback=False,
+                    is_ai_generated=True,
+                    response_source="ai_advisor",
+                    connection_available=False,
+                    connection_revision=None,
+                )
+                yield {"type": "done", "data": resp.model_dump(mode="json")}
+                return
+            generation_failed = True
+            connected = False
+
+    fallback_source = "offline_guidance" if generation_failed else "verified_guidance"
+    saved_session_id, saved_title = await persist_chat_turn(
+        db,
+        current_user_id,
+        payload.session_id,
+        payload.message,
+        static_reply,
+        response_source=fallback_source,
+        major_code=context,
+    )
+    resp = AIChatResponse(
+        reply=static_reply,
+        suggested_followups=followups,
+        context_major_code=context,
+        session_id=saved_session_id,
+        session_title=saved_title,
+        response_length_mode=length_mode,
+        is_fallback=generation_failed,
+        is_ai_generated=False,
+        response_source=fallback_source,
+        connection_available=connected,
+        connection_revision=payload.connection_revision if connected else None,
+    )
+    yield {"type": "delta", "content": resp.reply}
+    yield {"type": "done", "data": resp.model_dump(mode="json")}
+
+
 async def get_llm_status(db):
     """Compatibility facade: cùng nguồn ENV với Admin, không đọc settings ghép trường."""
     from app.services.ai_config.service import get_status

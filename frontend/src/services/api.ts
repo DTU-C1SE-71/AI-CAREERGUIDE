@@ -102,3 +102,56 @@ export function authPost<T>(path: string, body: unknown): Promise<T> {
 export function authPut<T>(path: string, body: unknown): Promise<T> {
   return requestJSON<T>(path, { method: "PUT", body: JSON.stringify(body) })
 }
+
+/** Mở kết nối SSE streaming không buffer toàn bộ body; caller đọc response.body trực tiếp. */
+export async function apiStreamFetch(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs = 120000,
+): Promise<Response> {
+  const token = currentToken()
+  const controller = new AbortController()
+  let timedOut = false
+  const cancel = () => controller.abort()
+  const onTimeout = () => {
+    timedOut = true
+    controller.abort()
+  }
+  init.signal?.addEventListener("abort", cancel, { once: true })
+  if (init.signal?.aborted) controller.abort()
+  const timer = window.setTimeout(onTimeout, timeoutMs)
+  const headers = new Headers(init.headers)
+  if (token) headers.set("Authorization", `Bearer ${token}`)
+  if (!headers.has("Accept")) headers.set("Accept", "text/event-stream")
+  if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json")
+  }
+  try {
+    const response = await fetch(path.startsWith("/api/") ? path : `/api${path}`, {
+      ...init,
+      headers,
+      signal: controller.signal,
+      cache: "no-store",
+    })
+    window.clearTimeout(timer)
+    if (currentToken() !== token) throw new DOMException("Phiên đăng nhập đã thay đổi.", "AbortError")
+    if (response.status === 401) {
+      expireSession(token, "Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.")
+      throw new ApiError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.", 401, "UNAUTHORIZED")
+    }
+    if (response.status === 403 && token && !path.endsWith("/identity/me")) {
+      window.dispatchEvent(new CustomEvent(SESSION_CHANGED_EVENT))
+    }
+    return response
+  } catch (error) {
+    window.clearTimeout(timer)
+    if (timedOut) {
+      throw new ApiError("Máy chủ phản hồi chậm (có thể đang khởi động lại). Vui lòng thử lại sau vài giây.", 504, "TIMEOUT")
+    }
+    if (error instanceof DOMException && error.name === "AbortError") throw error
+    if (error instanceof ApiError) throw error
+    throw new ApiError("Không kết nối được máy chủ. Kiểm tra mạng và thử lại.")
+  } finally {
+    init.signal?.removeEventListener("abort", cancel)
+  }
+}

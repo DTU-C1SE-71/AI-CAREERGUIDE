@@ -39,7 +39,7 @@ import {
   serializePersistedActiveChat,
 } from "../utils/chatSessionState"
 import { MOET_435_MAJORS } from "../data/moetMajors435"
-import { ApiError, requestJSON } from "../services/api"
+import { ApiError, apiStreamFetch, requestJSON } from "../services/api"
 
 interface AIChatAdvisorProps {
   open: boolean
@@ -221,6 +221,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
   )
   const [input, setInput] = useState("")
   const [typing, setTyping] = useState(false)
+  const [streamingMsgId, setStreamingMsgId] = useState<string | null>(null)
   const [fullscreen, setFullscreen] = useState(false)
   const [context, setContext] = useState(() => initialPersisted?.context || "")
   const [effort, setEffort] = useState<ReasoningEffort>(
@@ -629,11 +630,30 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
     setMessages(nextWithUser)
     setInput("")
     setTyping(true)
+    setStreamingMsgId(null)
     chatBusy.current = true
     focusInput()
     const version = ++requestVersion.current
     const controller = new AbortController()
     activeRequest.current = controller
+
+    type ChatTurnPayload = {
+      reply: string
+      suggested_followups?: string[]
+      context_major_code?: string | null
+      session_id?: string | null
+      session_title?: string | null
+      response_length_mode?: ResponseLengthMode | null
+      is_ai_generated: boolean
+      is_fallback: boolean
+      response_source?: string
+      connection_available: boolean
+      connection_revision?: string | null
+      connection_checked_at?: string | null
+    }
+
+    const assistantMsgId = `local-a-${++messageSequence.current}-${Date.now()}`
+    let streamedText = ""
 
     try {
       const history = baseMessages.slice(-10).map((m) => ({
@@ -641,46 +661,139 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
         content: m.content.slice(0, 4000),
       }))
 
-      const response = await requestJSON<{
-        reply: string
-        suggested_followups?: string[]
-        context_major_code?: string | null
-        session_id?: string | null
-        session_title?: string | null
-        response_length_mode?: ResponseLengthMode | null
-        is_ai_generated: boolean
-        is_fallback: boolean
-        response_source?: string
-        connection_available: boolean
-        connection_revision?: string | null
-        connection_checked_at?: string | null
-      }>(
-        "/rag-governance/chat",
+      const requestPayload = {
+        ...buildEvaluateProfilePayload(assessment),
+        message: trimmed,
+        major_code: context || null,
+        session_id: isAuthenticated ? activeSessionId : null,
+        history,
+        connection_revision: connection.revisionToken,
+        response_length: effort,
+      }
+
+      let response: ChatTurnPayload | null = null
+      const streamRes = await apiStreamFetch(
+        "/rag-governance/chat/stream",
         {
           method: "POST",
           signal: controller.signal,
-          body: JSON.stringify({
-            ...buildEvaluateProfilePayload(assessment),
-            message: trimmed,
-            major_code: context || null,
-            session_id: isAuthenticated ? activeSessionId : null,
-            history,
-            connection_revision: connection.revisionToken,
-            response_length: effort,
-          }),
+          body: JSON.stringify(requestPayload),
         },
         CHAT_TIMEOUT_MS,
       )
 
+      if (streamRes.status === 404 || streamRes.status === 405 || !streamRes.body) {
+        response = await requestJSON<ChatTurnPayload>(
+          "/rag-governance/chat",
+          {
+            method: "POST",
+            signal: controller.signal,
+            body: JSON.stringify(requestPayload),
+          },
+          CHAT_TIMEOUT_MS,
+        )
+      } else if (!streamRes.ok) {
+        const errData = await streamRes.json().catch(() => null)
+        const detail = errData && typeof errData === "object" && "detail" in errData ? errData.detail : null
+        const msg =
+          typeof detail === "string"
+            ? detail
+            : detail && typeof detail === "object" && "message" in detail
+              ? String(detail.message)
+              : `Không thể hoàn tất yêu cầu (HTTP ${streamRes.status}).`
+        throw new ApiError(msg, streamRes.status, `HTTP_${streamRes.status}`)
+      } else {
+        const reader = streamRes.body.getReader()
+        const decoder = new TextDecoder("utf-8")
+        let buffer = ""
+
+        const processFrame = (frame: string) => {
+          const lines = frame.split(/\r?\n/)
+          const dataLines: string[] = []
+          for (const line of lines) {
+            if (line.startsWith("data:")) {
+              dataLines.push(line.slice(5).trimStart())
+            }
+          }
+          if (dataLines.length === 0) return
+          const rawJson = dataLines.join("\n").trim()
+          if (!rawJson || rawJson === "[DONE]") return
+          let parsed: { type?: string; content?: string; data?: ChatTurnPayload; status?: number; message?: string }
+          try {
+            parsed = JSON.parse(rawJson)
+          } catch {
+            return
+          }
+          if (parsed.type === "delta" && typeof parsed.content === "string" && parsed.content) {
+            streamedText += parsed.content
+            const currentText = streamedText
+            setStreamingMsgId(assistantMsgId)
+            setMessages((prev) => {
+              const exists = prev.some((m) => m.id === assistantMsgId)
+              if (exists) {
+                return prev.map((m) =>
+                  m.id === assistantMsgId ? { ...m, content: currentText } : m,
+                )
+              }
+              return [
+                ...prev,
+                {
+                  id: assistantMsgId,
+                  role: "assistant",
+                  content: currentText,
+                  createdAt: new Date().toISOString(),
+                },
+              ]
+            })
+          } else if (parsed.type === "done" && parsed.data) {
+            response = parsed.data
+          } else if (parsed.type === "error") {
+            throw new ApiError(
+              parsed.message || "Đã xảy ra lỗi khi truyền phản hồi AI.",
+              parsed.status || 500,
+            )
+          }
+        }
+
+        while (true) {
+          const { done, value } = await reader.read()
+          if (version !== requestVersion.current || controller.signal.aborted) {
+            try {
+              await reader.cancel()
+            } catch {
+              // ignore cancel error
+            }
+            return
+          }
+          if (value) {
+            buffer += decoder.decode(value, { stream: !done })
+            const frames = buffer.split(/\r?\n\r?\n/)
+            buffer = frames.pop() ?? ""
+            for (const frame of frames) {
+              processFrame(frame)
+            }
+          }
+          if (done) {
+            buffer += decoder.decode()
+            if (buffer.trim()) {
+              processFrame(buffer)
+            }
+            break
+          }
+        }
+      }
+
       if (version !== requestVersion.current || controller.signal.aborted) {
         return
       }
-      if (typeof response.reply !== "string" || !response.reply.trim()) {
+      const finalReply = response?.reply?.trim() || streamedText.trim()
+      if (!finalReply) {
         throw new Error("Missing guidance response")
       }
       const nextMajorCode = response?.context_major_code || context || ""
       setContext(nextMajorCode)
       if (
+        response &&
         !response.connection_available &&
         (response.is_ai_generated || response.is_fallback)
       ) {
@@ -696,22 +809,23 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
 
       const replyIso = new Date().toISOString()
       const assistantMsg: AdvisorMessage = {
-        id: `local-a-${++messageSequence.current}-${Date.now()}`,
+        id: assistantMsgId,
         role: "assistant",
-        content: response.reply,
-        source: response.is_fallback
+        content: finalReply,
+        source: response?.is_fallback
           ? "offline_guidance"
-          : response.is_ai_generated
-            ? undefined
-            : "verified_guidance",
-        lengthMode: response.response_length_mode || undefined,
+          : response && !response.is_ai_generated
+            ? "verified_guidance"
+            : undefined,
+        lengthMode: response?.response_length_mode || undefined,
         createdAt: replyIso,
       }
       const finalMessages = [...nextWithUser, assistantMsg]
       setMessages(finalMessages)
+      setStreamingMsgId(null)
 
       // Update session history immediately
-      if (isAuthenticated && response.session_id) {
+      if (isAuthenticated && response?.session_id) {
         const sid = response.session_id
         setActiveSessionId(sid)
         setSessions((prev) => {
@@ -719,36 +833,16 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
           const updatedItem: ChatSessionItem = {
             id: sid,
             title:
-              response.session_title ||
+              response?.session_title ||
               existing?.title ||
               makeTitle(trimmed),
             major_code: nextMajorCode || existing?.major_code || null,
             message_count: (existing?.message_count || 0) + 2,
-            last_message_preview: makePreview(response.reply),
+            last_message_preview: makePreview(finalReply),
             created_at: existing?.created_at || nowIso,
             updated_at: replyIso,
           }
           return [updatedItem, ...prev.filter((s) => s.id !== sid)]
-        })
-      } else if (!isAuthenticated) {
-        const sid = activeSessionId || `guest-${Date.now()}`
-        setActiveSessionId(sid)
-        const storedMessages = finalMessages.filter((m) => m.id !== "welcome")
-        setSessions((prev) => {
-          const existing = prev.find((s) => s.id === sid)
-          const updatedItem: ChatSessionItem = {
-            id: sid,
-            title: existing?.title || makeTitle(trimmed),
-            major_code: nextMajorCode || existing?.major_code || null,
-            message_count: storedMessages.length,
-            last_message_preview: makePreview(response.reply),
-            created_at: existing?.created_at || nowIso,
-            updated_at: replyIso,
-            localMessages: storedMessages,
-          }
-          const next = [updatedItem, ...prev.filter((s) => s.id !== sid)]
-          writeGuestSessions(next)
-          return next
         })
       }
     } catch (error) {
@@ -762,38 +856,45 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
       } else {
         markOffline(unavailableReply)
       }
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `local-err-${++messageSequence.current}-${Date.now()}`,
-          role: "assistant",
-          content: unavailableReply,
-        },
-      ])
+      if (!streamedText.trim()) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            id: `local-err-${++messageSequence.current}-${Date.now()}`,
+            role: "assistant",
+            content: unavailableReply,
+          },
+        ])
+      }
     } finally {
       if (version === requestVersion.current) {
         chatBusy.current = false
         setTyping(false)
+        setStreamingMsgId(null)
       }
     }
   }
 
   const stopGeneration = () => {
     if (!typing && !chatBusy.current) return
+    const hadStreamedContent = Boolean(streamingMsgId)
     requestVersion.current += 1
     activeRequest.current?.abort()
     activeRequest.current = null
     chatBusy.current = false
     setTyping(false)
-    setMessages((prev) => [
-      ...prev,
-      {
-        id: `local-stop-${++messageSequence.current}-${Date.now()}`,
-        role: "assistant",
-        content:
-          "Đã dừng trả lời câu hỏi này. Em có thể gửi câu hỏi mới bất cứ lúc nào nhé.",
-      },
-    ])
+    setStreamingMsgId(null)
+    if (!hadStreamedContent) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: `local-stop-${++messageSequence.current}-${Date.now()}`,
+          role: "assistant",
+          content:
+            "Đã dừng trả lời câu hỏi này. Em có thể gửi câu hỏi mới bất cứ lúc nào nhé.",
+        },
+      ])
+    }
     focusInput()
   }
 
@@ -1431,6 +1532,12 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                                 >
                                   {message.content}
                                 </Markdown>
+                                {streamingMsgId === message.id && typing && (
+                                  <span
+                                    aria-hidden="true"
+                                    className="ml-0.5 inline-block h-4 w-1.5 animate-pulse rounded-xs bg-sky-500 align-middle"
+                                  />
+                                )}
                               </div>
                             </>
                           ) : (
@@ -1442,7 +1549,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                       </motion.div>
                     ))}
 
-                    {typing && (
+                    {typing && !streamingMsgId && (
                       <div className="flex items-center gap-3">
                         <span className="grid size-9 place-items-center rounded-xl bg-sky-100 text-sky-700">
                           <Sparkles size={16} />
