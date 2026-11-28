@@ -157,12 +157,11 @@ async def check_counselor_connection(
 @router.post("/chat", response_model=AIChatResponse)
 async def chat_with_counselor(
     payload: AIChatRequest,
-    current_user: Optional[User] = Depends(get_optional_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Locally gate scope before any conversational provider generation."""
-    user_id = current_user.id if current_user else None
-    return await service.chat_with_career_counselor(db, payload, user_id)
+    """Locally gate scope before any conversational provider generation (requires login)."""
+    return await service.chat_with_career_counselor(db, payload, current_user.id)
 
 
 @router.get("/chat/sessions", response_model=List[ChatSessionSummary])

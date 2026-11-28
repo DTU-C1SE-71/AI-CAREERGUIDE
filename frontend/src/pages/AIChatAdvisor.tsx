@@ -11,6 +11,8 @@ import {
   History,
   Info,
   LoaderCircle,
+  Lock,
+  LogIn,
   Maximize2,
   MessageSquare,
   Minimize2,
@@ -25,6 +27,7 @@ import {
 } from "lucide-react"
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Markdown from "react-markdown"
+import { useNavigate } from "react-router-dom"
 import remarkGfm from "remark-gfm"
 import { useSelectedAssessment } from "../hooks/useSelectedAssessment"
 import { useAIConnection } from "../context/AIConnectionContext"
@@ -194,6 +197,7 @@ function mapResponseSource(
 }
 
 export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
+  const navigate = useNavigate()
   const assessment = useSelectedAssessment()
   const { user, token } = useAuth()
   const isAuthenticated = Boolean(user && token)
@@ -602,6 +606,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
   const send = async (text: string) => {
     const trimmed = text.trim()
     if (
+      !isAuthenticated ||
       !trimmed ||
       trimmed.length > 4000 ||
       typing ||
@@ -813,7 +818,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
 
   const submit = (event: FormEvent) => {
     event.preventDefault()
-    if (typing || chatBusy.current || connection.state !== "online") return
+    if (!isAuthenticated || typing || chatBusy.current || connection.state !== "online") return
     void send(input)
   }
 
@@ -1476,154 +1481,171 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                           key={prompt}
                           type="button"
                           onClick={() => void send(prompt)}
-                          disabled={connection.state !== "online" || typing}
-                          className="shrink-0 rounded-full border border-sky-200/80 bg-sky-50/70 px-3 py-1 text-xs font-semibold text-sky-800 transition hover:bg-sky-100 disabled:opacity-50"
+                          disabled={!isAuthenticated || connection.state !== "online" || typing}
+                          className="shrink-0 rounded-full border border-sky-200/80 bg-sky-50/70 px-3 py-1 text-xs font-semibold text-sky-800 transition hover:bg-sky-100 disabled:cursor-not-allowed disabled:opacity-50"
                         >
                           {prompt}
                         </button>
                       ))}
                     </div>
 
-                    <form
-                      onSubmit={submit}
-                      className="rounded-2xl border border-slate-200 bg-white px-3 pt-2 pb-1.5 shadow-2xs transition focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/15"
-                    >
-                      <textarea
-                        ref={inputRef}
-                        rows={1}
-                        maxLength={4000}
-                        aria-label="Câu hỏi hướng nghiệp"
-                        value={input}
-                        onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (
-                            e.key === "Enter" &&
-                            !e.shiftKey &&
-                            !e.nativeEvent.isComposing
-                          ) {
-                            e.preventDefault()
-                            if (
-                              !typing &&
-                              !chatBusy.current &&
-                              connection.state === "online" &&
-                              input.trim()
-                            ) {
-                              void send(input)
-                            }
-                          }
-                        }}
-                        placeholder="Em muốn hỏi thầy/cô điều gì hôm nay?"
-                        className="max-h-28 min-h-9 w-full resize-none bg-transparent px-1 py-1 text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slate-400"
-                      />
+                    {!isAuthenticated ? (
+                      <div className="flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border border-slate-200 bg-slate-50/90 px-3.5 py-2.5 shadow-2xs">
+                        <div className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-600 sm:text-sm">
+                          <Lock size={15} className="shrink-0 text-sky-600" />
+                          <span>Vui lòng đăng nhập để trò chuyện với cố vấn AI.</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            onClose()
+                            navigate("/login")
+                          }}
+                          className="inline-flex shrink-0 items-center gap-1.5 rounded-xl bg-sky-600 px-3.5 py-1.5 text-xs font-semibold text-white transition hover:bg-sky-700 cursor-pointer"
+                        >
+                          <LogIn size={14} />
+                          Đăng nhập
+                        </button>
+                      </div>
+                    ) : (
+                      <form
+                        onSubmit={submit}
+                        className="flex items-center gap-1.5 rounded-2xl border border-slate-200 bg-white px-2.5 py-1.5 shadow-2xs transition focus-within:border-sky-500 focus-within:ring-2 focus-within:ring-sky-500/15"
+                      >
+                        <button
+                          type="button"
+                          onClick={attachStudentProfile}
+                          title="Đính kèm điểm học tập"
+                          aria-label="Đính kèm điểm học tập"
+                          className="grid size-8 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
+                        >
+                          <Paperclip size={16} />
+                        </button>
 
-                      <div className="mt-1 flex items-center justify-between gap-2 pt-1">
-                        <div className="flex items-center gap-1.5">
+                        <div ref={effortMenuRef} className="relative shrink-0">
+                          <AnimatePresence>
+                            {effortMenuOpen && (
+                              <motion.div
+                                initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                                animate={{ opacity: 1, y: 0, scale: 1 }}
+                                exit={{ opacity: 0, y: 4, scale: 0.97 }}
+                                transition={{
+                                  duration: 0.15,
+                                  ease: [0.22, 1, 0.36, 1],
+                                }}
+                                role="menu"
+                                aria-label="Mức độ suy luận"
+                                className="absolute bottom-full left-0 z-30 mb-2 w-56 rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-xl ring-1 ring-slate-900/5"
+                              >
+                                <div className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500">
+                                  <span>Mức độ suy luận</span>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setEffortInfoOpen((v) => !v)
+                                    }
+                                    aria-label="Thông tin mức độ suy luận"
+                                    className="grid size-5 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
+                                  >
+                                    <Info size={13} />
+                                  </button>
+                                </div>
+                                {effortInfoOpen && (
+                                  <p className="mx-1.5 mb-1.5 rounded-xl bg-sky-50 px-2.5 py-2 text-[11px] leading-relaxed text-sky-900">
+                                    Tự động điều chỉnh theo câu hỏi, hoặc chọn
+                                    cố định từ Thấp đến Rất cao.
+                                  </p>
+                                )}
+                                <div className="space-y-0.5">
+                                  {EFFORT_OPTIONS.map((opt) => {
+                                    const selected = effort === opt.value
+                                    return (
+                                      <button
+                                        key={opt.value}
+                                        type="button"
+                                        role="menuitemradio"
+                                        aria-checked={selected}
+                                        onClick={() => {
+                                          setEffort(opt.value)
+                                          setEffortMenuOpen(false)
+                                          setEffortInfoOpen(false)
+                                          focusInput()
+                                        }}
+                                        className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${
+                                          selected
+                                            ? "bg-sky-50/90 font-bold text-slate-900"
+                                            : "font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                                        }`}
+                                      >
+                                        <span>{opt.label}</span>
+                                        {selected && (
+                                          <Check
+                                            size={15}
+                                            className="text-sky-600"
+                                          />
+                                        )}
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+
                           <button
                             type="button"
-                            onClick={attachStudentProfile}
-                            title="Đính kèm điểm học tập"
-                            aria-label="Đính kèm điểm học tập"
-                            className="grid size-8 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
+                            onClick={() => {
+                              setEffortMenuOpen((v) => !v)
+                              setEffortInfoOpen(false)
+                            }}
+                            aria-haspopup="menu"
+                            aria-expanded={effortMenuOpen}
+                            title="Mức độ suy luận của AI"
+                            className={`inline-flex h-8 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition ${
+                              effortMenuOpen
+                                ? "border-sky-300 bg-sky-50 text-sky-800"
+                                : "border-slate-200/90 bg-slate-50/80 text-slate-700 hover:border-sky-200 hover:bg-sky-50/60 hover:text-sky-800"
+                            }`}
                           >
-                            <Paperclip size={16} />
-                          </button>
-
-                          <div ref={effortMenuRef} className="relative">
-                            <AnimatePresence>
-                              {effortMenuOpen && (
-                                <motion.div
-                                  initial={{ opacity: 0, y: 6, scale: 0.97 }}
-                                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                                  exit={{ opacity: 0, y: 4, scale: 0.97 }}
-                                  transition={{
-                                    duration: 0.15,
-                                    ease: [0.22, 1, 0.36, 1],
-                                  }}
-                                  role="menu"
-                                  aria-label="Mức độ suy luận"
-                                  className="absolute bottom-full left-0 z-30 mb-2 w-56 rounded-2xl border border-slate-200/90 bg-white p-1.5 shadow-xl ring-1 ring-slate-900/5"
-                                >
-                                  <div className="flex items-center justify-between px-3 py-2 text-xs font-semibold text-slate-500">
-                                    <span>Mức độ suy luận</span>
-                                    <button
-                                      type="button"
-                                      onClick={() =>
-                                        setEffortInfoOpen((v) => !v)
-                                      }
-                                      aria-label="Thông tin mức độ suy luận"
-                                      className="grid size-5 place-items-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
-                                    >
-                                      <Info size={13} />
-                                    </button>
-                                  </div>
-                                  {effortInfoOpen && (
-                                    <p className="mx-1.5 mb-1.5 rounded-xl bg-sky-50 px-2.5 py-2 text-[11px] leading-relaxed text-sky-900">
-                                      Tự động điều chỉnh theo câu hỏi, hoặc chọn
-                                      cố định từ Thấp đến Rất cao.
-                                    </p>
-                                  )}
-                                  <div className="space-y-0.5">
-                                    {EFFORT_OPTIONS.map((opt) => {
-                                      const selected = effort === opt.value
-                                      return (
-                                        <button
-                                          key={opt.value}
-                                          type="button"
-                                          role="menuitemradio"
-                                          aria-checked={selected}
-                                          onClick={() => {
-                                            setEffort(opt.value)
-                                            setEffortMenuOpen(false)
-                                            setEffortInfoOpen(false)
-                                            focusInput()
-                                          }}
-                                          className={`flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition ${
-                                            selected
-                                              ? "bg-sky-50/90 font-bold text-slate-900"
-                                              : "font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
-                                          }`}
-                                        >
-                                          <span>{opt.label}</span>
-                                          {selected && (
-                                            <Check
-                                              size={15}
-                                              className="text-sky-600"
-                                            />
-                                          )}
-                                        </button>
-                                      )
-                                    })}
-                                  </div>
-                                </motion.div>
-                              )}
-                            </AnimatePresence>
-
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setEffortMenuOpen((v) => !v)
-                                setEffortInfoOpen(false)
-                              }}
-                              aria-haspopup="menu"
-                              aria-expanded={effortMenuOpen}
-                              title="Mức độ suy luận của AI"
-                              className={`inline-flex h-8 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition ${
-                                effortMenuOpen
-                                  ? "border-sky-300 bg-sky-50 text-sky-800"
-                                  : "border-slate-200/90 bg-slate-50/80 text-slate-700 hover:border-sky-200 hover:bg-sky-50/60 hover:text-sky-800"
+                            <Brain size={14} className="text-sky-600" />
+                            <span>{currentEffortOption.label}</span>
+                            <ChevronDown
+                              size={13}
+                              className={`text-slate-400 transition-transform duration-150 ${
+                                effortMenuOpen ? "rotate-180" : ""
                               }`}
-                            >
-                              <Brain size={14} className="text-sky-600" />
-                              <span>{currentEffortOption.label}</span>
-                              <ChevronDown
-                                size={13}
-                                className={`text-slate-400 transition-transform duration-150 ${
-                                  effortMenuOpen ? "rotate-180" : ""
-                                }`}
-                              />
-                            </button>
-                          </div>
+                            />
+                          </button>
                         </div>
+
+                        <textarea
+                          ref={inputRef}
+                          rows={1}
+                          maxLength={4000}
+                          aria-label="Câu hỏi hướng nghiệp"
+                          value={input}
+                          onChange={(e) => setInput(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (
+                              e.key === "Enter" &&
+                              !e.shiftKey &&
+                              !e.nativeEvent.isComposing
+                            ) {
+                              e.preventDefault()
+                              if (
+                                isAuthenticated &&
+                                !typing &&
+                                !chatBusy.current &&
+                                connection.state === "online" &&
+                                input.trim()
+                              ) {
+                                void send(input)
+                              }
+                            }
+                          }}
+                          placeholder="Em muốn hỏi thầy/cô điều gì hôm nay?"
+                          className="max-h-28 min-h-8 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-1 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400"
+                        />
 
                         {typing ? (
                           <button
@@ -1631,7 +1653,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                             onClick={stopGeneration}
                             title="Dừng câu hỏi"
                             aria-label="Dừng câu hỏi"
-                            className="grid size-8 shrink-0 place-items-center rounded-xl bg-rose-600 text-white transition hover:bg-rose-700 cursor-pointer"
+                            className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-xl bg-sky-600 text-white transition hover:bg-sky-700"
                           >
                             <Square size={13} className="fill-current" />
                           </button>
@@ -1646,8 +1668,8 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                             <ArrowUp size={17} />
                           </button>
                         )}
-                      </div>
-                    </form>
+                      </form>
+                    )}
                   </div>
                 </div>
               </div>

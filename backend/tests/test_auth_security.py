@@ -126,7 +126,7 @@ async def test_expired_or_invalid_bearer_never_becomes_guest(auth_client, prefix
         response = await client.post(f"{prefix}/rag-governance/chat", headers={"Authorization": f"Bearer {token}"}, json={"message": "Tìm hiểu ngành An toàn thông tin"})
         assert response.status_code == 401
     guest = await client.post(f"{prefix}/rag-governance/chat", json={"message": "Tìm hiểu ngành An toàn thông tin"})
-    assert guest.status_code == 200
+    assert guest.status_code == 401
 
 
 @pytest.mark.asyncio
