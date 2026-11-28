@@ -5,7 +5,7 @@
       "destination": "https://ai-careerguide-backend-production.up.railway.app/api/$1"
     },
     {
-      "source": "/((?!api/|robots\\.txt|sitemap\\.xml|favicon\\.svg|assets/|images/).*)",
+      "source": "/((?!api/|robots\\.txt|sitemap\\.xml|favicon\\.svg|google8e349acc07ad1d88\\.html|assets/|images/).*)",
       "destination": "/index.html"
     }
   ],
