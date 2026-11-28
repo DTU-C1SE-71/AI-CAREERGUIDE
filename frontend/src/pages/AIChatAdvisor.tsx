@@ -121,9 +121,9 @@ const initialMessages: AdvisorMessage[] = [
   {
     id: "welcome",
     role: "assistant",
-    content: `### Chào em, thầy/cô là Giáo viên Cố vấn AI
+    content: `### Chào bạn, mình là Trợ lý Cố vấn AI
 
-Em cần tư vấn về ngành học, điểm số, sở thích, bài học THPT hay lộ trình học tập cứ hỏi thầy/cô nhé.`,
+Bạn cần tư vấn về ngành học, điểm số, sở thích, bài học THPT hay lộ trình học tập cứ hỏi mình nhé.`,
   },
 ]
 
@@ -135,7 +135,7 @@ const quickPrompts = [
 ]
 
 const unavailableReply =
-  "Thầy/cô chưa nhận được phản hồi tư vấn lúc này. Em kiểm tra lại kết nối rồi gửi lại câu hỏi cho thầy/cô nhé."
+  "Mình chưa nhận được phản hồi tư vấn lúc này. Bạn kiểm tra lại kết nối rồi gửi lại câu hỏi cho mình nhé."
 
 function makePreview(text: string): string {
   const clean = text.replace(/[#*`>_]/g, "").replace(/\s+/g, " ").trim()
@@ -797,7 +797,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
         !response.connection_available &&
         (response.is_ai_generated || response.is_fallback)
       ) {
-        markOffline("Thầy/cô chưa nhận được phản hồi AI. Em kiểm tra lại kết nối nhé.")
+        markOffline("Mình chưa nhận được phản hồi AI. Bạn kiểm tra lại kết nối nhé.")
       }
 
       if (
@@ -851,7 +851,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
       }
       if (error instanceof ApiError && error.status === 409) {
         markOffline(
-          "Kết nối AI đã thay đổi. Em kiểm tra lại trước khi gửi câu hỏi tiếp theo nhé.",
+          "Kết nối AI đã thay đổi. Bạn kiểm tra lại trước khi gửi câu hỏi tiếp theo nhé.",
         )
       } else {
         markOffline(unavailableReply)
@@ -891,7 +891,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
           id: `local-stop-${++messageSequence.current}-${Date.now()}`,
           role: "assistant",
           content:
-            "Đã dừng trả lời câu hỏi này. Em có thể gửi câu hỏi mới bất cứ lúc nào nhé.",
+            "Đã dừng trả lời câu hỏi này. Bạn có thể gửi câu hỏi mới bất cứ lúc nào nhé.",
         },
       ])
     }
@@ -912,7 +912,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
       .join(", ")
     setInput(
       (prev) =>
-        `${prev ? `${prev} ` : ""}Điểm số của em: ${summary || "chưa có điểm được nhập"}`,
+        `${prev ? `${prev} ` : ""}Điểm số của mình: ${summary || "chưa có điểm được nhập"}`,
     )
     focusInput()
   }
@@ -961,7 +961,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
             </p>
             <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
               {isAuthenticated
-                ? "Các cuộc trò chuyện của em sẽ tự động được lưu vào tài khoản."
+                ? "Các cuộc trò chuyện của bạn sẽ tự động được lưu vào tài khoản."
                 : "Các cuộc trò chuyện tạm được lưu trên trình duyệt này."}
             </p>
           </div>
@@ -1098,7 +1098,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                   <div className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
                       <h2 className="truncate text-sm font-bold text-slate-900 sm:text-base">
-                        Giáo viên Cố vấn AI
+                        Trợ lý Cố vấn AI
                       </h2>
                       <span
                         role="status"
@@ -1115,7 +1115,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                       />
                     </div>
                     <p className="truncate text-[11px] font-medium text-slate-500">
-                      Đồng hành cùng em về ngành học, bài học THPT &amp; lộ trình tương lai
+                      Đồng hành cùng bạn về ngành học, bài học THPT &amp; lộ trình tương lai
                     </p>
                   </div>
                 </div>
@@ -1750,7 +1750,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                               }
                             }
                           }}
-                          placeholder="Em muốn hỏi thầy/cô điều gì hôm nay?"
+                          placeholder="Bạn muốn hỏi mình điều gì hôm nay?"
                           className="max-h-28 min-h-8 min-w-0 flex-1 resize-none bg-transparent px-1.5 py-1 text-sm leading-6 text-slate-800 outline-none placeholder:text-slate-400"
                         />
 

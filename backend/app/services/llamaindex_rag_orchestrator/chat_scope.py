@@ -424,5 +424,5 @@ def response_length_guidance(mode: ResponseLengthMode) -> tuple[str, int]:
 
 def local_scope_reply(decision: ScopeDecision) -> str:
     if decision == "greeting":
-        return "Chào em! Thầy/cô hỗ trợ em về hướng nghiệp, học tập, tìm hiểu nghề nghiệp và hướng dẫn sử dụng các tính năng trên AI CareerGuide. Em đang muốn tìm hiểu vấn đề nào?"
-    return "Thầy/cô chưa hiểu rõ câu hỏi của em. Em hãy viết rõ hơn điều muốn hỏi về học tập, chọn ngành, nghề nghiệp hoặc cách sử dụng hệ thống AI CareerGuide để thầy/cô hỗ trợ đúng nhé."
+        return "Chào bạn! Mình hỗ trợ bạn về hướng nghiệp, học tập, tìm hiểu nghề nghiệp và hướng dẫn sử dụng các tính năng trên AI CareerGuide. Bạn đang muốn tìm hiểu vấn đề nào?"
+    return "Mình chưa hiểu rõ câu hỏi của bạn. Bạn hãy viết rõ hơn điều muốn hỏi về học tập, chọn ngành, nghề nghiệp hoặc cách sử dụng hệ thống AI CareerGuide để mình hỗ trợ đúng nhé."

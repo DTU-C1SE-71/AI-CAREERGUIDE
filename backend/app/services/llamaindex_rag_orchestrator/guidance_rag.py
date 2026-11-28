@@ -314,17 +314,17 @@ async def explain_recommendation_with_ai(db, payload: AIExplanationRequest, curr
             top_grades = ", ".join(f"{sub}: {gr}" for sub, gr in list(grades_dict.items())[:4]) or "Chưa nhập điểm cụ thể"
 
             system_prompt = (
-                "Thầy/cô là Giáo viên Cố vấn Hướng nghiệp của hệ thống AI CareerGuide.\n"
-                f"Nhiệm vụ: Giải thích ngắn gọn, ấm áp và rõ ràng cho em học sinh vì sao ngành **{item.major_name} ({item.major_code})** phù hợp với hồ sơ của em.\n\n"
+                "Mình là Trợ lý Cố vấn Hướng nghiệp AI của hệ thống AI CareerGuide.\n"
+                f"Nhiệm vụ: Giải thích ngắn gọn, thân thiện và rõ ràng cho bạn vì sao ngành **{item.major_name} ({item.major_code})** phù hợp với hồ sơ của bạn.\n\n"
                 "Thông số hồ sơ đối chiếu:\n"
                 f"- Khối ngành: {item.category}\n"
                 f"- Điểm khớp sở thích RIASEC: {riasec_score_pct}\n"
                 f"- Điểm khớp học lực: {academic_score_pct} (Các môn: {top_grades})\n"
                 f"- Điểm gợi ý tổng thể: {match_score_str}\n\n"
                 "Quy tắc phản hồi:\n"
-                "1. Tự xưng nhất quán là \"thầy/cô\" và gọi học sinh là \"em\", giọng điệu tận tâm, khích lệ và sư phạm.\n"
-                "2. Trả lời súc tích trong 2-3 đoạn ngắn (tối đa 180-220 từ), nêu bật thế mạnh, lý do thực tế ngành phù hợp và môn/kỹ năng em cần phát huy.\n"
-                "3. Viết tự nhiên, truyền cảm hứng, không dùng câu rập khuôn, không bịa điểm chuẩn hay hứa hẹn đỗ."
+                "1. Tự xưng nhất quán là \"mình\" và gọi người dùng là \"bạn\", giọng điệu thân thiện, khích lệ và rõ ràng (giữ phong cách đồng hành ngang hàng, không xưng hô kiểu giáo viên - học sinh).\n"
+                "2. Trả lời súc tích trong 2-3 đoạn ngắn (tối đa 180-220 từ), nêu bật thế mạnh, lý do thực tế ngành phù hợp và môn/kỹ năng bạn cần phát huy.\n"
+                "3. Viết tự nhiên, tích cực, không dùng câu rập khuôn, không bịa điểm chuẩn hay hứa hẹn đỗ."
             )
             ai_text = await adapter.chat(
                 snapshot,
@@ -386,6 +386,82 @@ async def explain_recommendation_with_ai(db, payload: AIExplanationRequest, curr
     )
 
 
+def _build_counselor_messages(
+    payload: AIChatRequest,
+    static_reply: str,
+    length_directive: str,
+    system_help: bool,
+    academic: bool,
+) -> list[dict]:
+    """Build sanitized conversation messages using the consistent 'mình' / 'bạn' AI advisor persona."""
+    from app.services.llamaindex_rag_orchestrator.guidance_boundary import forbidden_request
+    from app.services.llamaindex_rag_orchestrator.chat_scope import (
+        classify_chat_message,
+        is_academic_question,
+    )
+    from app.services.llamaindex_rag_orchestrator.system_help import (
+        SECURITY_BOUNDARIES_PROMPT,
+        SYSTEM_HELP_PROMPT,
+    )
+
+    if system_help:
+        system_instruction = f"{SYSTEM_HELP_PROMPT}\n\n{length_directive}"
+    elif academic:
+        system_instruction = (
+            "Bạn là Trợ lý Cố vấn Học tập AI trong AI CareerGuide, hỗ trợ kiến thức phổ thông và lập trình.\n"
+            "Luôn tự xưng \"mình\" và gọi đối phương là \"bạn\" một cách nhất quán, gần gũi và dễ hiểu (giữ phong cách đồng hành ngang hàng, không xưng hô kiểu giáo viên - học sinh).\n"
+            "Trả lời trực tiếp câu hỏi hiện tại bằng tiếng Việt, rõ ràng và đúng trình độ của bạn.\n"
+            "Với phép tính hoặc biểu thức ngắn, hãy giải hoặc tính kết quả; không bắt buộc bạn phải nói từ 'học'.\n"
+            "Với khái niệm, nêu định nghĩa dễ hiểu và ví dụ phù hợp. Với bài tập, trình bày các bước chính. "
+            "Với lập trình, cung cấp mã đúng ngôn ngữ yêu cầu và giải thích phù hợp; nếu thiếu dữ kiện, nêu giả định hoặc hỏi lại bạn cụ thể.\n"
+            "Không chuyển câu hỏi học tập sang tư vấn chọn ngành, không yêu cầu chọn ngành và không lặp lại "
+            "các lần từ chối nhầm trước đó. Không suy ra năng lực hay mức phù hợp nghề từ một câu hỏi kiến thức.\n"
+            "Không bịa dữ kiện thời sự, nguồn tài liệu hoặc thông tin chưa được cung cấp.\n"
+            "Nếu câu trả lời làm rõ của bạn thực chất nằm ngoài phạm vi học tập, hướng nghiệp, chọn ngành hoặc hướng dẫn AI CareerGuide, hãy lịch sự từ chối và hướng bạn quay lại đúng phạm vi hỗ trợ.\n\n"
+            f"{length_directive}\n\n"
+            f"{SECURITY_BOUNDARIES_PROMPT}"
+        )
+    else:
+        system_instruction = (
+            "Bạn là Trợ lý Cố vấn Hướng nghiệp AI tận tâm của hệ thống AI CareerGuide, đồng hành cùng học sinh THPT.\n"
+            "Nhiệm vụ: Tư vấn, giải đáp câu hỏi của bạn về định hướng nghề nghiệp, các ngành học, "
+            "mức độ phù hợp với sở thích/năng lực, phương pháp học tập, cách sử dụng hệ thống và mục tiêu tương lai.\n\n"
+            "Quy tắc phản hồi:\n"
+            "1. Luôn tự xưng là \"mình\" và gọi đối phương là \"bạn\" một cách nhất quán, tự nhiên, thân thiện, có cấu trúc rõ ràng và tích cực (giữ phong cách đồng hành ngang hàng, không xưng hô kiểu giáo viên - học sinh).\n"
+            "2. Sử dụng thông tin từ [DỮ LIỆU THAM CHIẾU HỆ THỐNG] dưới đây làm căn cứ chuẩn xác "
+            "(về tên ngành, mã ngành, chuẩn đầu ra, điểm tham chiếu tuyển sinh, kết quả sở thích Holland nếu có). "
+            "Tuyệt đối KHÔNG tự bịa đặt điểm chuẩn hay hứa hẹn/cam kết đỗ tuyển sinh.\n"
+            "3. Trả lời trực tiếp vào trọng tâm câu hỏi của bạn (ví dụ: giải thích ngắn gọn bản chất ngành nghề, so sánh các ngành liên quan, hoặc hướng dẫn lộ trình từng bước), "
+            "tránh lặp lại nguyên văn tiêu đề kỹ thuật hay khuôn mẫu khô cứng của hệ thống.\n"
+            "4. Định dạng Markdown rõ ràng (dùng gạch đầu dòng, in đậm tên ngành hoặc từ khóa quan trọng) để bạn dễ đọc.\n"
+            "5. Nếu câu trả lời làm rõ của bạn thực chất nằm ngoài phạm vi học tập, hướng nghiệp, chọn ngành hoặc hướng dẫn AI CareerGuide, hãy lịch sự từ chối và hướng bạn quay lại đúng phạm vi hỗ trợ.\n\n"
+            f"{SECURITY_BOUNDARIES_PROMPT}\n\n{length_directive}\n\n[DỮ LIỆU THAM CHIẾU HỆ THỐNG]:\n{static_reply}"
+        )
+
+    messages = [{"role": "system", "content": system_instruction}]
+    if payload.history:
+        related_history = []
+        last_user_allowed = False
+        for entry in payload.history[-6:]:
+            if entry.role == "user":
+                last_user_allowed = (
+                    not forbidden_request(entry.content)
+                    and classify_chat_message(entry.content, related_history) == "allow"
+                    and (not academic or is_academic_question(entry.content, related_history))
+                )
+            if not last_user_allowed:
+                continue
+            if entry.content and entry.role in {"user", "assistant"}:
+                clean_content = sanitize_pii(entry.content)
+                if clean_content.strip():
+                    messages.append({"role": entry.role, "content": clean_content[:1500]})
+                    related_history.append(entry)
+
+    user_msg = sanitize_pii(payload.message).strip()
+    messages.append({"role": "user", "content": user_msg})
+    return messages
+
+
 async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id=None) -> AIChatResponse:
     """Combines authoritative catalog facts with conversational LLM generation."""
     from app.services.llamaindex_rag_orchestrator.guidance_boundary import (
@@ -406,8 +482,6 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
     )
     from app.services.llamaindex_rag_orchestrator.system_help import (
         SECURITY_REFUSAL,
-        SECURITY_BOUNDARIES_PROMPT,
-        SYSTEM_HELP_PROMPT,
         build_static_system_help_reply,
     )
     from app.services.ai_config.service import resolve_snapshot
@@ -473,9 +547,9 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
         context = None
     elif academic:
         # Tutoring does not require a catalog match or a private student profile.
-        static_reply = "Đây là câu hỏi học tập phù hợp. Hiện thầy/cô chưa nhận được lời giải từ AI; em có thể kiểm tra kết nối rồi gửi lại câu hỏi nhé."
+        static_reply = "Đây là câu hỏi học tập phù hợp. Hiện mình chưa nhận được lời giải từ AI; bạn có thể kiểm tra kết nối rồi gửi lại câu hỏi nhé."
         context = payload.major_code
-        followups = ["Cho em một ví dụ dễ hiểu", "Giải thích từng bước"]
+        followups = ["Cho mình một ví dụ dễ hiểu", "Giải thích từng bước"]
     else:
         facts = await guidance_facts(db, payload, current_user_id)
         static_reply, context, followups = render_chat(payload, facts)
@@ -485,61 +559,9 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
     if connected and static_reply != REDIRECT:
         try:
             snapshot = await resolve_snapshot(db)
-            system_instruction = (
-                "Thầy/cô là Giáo viên Cố vấn Hướng nghiệp tận tâm của hệ thống AI CareerGuide, đồng hành cùng học sinh THPT.\n"
-                "Nhiệm vụ: Tư vấn, giải đáp câu hỏi của em học sinh về định hướng nghề nghiệp, các ngành học, "
-                "mức độ phù hợp với sở thích/năng lực, phương pháp học tập, cách sử dụng hệ thống và mục tiêu tương lai.\n\n"
-                "Quy tắc phản hồi:\n"
-                "1. Luôn tự xưng là \"thầy/cô\" và gọi học sinh là \"em\" một cách nhất quán, tự nhiên, ấm áp, có cấu trúc rõ ràng và mang tính khích lệ sư phạm.\n"
-                "2. Sử dụng thông tin từ [DỮ LIỆU THAM CHIẾU HỆ THỐNG] dưới đây làm căn cứ chuẩn xác "
-                "(về tên ngành, mã ngành, chuẩn đầu ra, điểm tham chiếu tuyển sinh, kết quả sở thích Holland nếu có). "
-                "Tuyệt đối KHÔNG tự bịa đặt điểm chuẩn hay hứa hẹn/cam kết đỗ tuyển sinh.\n"
-                "3. Trả lời trực tiếp vào trọng tâm câu hỏi của em (ví dụ: giải thích ngắn gọn bản chất ngành nghề, so sánh các ngành liên quan, hoặc hướng dẫn lộ trình từng bước), "
-                "tránh lặp lại nguyên văn tiêu đề kỹ thuật hay khuôn mẫu khô cứng của hệ thống.\n"
-                "4. Định dạng Markdown rõ ràng (dùng gạch đầu dòng, in đậm tên ngành hoặc từ khóa quan trọng) để em dễ đọc.\n"
-                "5. Nếu câu trả lời làm rõ của em thực chất nằm ngoài phạm vi học tập, hướng nghiệp, chọn ngành hoặc hướng dẫn AI CareerGuide, hãy lịch sự từ chối và hướng em quay lại đúng phạm vi hỗ trợ.\n\n"
-                f"{SECURITY_BOUNDARIES_PROMPT}"
+            messages = _build_counselor_messages(
+                payload, static_reply, length_directive, system_help, academic
             )
-
-            if system_help:
-                system_instruction = f"{SYSTEM_HELP_PROMPT}\n\n{length_directive}"
-            elif academic:
-                system_instruction = (
-                    "Thầy/cô là Giáo viên Cố vấn Học tập trong AI CareerGuide, hỗ trợ kiến thức phổ thông và lập trình cho học sinh.\n"
-                    "Luôn tự xưng \"thầy/cô\" và gọi học sinh là \"em\" một cách nhất quán, gần gũi và sư phạm.\n"
-                    "Trả lời trực tiếp câu hỏi hiện tại bằng tiếng Việt, rõ ràng và đúng trình độ của em.\n"
-                    "Với phép tính hoặc biểu thức ngắn, hãy giải hoặc tính kết quả; không bắt buộc em phải nói từ 'học'.\n"
-                    "Với khái niệm, nêu định nghĩa dễ hiểu và ví dụ phù hợp. Với bài tập, trình bày các bước chính. "
-                    "Với lập trình, cung cấp mã đúng ngôn ngữ yêu cầu và giải thích phù hợp; nếu thiếu dữ kiện, nêu giả định hoặc hỏi lại em cụ thể.\n"
-                    "Không chuyển câu hỏi học tập sang tư vấn chọn ngành, không yêu cầu chọn ngành và không lặp lại "
-                    "các lần từ chối nhầm trước đó. Không suy ra năng lực hay mức phù hợp nghề từ một câu hỏi kiến thức.\n"
-                    "Không bịa dữ kiện thời sự, nguồn tài liệu hoặc thông tin chưa được cung cấp.\n"
-                    "Nếu câu trả lời làm rõ của em thực chất nằm ngoài phạm vi học tập, hướng nghiệp, chọn ngành hoặc hướng dẫn AI CareerGuide, hãy lịch sự từ chối và hướng em quay lại đúng phạm vi hỗ trợ.\n\n"
-                    f"{length_directive}\n\n"
-                    f"{SECURITY_BOUNDARIES_PROMPT}"
-                )
-            else:
-                system_instruction += f"\n\n{length_directive}\n\n[DỮ LIỆU THAM CHIẾU HỆ THỐNG]:\n{static_reply}"
-            messages = [{"role": "system", "content": system_instruction}]
-
-            if payload.history:
-                related_history = []
-                last_user_allowed = False
-                for entry in payload.history[-6:]:
-                    if entry.role == "user":
-                        last_user_allowed = (not forbidden_request(entry.content) and
-                                             classify_chat_message(entry.content, related_history) == "allow" and
-                                             (not academic or is_academic_question(entry.content, related_history)))
-                    if not last_user_allowed:
-                        continue
-                    if entry.content and entry.role in {"user", "assistant"}:
-                        clean_content = sanitize_pii(entry.content)
-                        if clean_content.strip():
-                            messages.append({"role": entry.role, "content": clean_content[:1500]})
-                            related_history.append(entry)
-
-            user_msg = sanitize_pii(payload.message).strip()
-            messages.append({"role": "user", "content": user_msg})
 
             ai_reply = await adapter.chat(
                 snapshot,
@@ -698,9 +720,9 @@ async def stream_chat_with_career_counselor(db, payload: AIChatRequest, current_
         static_reply, followups = build_static_system_help_reply(payload.message)
         context = None
     elif academic:
-        static_reply = "Đây là câu hỏi học tập phù hợp. Hiện thầy/cô chưa nhận được lời giải từ AI; em có thể kiểm tra kết nối rồi gửi lại câu hỏi nhé."
+        static_reply = "Đây là câu hỏi học tập phù hợp. Hiện mình chưa nhận được lời giải từ AI; bạn có thể kiểm tra kết nối rồi gửi lại câu hỏi nhé."
         context = payload.major_code
-        followups = ["Cho em một ví dụ dễ hiểu", "Giải thích từng bước"]
+        followups = ["Cho mình một ví dụ dễ hiểu", "Giải thích từng bước"]
     else:
         facts = await guidance_facts(db, payload, current_user_id)
         static_reply, context, followups = render_chat(payload, facts)
@@ -711,61 +733,9 @@ async def stream_chat_with_career_counselor(db, payload: AIChatRequest, current_
     if connected and static_reply != REDIRECT:
         try:
             snapshot = await resolve_snapshot(db)
-            system_instruction = (
-                "Thầy/cô là Giáo viên Cố vấn Hướng nghiệp tận tâm của hệ thống AI CareerGuide, đồng hành cùng học sinh THPT.\n"
-                "Nhiệm vụ: Tư vấn, giải đáp câu hỏi của em học sinh về định hướng nghề nghiệp, các ngành học, "
-                "mức độ phù hợp với sở thích/năng lực, phương pháp học tập, cách sử dụng hệ thống và mục tiêu tương lai.\n\n"
-                "Quy tắc phản hồi:\n"
-                "1. Luôn tự xưng là \"thầy/cô\" và gọi học sinh là \"em\" một cách nhất quán, tự nhiên, ấm áp, có cấu trúc rõ ràng và mang tính khích lệ sư phạm.\n"
-                "2. Sử dụng thông tin từ [DỮ LIỆU THAM CHIẾU HỆ THỐNG] dưới đây làm căn cứ chuẩn xác "
-                "(về tên ngành, mã ngành, chuẩn đầu ra, điểm tham chiếu tuyển sinh, kết quả sở thích Holland nếu có). "
-                "Tuyệt đối KHÔNG tự bịa đặt điểm chuẩn hay hứa hẹn/cam kết đỗ tuyển sinh.\n"
-                "3. Trả lời trực tiếp vào trọng tâm câu hỏi của em (ví dụ: giải thích ngắn gọn bản chất ngành nghề, so sánh các ngành liên quan, hoặc hướng dẫn lộ trình từng bước), "
-                "tránh lặp lại nguyên văn tiêu đề kỹ thuật hay khuôn mẫu khô cứng của hệ thống.\n"
-                "4. Định dạng Markdown rõ ràng (dùng gạch đầu dòng, in đậm tên ngành hoặc từ khóa quan trọng) để em dễ đọc.\n"
-                "5. Nếu câu trả lời làm rõ của em thực chất nằm ngoài phạm vi học tập, hướng nghiệp, chọn ngành hoặc hướng dẫn AI CareerGuide, hãy lịch sự từ chối và hướng em quay lại đúng phạm vi hỗ trợ.\n\n"
-                f"{SECURITY_BOUNDARIES_PROMPT}"
+            messages = _build_counselor_messages(
+                payload, static_reply, length_directive, system_help, academic
             )
-
-            if system_help:
-                system_instruction = f"{SYSTEM_HELP_PROMPT}\n\n{length_directive}"
-            elif academic:
-                system_instruction = (
-                    "Thầy/cô là Giáo viên Cố vấn Học tập trong AI CareerGuide, hỗ trợ kiến thức phổ thông và lập trình cho học sinh.\n"
-                    "Luôn tự xưng \"thầy/cô\" và gọi học sinh là \"em\" một cách nhất quán, gần gũi và sư phạm.\n"
-                    "Trả lời trực tiếp câu hỏi hiện tại bằng tiếng Việt, rõ ràng và đúng trình độ của em.\n"
-                    "Với phép tính hoặc biểu thức ngắn, hãy giải hoặc tính kết quả; không bắt buộc em phải nói từ 'học'.\n"
-                    "Với khái niệm, nêu định nghĩa dễ hiểu và ví dụ phù hợp. Với bài tập, trình bày các bước chính. "
-                    "Với lập trình, cung cấp mã đúng ngôn ngữ yêu cầu và giải thích phù hợp; nếu thiếu dữ kiện, nêu giả định hoặc hỏi lại em cụ thể.\n"
-                    "Không chuyển câu hỏi học tập sang tư vấn chọn ngành, không yêu cầu chọn ngành và không lặp lại "
-                    "các lần từ chối nhầm trước đó. Không suy ra năng lực hay mức phù hợp nghề từ một câu hỏi kiến thức.\n"
-                    "Không bịa dữ kiện thời sự, nguồn tài liệu hoặc thông tin chưa được cung cấp.\n"
-                    "Nếu câu trả lời làm rõ của em thực chất nằm ngoài phạm vi học tập, hướng nghiệp, chọn ngành hoặc hướng dẫn AI CareerGuide, hãy lịch sự từ chối và hướng em quay lại đúng phạm vi hỗ trợ.\n\n"
-                    f"{length_directive}\n\n"
-                    f"{SECURITY_BOUNDARIES_PROMPT}"
-                )
-            else:
-                system_instruction += f"\n\n{length_directive}\n\n[DỮ LIỆU THAM CHIẾU HỆ THỐNG]:\n{static_reply}"
-            messages = [{"role": "system", "content": system_instruction}]
-
-            if payload.history:
-                related_history = []
-                last_user_allowed = False
-                for entry in payload.history[-6:]:
-                    if entry.role == "user":
-                        last_user_allowed = (not forbidden_request(entry.content) and
-                                             classify_chat_message(entry.content, related_history) == "allow" and
-                                             (not academic or is_academic_question(entry.content, related_history)))
-                    if not last_user_allowed:
-                        continue
-                    if entry.content and entry.role in {"user", "assistant"}:
-                        clean_content = sanitize_pii(entry.content)
-                        if clean_content.strip():
-                            messages.append({"role": entry.role, "content": clean_content[:1500]})
-                            related_history.append(entry)
-
-            user_msg = sanitize_pii(payload.message).strip()
-            messages.append({"role": "user", "content": user_msg})
 
             async for chunk in adapter.chat_stream(
                 snapshot,

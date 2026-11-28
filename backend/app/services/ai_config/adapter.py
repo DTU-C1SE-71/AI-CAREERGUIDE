@@ -5,6 +5,7 @@ import logging
 import math
 import queue
 import random
+import re
 import threading
 import time
 import weakref
@@ -348,6 +349,21 @@ async def chat(snapshot: ConfigSnapshot, messages: list[dict], *, max_tokens: in
     )
 
 
+def _provider_has_interleaved_sse_bug(snapshot: ConfigSnapshot) -> bool:
+    """Detect upstream gateways whose native stream=true multiplexes two answers onto one stream."""
+    host = str((snapshot.binding or {}).get("host") or "").lower()
+    return host.endswith("xkiro.com")
+
+
+def _iter_progressive_chunks(text: str, words_per_chunk: int = 3) -> list[str]:
+    """Split completed text into lossless word+whitespace chunks for progressive UI streaming."""
+    tokens = re.findall(r"\S+\s*|\s+", text)
+    if not tokens:
+        return [text] if text else []
+    step = max(1, words_per_chunk)
+    return ["".join(tokens[i : i + step]) for i in range(0, len(tokens), step)]
+
+
 async def chat_stream(
     snapshot: ConfigSnapshot,
     messages: list[dict],
@@ -355,8 +371,15 @@ async def chat_stream(
     max_tokens: int = 1024,
     timeout: float = 90,
 ) -> AsyncIterator[str]:
-    """Stream chat completion text deltas over OpenAI-compatible SSE with DNS pinning & secret redaction."""
+    """Stream chat completion text deltas safely with DNS pinning, stream-ID pinning, & secret redaction."""
     _validate_snapshot(snapshot)
+    if _provider_has_interleaved_sse_bug(snapshot):
+        full_text = await chat(snapshot, messages, max_tokens=max_tokens, timeout=timeout)
+        for piece in _iter_progressive_chunks(full_text, words_per_chunk=3):
+            yield piece
+            await asyncio.sleep(0.015)
+        return
+
     req_data = _chat_body(snapshot, messages, max_tokens, None)
     req_data["stream"] = True
     body = _body(req_data)
@@ -382,6 +405,7 @@ async def chat_stream(
 
                     total_bytes = 0
                     yielded_any = False
+                    pinned_stream_id: str | None = None
                     async for raw_line in response.aiter_lines():
                         line = raw_line.strip()
                         if not line or line.startswith(":"):
@@ -401,21 +425,33 @@ async def chat_stream(
                             continue
                         if event.get("error"):
                             _safe_json(payload_str.encode("utf-8"), 502)
+                        event_id = event.get("id")
+                        if isinstance(event_id, str) and event_id:
+                            if pinned_stream_id is None:
+                                pinned_stream_id = event_id
+                            elif event_id != pinned_stream_id:
+                                continue
                         choices = event.get("choices")
-                        if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+                        if not isinstance(choices, list) or not choices:
                             continue
-                        delta = choices[0].get("delta")
-                        if not isinstance(delta, dict):
+                        primary_choice = next(
+                            (ch for ch in choices if isinstance(ch, dict) and ch.get("index", 0) == 0),
+                            None,
+                        )
+                        if primary_choice is None:
                             continue
-                        content = delta.get("content")
-                        if not isinstance(content, str) or not content:
-                            continue
-                        safe_piece = _redact(content, snapshot.credential)
-                        total_bytes += len(safe_piece.encode("utf-8"))
-                        if total_bytes > _MAX_RESPONSE_BYTES:
-                            raise AIConfigError("RESPONSE_LIMIT", "Phản hồi provider vượt giới hạn.", 502)
-                        yielded_any = True
-                        yield safe_piece
+                        delta = primary_choice.get("delta")
+                        if isinstance(delta, dict):
+                            content = delta.get("content")
+                            if isinstance(content, str) and content:
+                                safe_piece = _redact(content, snapshot.credential)
+                                total_bytes += len(safe_piece.encode("utf-8"))
+                                if total_bytes > _MAX_RESPONSE_BYTES:
+                                    raise AIConfigError("RESPONSE_LIMIT", "Phản hồi provider vượt giới hạn.", 502)
+                                yielded_any = True
+                                yield safe_piece
+                        if primary_choice.get("finish_reason") is not None:
+                            break
 
                     if not yielded_any:
                         raise AIConfigError("PROTOCOL_ERROR", "Provider không trả nội dung chat hợp lệ.", 502)

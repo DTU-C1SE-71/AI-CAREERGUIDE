@@ -90,8 +90,8 @@ const capabilities = [
   {
     id: "advisor",
     icon: BookOpenCheck,
-    title: "Giáo viên Cố vấn AI",
-    desc: "Đối chiếu nghề mơ ước với hồ sơ năng lực, phân tích kỹ năng và hỏi đáp trực tiếp cùng Giáo viên Cố vấn AI.",
+    title: "Trợ lý Cố vấn AI",
+    desc: "Đối chiếu nghề mơ ước với hồ sơ năng lực, phân tích kỹ năng và hỏi đáp trực tiếp cùng Trợ lý Cố vấn AI.",
   },
   {
     id: "universities",

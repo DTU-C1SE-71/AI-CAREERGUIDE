@@ -121,13 +121,13 @@ export function MainLayout() {
             <button
               type="button"
               onClick={openChat}
-              aria-label={`Mở Giáo viên Cố vấn AI (${aiStatusText})`}
+              aria-label={`Mở Trợ lý Cố vấn AI (${aiStatusText})`}
               className="group inline-flex h-[52px] items-center rounded-full bg-gradient-to-br from-sky-500 to-cyan-600 p-1.5 text-white shadow-lg shadow-sky-600/25 ring-1 ring-white/30 transition-[transform,box-shadow] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] hover:-translate-y-0.5 hover:shadow-xl hover:shadow-sky-600/35 active:scale-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 focus-visible:ring-offset-2 motion-reduce:transition-none cursor-pointer select-none"
             >
               <span className="grid grid-cols-[0fr] transition-[grid-template-columns] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:grid-cols-[1fr] group-focus-visible:grid-cols-[1fr] motion-reduce:transition-none">
                 <span className="overflow-hidden">
                   <span className="flex flex-col items-end whitespace-nowrap pl-3.5 pr-1.5 text-right opacity-0 translate-x-2 transition-[opacity,transform] duration-150 ease-[cubic-bezier(0.22,1,0.36,1)] group-hover:translate-x-0 group-hover:opacity-100 group-hover:duration-200 group-hover:delay-75 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 group-focus-visible:duration-200 group-focus-visible:delay-75 motion-reduce:transition-none">
-                    <span className="text-sm font-bold leading-tight">Giáo viên Cố vấn AI</span>
+                    <span className="text-sm font-bold leading-tight">Trợ lý Cố vấn AI</span>
                     <span className="text-[11px] font-medium leading-tight text-sky-100">
                       {aiStatusText}
                     </span>
