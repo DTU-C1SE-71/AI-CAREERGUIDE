@@ -1,18 +1,18 @@
-from typing import Dict, Any, List, Optional
-from fastapi import APIRouter, Depends, Response, status
+import uuid
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_optional_current_user
 from app.models.identity import User
 from app.schemas.assessment import (
-    RIASECAssessmentSubmit,
-    CognitivePreferenceSubmit,
-    GradeEntrySubmit,
     DiagnosticCheckBatchSubmit,
     AssessmentQuestionSetResponse,
+    AssessmentSubmissionDetail,
     AssessmentSubmissionRequest,
     AssessmentSubmissionResponse,
+    AssessmentSubmissionSummary,
 )
 from app.services.assessment import service
 from app.modules.assessment import service as modular_assessment_service
@@ -37,7 +37,6 @@ async def submit_assessment_alt(
     db: AsyncSession = Depends(get_db)
 ):
     """Lưu bài đánh giá RIASEC & Nhận thức theo đúng user_id đang đăng nhập (hoặc tính toán không lưu DB cho khách)."""
-    import uuid
     target_user_id = current_user.id if current_user else uuid.uuid4()
     return await modular_assessment_service.process_assessment_submission(
         db,
@@ -47,55 +46,46 @@ async def submit_assessment_alt(
     )
 
 
-
-@router.post("/riasec", status_code=status.HTTP_200_OK)
-async def submit_riasec_assessment(
-    payload: RIASECAssessmentSubmit,
+@router.get("/submissions", response_model=List[AssessmentSubmissionSummary], status_code=status.HTTP_200_OK)
+async def list_submissions_alt(
+    limit: int = Query(default=20, ge=1, le=100),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """Submits Holland RIASEC answers and calculates normalized 6-dimensional interest vector."""
-    assessment = await service.save_riasec_assessment(db, current_user.id, payload)
-    return {
-        "message": "RIASEC assessment recorded successfully",
-        "assessment_id": str(assessment.id),
-        "riasec_scores": assessment.riasec_scores,
-        "assessed_at": assessment.assessed_at
-    }
+    """Lịch sử nộp bài khảo sát của người dùng hiện tại (alias under /assessment prefix)."""
+    return await modular_assessment_service.list_student_submissions(db, current_user.id, limit=limit)
 
 
-@router.post("/cognitive-preferences", status_code=status.HTTP_200_OK)
-async def submit_cognitive_preferences(
-    payload: CognitivePreferenceSubmit,
+@router.get("/submissions/{submission_id}", response_model=AssessmentSubmissionDetail, status_code=status.HTTP_200_OK)
+async def get_submission_detail_alt(
+    submission_id: uuid.UUID,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """Submits cognitive style and learning environment preferences."""
-    assessment = await service.save_cognitive_preferences(db, current_user.id, payload)
-    return {
-        "message": "Cognitive preferences recorded successfully",
-        "assessment_id": str(assessment.id),
-        "cognitive_preferences": assessment.cognitive_preferences
-    }
+    """Chi tiết một lượt nộp bài khảo sát của người dùng hiện tại (alias under /assessment prefix)."""
+    return await modular_assessment_service.get_student_submission_detail(db, current_user.id, submission_id)
 
 
-@router.post("/grades", status_code=status.HTTP_200_OK)
-async def submit_grades(
-    payload: GradeEntrySubmit,
+@router.put("/submissions/{submission_id}", response_model=AssessmentSubmissionResponse, status_code=status.HTTP_200_OK)
+async def update_submission_alt(
+    submission_id: uuid.UUID,
+    payload: AssessmentSubmissionRequest,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
-    """
-    Submits subject grades (single or multi-semester), computes national Z-scores for admission blocks
-    using national mean and std dev parameters, and returns standardized percentiles.
-    """
-    grade_record = await service.process_and_save_grades(db, current_user.id, payload)
-    return {
-        "message": "Academic grades standardized successfully",
-        "assessment_id": str(grade_record.assessment_id),
-        "academic_year": grade_record.academic_year,
-        "computed_block_zscores": grade_record.computed_block_zscores
-    }
+    """Cập nhật hồ sơ đã lưu, làm mới cache AI và tính lại đề xuất (alias under /assessment prefix)."""
+    return await modular_assessment_service.update_student_submission(db, current_user.id, submission_id, payload)
+
+
+@router.delete("/submissions/{submission_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_submission_alt(
+    submission_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Xóa vĩnh viễn một lượt nộp bài khảo sát của người dùng hiện tại (alias under /assessment prefix)."""
+    await modular_assessment_service.delete_student_submission(db, current_user.id, submission_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/diagnostic-checks", status_code=status.HTTP_200_OK)

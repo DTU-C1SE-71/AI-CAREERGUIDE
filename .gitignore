@@ -70,6 +70,8 @@ postgres_data/
 # Backup folders
 src_backup_prior_to_zip/
 frontend/src_backup_prior_to_zip/
+backups/
+*.dump
 *.bak
 
 # IDE & OS

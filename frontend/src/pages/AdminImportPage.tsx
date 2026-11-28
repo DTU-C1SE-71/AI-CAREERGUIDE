@@ -8,6 +8,8 @@ interface PreviewMajor {
   major_code: string
   name: string
   category?: string
+  benchmark_score?: number | null
+  benchmark_label?: string | null
 }
 interface ImportPreview {
   majors?: PreviewMajor[]
@@ -21,8 +23,8 @@ const PAGE_SIZE = 25
 const EXTRACTION_PROMPT = `Bạn là chuyên gia chuẩn hóa dữ liệu giáo dục đại học Việt Nam. Tôi đính kèm tài liệu Thông tư danh mục ngành đào tạo của Bộ GD&ĐT (PDF/DOCX) và file Excel mẫu (MOET_Major_Import_Template_Standard.xlsx).
 
 Hãy trích xuất TOÀN BỘ danh mục ngành đào tạo trong tài liệu nguồn và điền vào sheet 'MAU_NHAP_NGANH_CHUAN' theo đúng quy tắc sau:
-1. Giữ nguyên CHÍNH XÁC tên và thứ tự 20 cột kỹ thuật ở Dòng 1:
-   field_code, field_name, group_code, group_name, major_code, major_name, legacy_tt09_codes, degree_levels, circular_note, is_active, cip_code, holland_code, riasec_r, riasec_i, riasec_a, riasec_s, riasec_e, riasec_c, subject_blocks, career_paths.
+1. Giữ nguyên CHÍNH XÁC tên và thứ tự 21 cột kỹ thuật ở Dòng 1:
+   field_code, field_name, group_code, group_name, major_code, major_name, legacy_tt09_codes, degree_levels, circular_note, is_active, cip_code, holland_code, riasec_r, riasec_i, riasec_a, riasec_s, riasec_e, riasec_c, subject_blocks, career_paths, benchmark_score.
 2. Giữ nguyên Dòng 2 (mô tả cột), XÓA 2 dòng ví dụ mẫu (Dòng 3–4) và điền dữ liệu ngành thực tế bắt đầu từ Dòng 3.
 3. Nhóm cột BẮT BUỘC (trích xuất nguyên văn từ tài liệu nguồn):
    - field_code (2 chữ số), field_name (tên lĩnh vực cấp II)
@@ -34,9 +36,15 @@ Hãy trích xuất TOÀN BỘ danh mục ngành đào tạo trong tài liệu ng
    - degree_levels (7 = Đại học, 8 = Thạc sĩ, 9 = Tiến sĩ; VD: 789)
    - circular_note (ghi rõ số hiệu Thông tư nguồn và ghi chú hiệu lực/chuyển đổi nếu có)
    - is_active (TRUE nếu ngành còn hiệu lực, FALSE nếu đã bãi bỏ; mặc định TRUE)
-5. Nguyên tắc CHỐNG BỊA DỮ LIỆU cho 10 cột tùy chọn (cip_code, holland_code, riasec_r..c, subject_blocks, career_paths):
-   - Tuyệt đối KHÔNG tự tạo ngành ngoài tài liệu nguồn, không tự bịa điểm chuẩn, tổ hợp môn hay điểm RIASEC nếu tài liệu không nêu.
-   - Nếu tài liệu nguồn không có các trường này, hãy ĐỂ TRỐNG để hệ thống AI CareerGuide tự động ánh xạ tất định theo chuẩn nhóm ngành (sheet BANG_TRA_CUU_CIP_RIASEC) khi nhập file.
+5. Nguyên tắc cho 11 cột tùy chọn (cip_code, holland_code, riasec_r..c, subject_blocks, career_paths, benchmark_score):
+   - Tuyệt đối KHÔNG tự tạo ngành ngoài tài liệu nguồn, không tự bịa điểm chuẩn riêng của từng trường đại học, tổ hợp môn hay điểm RIASEC nếu tài liệu không nêu.
+   - Với các cột cip_code, holland_code, riasec_r..c, subject_blocks, career_paths: nếu tài liệu nguồn không nêu thì ĐỂ TRỐNG để hệ thống AI CareerGuide tự động ánh xạ tất định theo chuẩn nhóm ngành (sheet BANG_TRA_CUU_CIP_RIASEC) khi nhập file.
+   - Với cột benchmark_score (điểm tham chiếu thang 30): nếu tài liệu nguồn ghi rõ ngưỡng điểm chuẩn thì điền đúng theo tài liệu; nếu không, chỉ điền đúng mức điểm sàn tối thiểu theo quy định chung của Bộ GD&ĐT (có thể tra đối chiếu cột default_benchmark_score ở sheet BANG_TRA_CUU_CIP_RIASEC):
+     + 22.5: Y khoa, Răng - Hàm - Mặt
+     + 21.0: Dược học, Y học cổ truyền
+     + 19.0: Sư phạm / Đào tạo giáo viên và các ngành Sức khỏe có chứng chỉ hành nghề còn lại
+     + 18.0: Giáo dục Thể chất, Sư phạm Âm nhạc/Mỹ thuật, nhóm ngành Luật
+     + 15.0: Các ngành Đại học còn lại (hoặc để trống để hệ thống tự gán)
 6. Định dạng tất cả các cột mã (field_code, group_code, major_code, legacy_tt09_codes, degree_levels, cip_code) là Text để không bị mất chữ số 0 ở đầu.
 7. Đối chiếu lại toàn bộ danh sách (không trùng major_code, không sót ngành, đúng trạng thái is_active) rồi xuất file .xlsx hoàn chỉnh để quản trị viên rà soát trên bản xem trước trước khi lưu vào hệ thống.`
 
@@ -128,7 +136,7 @@ export function AdminImportPage() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <h2 id="import-template-title" className="text-lg font-semibold">Chuẩn bị tệp dữ liệu</h2>
-            <p className="mt-2 max-w-3xl text-sm text-slate-600">Dùng đúng cấu trúc 20 cột trong mẫu Excel (6 cột bắt buộc <code>field_code</code> → <code>major_name</code>, 4 cột thông tư và 10 cột tùy chọn tự ánh xạ khi bỏ trống). Hỗ trợ .xlsx và .csv; không điền số ước lượng.</p>
+            <p className="mt-2 max-w-3xl text-sm text-slate-600">Dùng đúng cấu trúc 21 cột trong mẫu Excel (6 cột bắt buộc <code>field_code</code> → <code>major_name</code>, 4 cột thông tư và 11 cột tùy chọn tự ánh xạ khi bỏ trống, gồm <code>benchmark_score</code> theo ngưỡng Bộ GD&amp;ĐT). Hỗ trợ .xlsx và .csv; không điền điểm chuẩn riêng từng trường khi chưa có nguồn.</p>
           </div>
           <a className="admin-button" href="/MOET_Major_Import_Template_Standard.xlsx" download><Download size={17} aria-hidden="true" />Tải mẫu Excel</a>
         </div>
@@ -162,7 +170,7 @@ export function AdminImportPage() {
         {preview && <>
           <div className="border-t border-slate-200 pt-5"><h3 className="font-semibold">Bản xem trước</h3><p className="my-3 text-sm" role="status">{rows.length} ngành trong bản xem trước{sheet ? ` · ${sheet}` : ""}.</p></div>
           {rows.length ? <>
-            <div className="overflow-x-auto"><table className="admin-table"><caption className="sr-only">Danh mục xem trước, trang {previewPage}</caption><thead><tr><th scope="col">Mã ngành</th><th scope="col">Tên ngành</th><th scope="col">Nhóm</th></tr></thead><tbody>{rows.slice((previewPage - 1) * PAGE_SIZE, previewPage * PAGE_SIZE).map(row => <tr key={row.major_code}><td>{row.major_code}</td><td>{row.name}</td><td>{row.category || "Chưa phân nhóm"}</td></tr>)}</tbody></table></div>
+            <div className="overflow-x-auto"><table className="admin-table"><caption className="sr-only">Danh mục xem trước, trang {previewPage}</caption><thead><tr><th scope="col">Mã ngành</th><th scope="col">Tên ngành</th><th scope="col">Nhóm</th><th scope="col">Điểm tham chiếu</th></tr></thead><tbody>{rows.slice((previewPage - 1) * PAGE_SIZE, previewPage * PAGE_SIZE).map(row => <tr key={row.major_code}><td>{row.major_code}</td><td>{row.name}</td><td>{row.category || "Chưa phân nhóm"}</td><td title={row.benchmark_label || undefined}>{row.benchmark_score != null ? `${row.benchmark_score.toFixed(1)}đ` : "—"}</td></tr>)}</tbody></table></div>
             <div className="admin-pagination"><span>Trang {previewPage}/{previewPages}</span><button className="admin-button" type="button" disabled={previewPage <= 1} onClick={() => setPreviewPage(value => value - 1)}>Trước</button><button className="admin-button" type="button" disabled={previewPage >= previewPages} onClick={() => setPreviewPage(value => value + 1)}>Sau</button></div>
           </> : <p className="rounded-md bg-slate-50 p-4 text-sm text-slate-600">Tệp chưa có ngành để nhập. Kiểm tra tên cột và các dòng dữ liệu rồi xem trước lại.</p>}
           <fieldset className="mt-5 border-t border-slate-200 pt-4" disabled={busy}><legend className="font-semibold">Cách lưu danh mục</legend>

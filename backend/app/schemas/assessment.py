@@ -12,6 +12,9 @@ from app.modules.assessment.schemas import (
     AssessmentQuestionSetResponse,
     AssessmentSubmissionRequest,
     AssessmentSubmissionResponse,
+    AssessmentResponseItem,
+    AssessmentSubmissionSummary,
+    AssessmentSubmissionDetail,
 )
 
 

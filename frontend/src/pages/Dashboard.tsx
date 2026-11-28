@@ -8,7 +8,6 @@ import {
   ClipboardCheck,
   Clock,
   Compass,
-  Download,
   Eye,
   GraduationCap,
   History,
@@ -45,7 +44,6 @@ import type { AspirationAIAnalysis, StudentSkillAnalysis } from "../types/insigh
 import type { FunnelRecommendationData, Major } from "../types/major"
 import { formatBlockWithSubjects } from "../utils"
 import { buildEvaluateProfilePayload, getValidRiasecAnswer } from "../utils/assessmentPayload"
-import { exportCareerReportPdf } from "../utils/pdfReport"
 
 interface BestBlockStatsPayload {
   block: string
@@ -74,6 +72,8 @@ interface DashboardOverviewPayload {
   funnel?: FunnelRecommendationData
   interest_evidence?: InterestEvidence
   aspirationAnalysis?: AspirationAnalysisPayload | null
+  from_cache?: boolean
+  cached_at?: string | null
 }
 
 const ARCHETYPES: Record<string, string> = {
@@ -108,8 +108,10 @@ export function Dashboard() {
     history,
     activeHistoryId,
     hydrating,
+    profileRevision,
     update,
     reset,
+    updateHistoryAttempt,
     selectHistoryAttempt,
     deleteHistoryAttempt,
   } = useAssessment()
@@ -139,6 +141,8 @@ export function Dashboard() {
         aspiration: activeAttempt.aspiration,
         completed: true,
         completedAt: activeAttempt.createdAt,
+        syncStatus: activeAttempt.id.startsWith("db-") ? "SYNCED" : undefined,
+        submissionId: activeAttempt.id.startsWith("db-") ? activeAttempt.id.slice(3) : undefined,
       }
     }
     if (assessment.completed && evaluateAssessmentCompleteness(assessment).isComplete) {
@@ -153,6 +157,8 @@ export function Dashboard() {
         aspiration: history[0].aspiration,
         completed: true,
         completedAt: history[0].createdAt,
+        syncStatus: history[0].id.startsWith("db-") ? "SYNCED" : undefined,
+        submissionId: history[0].id.startsWith("db-") ? history[0].id.slice(3) : undefined,
       }
     }
     return assessment
@@ -163,8 +169,6 @@ export function Dashboard() {
   const [isEvaluating, setIsEvaluating] = useState(false)
   const [isAnalyzingAspiration, setIsAnalyzingAspiration] = useState(false)
   const [evaluateError, setEvaluateError] = useState<string | null>(null)
-  const [exportingPdf, setExportingPdf] = useState(false)
-  const [pdfError, setPdfError] = useState<string | null>(null)
   const [reloadNonce, setReloadNonce] = useState(0)
   const [showHistoryDrawer, setShowHistoryDrawer] = useState(false)
   const [recommendationMode, setRecommendationMode] = useState<"algorithm" | "ai">("algorithm")
@@ -183,6 +187,18 @@ export function Dashboard() {
   const profileRef = useRef(effectiveAssessment)
   useEffect(() => { profileRef.current = effectiveAssessment }, [effectiveAssessment])
   const reportTopRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (profileRevision === 0) return
+    skillCacheRef.current = {}
+    aspirationAiCacheRef.current = {}
+    inFlightAiFingerprintRef.current = null
+    inFlightAspirationAiRef.current = null
+    setSkillAnalysis(null)
+    setAspirationAiAnalysis(null)
+    setData(null)
+    setReloadNonce((n) => n + 1)
+  }, [profileRevision])
 
   const draftCompleteness = useMemo(
     () => evaluateAssessmentCompleteness(effectiveAssessment),
@@ -207,7 +223,6 @@ export function Dashboard() {
       setIsEvaluating(true)
       setIsAnalyzingAspiration(true)
       const payload = buildEvaluateProfilePayload(effectiveAssessment, 435, {
-        gender: profileGender,
         grade_level: profileGradeLevel,
       })
       requestJSON<DashboardOverviewPayload | null>(
@@ -253,7 +268,6 @@ export function Dashboard() {
   }, [
     hasCompletedAssessment,
     effectiveAssessment,
-    profileGender,
     profileGradeLevel,
     activeHistoryId,
     reloadNonce,
@@ -444,18 +458,43 @@ export function Dashboard() {
 
   const handleUpdateAspiration = async (nextAspiration: CareerAspirationInput) => {
     if (!hasCompletedAssessment) throw new Error("Chưa đủ dữ liệu trắc nghiệm để phân tích")
-    if (activeAttemptIndex > 0) throw new Error("Không sửa bản xem lại")
     const snapshot = effectiveAssessment
+    const targetHistory = activeAttempt || history[0] || null
+    const targetHistoryId = targetHistory?.id || activeHistoryId
+    const targetSubmissionId = targetHistoryId?.startsWith("db-")
+      ? targetHistoryId.slice(3)
+      : snapshot.submissionId
     const request = ++aspirationRequest.current
     setIsAnalyzingAspiration(true)
     try {
+      const updatedState: AssessmentState = { ...snapshot, aspiration: nextAspiration }
+      const evalBody = buildEvaluateProfilePayload(updatedState, 435, {
+        gender: profileGender,
+        grade_level: profileGradeLevel,
+      })
+      if (targetSubmissionId) {
+        await requestJSON(`/assessment/submissions/${encodeURIComponent(targetSubmissionId)}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            riasec_answers: evalBody.riasec_answers,
+            cognitive_answers: evalBody.cognitive_answers,
+            aspiration: evalBody.aspiration,
+            grades_by_subject: evalBody.grades_by_subject,
+            score_context: evalBody.score_context,
+          }),
+        })
+      }
       const response = await apiRequest<DashboardOverviewPayload | null>("/recommender/evaluate", null, {
         method: "POST",
-        body: JSON.stringify(buildEvaluateProfilePayload({ ...snapshot, aspiration: nextAspiration }, 435, { gender: profileGender, grade_level: profileGradeLevel })),
+        body: JSON.stringify(evalBody),
       })
       if (request !== aspirationRequest.current || profileRef.current !== snapshot) throw new Error("Hồ sơ đã đổi")
       if (!response?.aspirationAnalysis) throw new Error("Chưa có phân tích")
-      update({ aspiration: nextAspiration })
+      if (targetHistoryId) {
+        updateHistoryAttempt(targetHistoryId, updatedState, { bumpRevision: true })
+      } else {
+        update({ aspiration: nextAspiration })
+      }
       setData(response)
     } finally {
       if (request === aspirationRequest.current) { setIsAnalyzingAspiration(false); setIsEvaluating(false) }
@@ -531,89 +570,6 @@ export function Dashboard() {
 
   const displayName = user?.name || data?.user_name || "Học sinh"
 
-  const handleExportPdf = async () => {
-    if (exportingPdf) return
-    setPdfError(null)
-    setExportingPdf(true)
-    try {
-      const funnelMajors =
-        activeFunnel.all_majors && activeFunnel.all_majors.length > 0
-          ? activeFunnel.all_majors
-          : activeFunnel.tier1_fields.flatMap((field) => field.majors || [])
-      const seenCodes = new Set<string>()
-      const topMajors = funnelMajors
-        .filter((major) => {
-          const key = major.code || major.id || major.name
-          if (seenCodes.has(key)) return false
-          seenCodes.add(key)
-          return true
-        })
-        .slice(0, 8)
-        .map((major) => ({
-          code: major.code,
-          name: major.name,
-          category: major.category,
-          match: major.match,
-          fit: major.fit,
-          best_matching_block: major.best_matching_block,
-          best_block_score: major.best_block_score,
-          benchmark_cutoff: major.benchmark_cutoff,
-          feasibility_label: major.feasibility_label,
-          is_trending: major.is_trending,
-          trend_label: major.trend_label,
-          explanation: major.explanation,
-          admission_advice: major.admission_advice,
-        }))
-
-      const attemptNum = history.length > 0 ? history.length - activeAttemptIndex : 1
-      await exportCareerReportPdf({
-        studentName: displayName,
-        studentEmail: user?.email,
-        gradeLevel: profileGradeLevel,
-        gender: profileGender,
-        schoolClass: user?.school_class,
-        schoolName: user?.school_name,
-        attemptLabel: `Lần #${attemptNum}`,
-        completedAt: activeAttempt?.createdAt || effectiveAssessment.completedAt,
-        hollandCode: hollandCodeBadge || "Chưa phân hóa",
-        archetypeTitle,
-        riasec: displayedRiasec
-          .filter(
-            (point): point is typeof point & { value: number } =>
-              typeof point.value === "number" && Number.isFinite(point.value),
-          )
-          .map((point) => ({
-            key: point.key,
-            label: point.label,
-            value: point.value,
-          })),
-        interestStatus: interestEvidence.status,
-        bestBlock: bestBlockStats,
-        scores: effectiveAssessment.scores || [],
-        horizonLabel: data?.horizon_label || activeFunnel.horizon_label,
-        weightsApplied: data?.weights_applied,
-        tier1Fields: (activeFunnel.tier1_fields || []).map((field) => ({
-          field_name: field.field_name,
-          match: field.match,
-          majors_count: field.majors_count,
-          eligible_count: field.eligible_count,
-        })),
-        topMajors,
-        skillAnalysis,
-        aspirationAnalysis: data?.aspirationAnalysis ?? null,
-        aspirationAiAnalysis,
-      })
-    } catch (error: unknown) {
-      setPdfError(
-        error instanceof Error && error.message
-          ? `Không thể xuất báo cáo PDF: ${error.message}`
-          : "Không thể xuất báo cáo PDF lúc này. Vui lòng thử lại.",
-      )
-    } finally {
-      setExportingPdf(false)
-    }
-  }
-
   const handleRetakeAssessment = () => {
     reset()
     navigate("/assessment")
@@ -664,37 +620,17 @@ export function Dashboard() {
               >
                 Làm lại
               </Button>
-              <Button
-                variant="secondary"
-                icon={Download}
-                loading={exportingPdf}
-                disabled={exportingPdf}
-                onClick={() => void handleExportPdf()}
-              >
-                {exportingPdf ? "Đang xuất PDF..." : "Xuất báo cáo PDF"}
-              </Button>
             </div>
           )}
         </div>
 
-        {pdfError && (
-          <div
-            role="alert"
-            className="mb-5 flex items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800"
-          >
-            <span>{pdfError}</span>
-            <button
-              type="button"
-              onClick={() => setPdfError(null)}
-              className="shrink-0 rounded-lg px-2.5 py-1 text-xs font-bold text-rose-700 hover:bg-rose-100"
-            >
-              Đóng
-            </button>
-          </div>
-        )}
-
         {activeAttemptIndex === 0 && assessment.syncStatus === "LOCAL_ONLY" && <p role="status" className="mb-5 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">Đã lưu trên thiết bị, chưa đồng bộ máy chủ. Bài làm vẫn được giữ trên trình duyệt này; hãy mở lại bài đánh giá và gửi lại khi kết nối hoạt động.</p>}
-        {activeAttemptIndex === 0 && assessment.syncStatus === "SYNCED" && assessment.submissionId && <p role="status" className="mb-5 text-xs text-slate-600">Đã đồng bộ bài đánh giá với máy chủ.</p>}
+        {activeAttemptIndex === 0 && assessment.syncStatus === "SYNCED" && assessment.submissionId && (
+          <p role="status" className="mb-5 text-xs text-slate-600">
+            Đã đồng bộ bài đánh giá với máy chủ
+            {data?.from_cache ? " · Đề xuất ngành tải nhanh từ CSDL." : "."}
+          </p>
+        )}
 
         {/* Liquid Glass Hydrating / Empty State when Student has NOT completed the Assessment */}
         {!hasCompletedAssessment && hydrating ? (
@@ -729,7 +665,7 @@ export function Dashboard() {
               {hasPartialProgress ? (
                 <>
                   <p className="mt-3 text-sm font-medium text-slate-600">
-                    Hệ thống cần đầy đủ dữ liệu ở cả 3 phần để phân tích chính xác ngành học phù hợp cho bạn.
+                    Hệ thống cần đầy đủ dữ liệu ở cả 3 phần để đưa ra phân tích và gợi ý ngành học tham khảo sát với hồ sơ của bạn.
                   </p>
 
                   <div className="mt-6 space-y-2.5 text-left">
@@ -834,7 +770,7 @@ export function Dashboard() {
                       <Clock size={15} />
                     </span>
                     <span>
-                      Lần #{history.length - activeAttemptIndex}
+                      Lần {history.length - activeAttemptIndex}
                       <span className="ml-2 font-medium text-slate-400">
                         {formatDateTimeVi(
                           activeAttempt?.createdAt || assessment.completedAt,
@@ -860,7 +796,7 @@ export function Dashboard() {
                             }`}
                           >
                             {isCurrent ? <CheckCircle2 size={12} /> : <Eye size={12} />}
-                            Lần #{attemptNumber} · Hồ sơ đã lưu
+                            Lần {attemptNumber} · Hồ sơ đã lưu
                           </button>
                           {history.length > 1 && (
                             <button

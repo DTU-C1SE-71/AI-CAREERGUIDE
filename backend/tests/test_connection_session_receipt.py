@@ -78,3 +78,38 @@ async def test_config_resolution_failure_invalidates_receipt_without_probing(mon
     resolver.side_effect = AIConfigError("CONFIGURATION_CHANGED", "Configuration changed")
     assert not await counselor_connection.verify_receipt(object(), opened["revision_token"])
     provider.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_shared_connection_probe_reuses_online_ttl_and_honors_force_and_revision(monkeypatch):
+    current = snapshot("c" * 64)
+    resolver = AsyncMock(return_value=current)
+    monkeypatch.setattr(config_service, "resolve_snapshot", resolver)
+    provider = AsyncMock(return_value="OK")
+    monkeypatch.setattr(counselor_connection.adapter, "chat", provider)
+    clock = [500.0]
+    monkeypatch.setattr(counselor_connection, "time", SimpleNamespace(
+        monotonic=lambda: clock[0], perf_counter=time.perf_counter,
+    ))
+    monkeypatch.setattr(counselor_connection, "_STATES", weakref.WeakKeyDictionary())
+
+    first = await counselor_connection.check_connection(object())
+    assert first["available"] is True
+    assert provider.await_count == 1
+
+    # Within ONLINE_CACHE_TTL_SECONDS (300s), subsequent checks hit shared cache without calling LLM
+    clock[0] += 120.0
+    second = await counselor_connection.check_connection(object())
+    assert second["revision_token"] == first["revision_token"]
+    assert provider.await_count == 1
+
+    # Revision change invalidates cached probe
+    resolver.return_value = snapshot("d" * 64)
+    third = await counselor_connection.check_connection(object())
+    assert third["available"] is True
+    assert provider.await_count == 2
+
+    # Explicit force=True bypasses TTL cache
+    fourth = await counselor_connection.check_connection(object(), force=True)
+    assert fourth["available"] is True
+    assert provider.await_count == 3

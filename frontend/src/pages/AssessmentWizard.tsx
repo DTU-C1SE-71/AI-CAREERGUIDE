@@ -5,9 +5,12 @@ import {
   ArrowLeft,
   ArrowRight,
   Check,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   ClipboardCheck,
+  Clock,
+  History,
   Layers,
   LayoutDashboard,
   ListChecks,
@@ -34,6 +37,7 @@ import { PageContainer } from "../components/layout/PageContainer"
 import { useAuth } from "../context/AuthContext"
 import {
   defaultCognitiveQuestions,
+  legacyCognitiveQuestions,
   type CognitiveQuestionItem,
 } from "../data/cognitiveQuestions"
 import {
@@ -44,8 +48,8 @@ import {
   type RiasecDimension,
 } from "../data/onetMiniIpQuestions"
 import { useAssessment } from "../hooks/useAssessment"
-import { apiRequest, currentToken } from "../services/api"
-import type { CareerAspirationInput } from "../types/assessment"
+import { apiRequest, currentToken, requestJSON } from "../services/api"
+import type { AssessmentHistoryItem, AssessmentState, CareerAspirationInput } from "../types/assessment"
 import { evaluateAssessmentCompleteness } from "../utils/assessmentEvidence"
 import { getValidRiasecAnswer } from "../utils/assessmentPayload"
 
@@ -90,6 +94,65 @@ const CANONICAL_30_CODES: string[] = [
 
 const RIASEC_ORDER: RiasecDimension[] = ["R", "I", "A", "S", "E", "C"]
 
+function resolveCogQuestionsForAttempt(
+  cog: Record<string, string | number> | undefined,
+  activeCogQuestions: CognitiveQuestionItem[],
+): CognitiveQuestionItem[] {
+  const safe = cog || {}
+  const hasV2 = Object.keys(safe).some(
+    (k) =>
+      k.startsWith("COG_V2_") ||
+      /^(analytical|abstract|spatial|linguistic)_[12]$/.test(k),
+  )
+  const hasLegacy = legacyCognitiveQuestions.some(
+    (q) => q.code in safe || (q.dimension ? q.dimension in safe : false),
+  )
+  return !hasV2 && hasLegacy ? legacyCognitiveQuestions : activeCogQuestions
+}
+
+function buildWizardProfileFingerprint(
+  answers: Record<string, number>,
+  cognitive: Record<string, string | number> | undefined,
+  scoresMap: Record<string, number>,
+  aspiration: CareerAspirationInput | undefined,
+  cogQuestions: CognitiveQuestionItem[],
+): string {
+  const riasecNorm: Record<string, number> = {}
+  CANONICAL_30_CODES.forEach((code, idx) => {
+    const val = getValidRiasecAnswer(answers, code, idx)
+    if (val !== undefined) riasecNorm[code] = val
+  })
+  const cogNorm: Record<string, string> = {}
+  cogQuestions.forEach((q, idx) => {
+    const v =
+      cognitive?.[q.code] ??
+      (q.dimension ? cognitive?.[q.dimension] : undefined) ??
+      cognitive?.[`2-${idx}`]
+    if (v !== undefined && v !== null && String(v).trim()) {
+      cogNorm[q.code] = String(v).trim().toUpperCase()
+    }
+  })
+  const scoresNorm = Object.entries(scoresMap)
+    .filter(([, s]) => Number.isFinite(s) && s >= 0 && s <= 10)
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([subj, s]) => `${subj}:${s.toFixed(2)}`)
+  const asp = aspiration
+    ? {
+        dreamJob: (aspiration.dreamJob || "").trim(),
+        desiredField: (aspiration.desiredField || "").trim(),
+        workValues: [...(aspiration.workValues || [])].sort(),
+        preferredEnvironment: (aspiration.preferredEnvironment || "").trim(),
+        scoreStrategy: aspiration.scoreStrategy || "FLEXIBLE_PATHWAY",
+      }
+    : null
+  return JSON.stringify({
+    riasec: riasecNorm,
+    cognitive: cogNorm,
+    scores: scoresNorm,
+    aspiration: asp,
+  })
+}
+
 const defaultRiasecFallback: QuestionItem[] = CANONICAL_30_CODES.map(
   (code, idx) => {
     const found = ONET_MINI_IP_ITEMS.find((i) => i.code === code)
@@ -104,15 +167,29 @@ const defaultRiasecFallback: QuestionItem[] = CANONICAL_30_CODES.map(
 
 export function AssessmentWizard() {
   const { user, token } = useAuth()
-  const { assessment, history, update, reset, recordCompletedAttempt, selectHistoryAttempt } = useAssessment()
+  const {
+    assessment,
+    history,
+    activeHistoryId,
+    update,
+    reset,
+    recordCompletedAttempt,
+    updateHistoryAttempt,
+    linkHistoryAttemptSubmission,
+    selectHistoryAttempt,
+  } = useAssessment()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [sessionStarted, setSessionStarted] = useState<boolean>(
-    () => searchParams.get("new") === "true",
+    () => searchParams.get("new") === "true" || searchParams.get("review") === "true",
   )
+  const [showHistoryPicker, setShowHistoryPicker] = useState(false)
   const [isReviewMode, setIsReviewMode] = useState<boolean>(
     () => searchParams.get("review") === "true",
   )
+  const [editingAttemptId, setEditingAttemptId] = useState<string | null>(null)
+  const [reviewBaselineFingerprint, setReviewBaselineFingerprint] = useState<string | null>(null)
+  const [saveEditError, setSaveEditError] = useState<string | null>(null)
   const submittingRef = useRef(false)
   const [submitting, setSubmitting] = useState(false)
   const [step, setStep] = useState<number>(() => {
@@ -144,7 +221,9 @@ export function AssessmentWizard() {
   >(defaultCognitiveQuestions)
 
   // Step 1 Mode: 'swipe' (Thẻ) | 'list' (Danh sách 30 câu) | 'radar' (Radar tổng quan)
-  const [step1Mode, setStep1Mode] = useState<"swipe" | "radar" | "list">("swipe")
+  const [step1Mode, setStep1Mode] = useState<"swipe" | "radar" | "list">(
+    () => (searchParams.get("review") === "true" ? "list" : "swipe"),
+  )
   const [cardIndex, setCardIndex] = useState<number>(() => {
     const firstUnanswered = ONET_MINI_IP_ITEMS.findIndex((item) => {
       const cIdx = CANONICAL_30_CODES.indexOf(item.code)
@@ -158,8 +237,12 @@ export function AssessmentWizard() {
   const [slideDirection, setSlideDirection] = useState<number>(1)
 
   // Step 2: Cognitive Quest
+  const [step2Mode, setStep2Mode] = useState<"swipe" | "list">(
+    () => (searchParams.get("review") === "true" ? "list" : "swipe"),
+  )
   const [cogIndex, setCogIndex] = useState(0)
   const [cogDirection, setCogDirection] = useState(1)
+  const [expandedCogOptions, setExpandedCogOptions] = useState<Record<string, boolean>>({})
   const autoAdvanceTimer = useRef<number | null>(null)
 
   useEffect(() => {
@@ -380,12 +463,77 @@ export function AssessmentWizard() {
     [assessment.aspiration]
   )
 
+  const displayedCognitiveQuestions = useMemo(() => {
+    if (!isReviewMode) return cognitiveQuestions
+    return resolveCogQuestionsForAttempt(assessment.cognitive, cognitiveQuestions)
+  }, [isReviewMode, assessment.cognitive, cognitiveQuestions])
+
+  const currentReviewFingerprint = useMemo(
+    () =>
+      buildWizardProfileFingerprint(
+        assessment.answers,
+        assessment.cognitive,
+        scores,
+        aspiration,
+        displayedCognitiveQuestions,
+      ),
+    [assessment.answers, assessment.cognitive, scores, aspiration, displayedCognitiveQuestions],
+  )
+
+  const hasReviewChanges = Boolean(
+    isReviewMode &&
+      reviewBaselineFingerprint &&
+      currentReviewFingerprint !== reviewBaselineFingerprint,
+  )
+
+  useEffect(() => {
+    if (!isReviewMode || reviewBaselineFingerprint) return
+    const targetId =
+      activeHistoryId ||
+      history[0]?.id ||
+      (assessment.submissionId ? `db-${assessment.submissionId}` : null)
+    const sourceAttempt = history.find((h) => h.id === targetId) || null
+    const baseAnswers = sourceAttempt?.answers || assessment.answers || {}
+    const baseCognitive = sourceAttempt?.cognitive || assessment.cognitive || {}
+    const baseScoresMap: Record<string, number> = {}
+    ;(sourceAttempt?.scores || assessment.scores || []).forEach((s) => {
+      if (s.subject && typeof s.score === "number" && Number.isFinite(s.score)) {
+        baseScoresMap[s.subject] = s.score
+      }
+    })
+    const baseCogQuestions = resolveCogQuestionsForAttempt(baseCognitive, cognitiveQuestions)
+    setEditingAttemptId(targetId)
+    setReviewBaselineFingerprint(
+      buildWizardProfileFingerprint(
+        baseAnswers,
+        baseCognitive,
+        baseScoresMap,
+        sourceAttempt?.aspiration || assessment.aspiration,
+        baseCogQuestions,
+      ),
+    )
+  }, [
+    isReviewMode,
+    reviewBaselineFingerprint,
+    activeHistoryId,
+    history,
+    assessment.answers,
+    assessment.cognitive,
+    assessment.scores,
+    assessment.aspiration,
+    assessment.submissionId,
+    cognitiveQuestions,
+  ])
+
   const totalCognitiveAnswered = useMemo(() => {
-    return cognitiveQuestions.filter((q, idx) => {
-      const v = assessment.cognitive[q.code] ?? assessment.cognitive[`2-${idx}`]
+    return displayedCognitiveQuestions.filter((q, idx) => {
+      const v =
+        assessment.cognitive[q.code] ??
+        (q.dimension ? assessment.cognitive[q.dimension] : undefined) ??
+        assessment.cognitive[`2-${idx}`]
       return v !== undefined && v !== null && String(v).trim() !== ""
     }).length
-  }, [assessment.cognitive, cognitiveQuestions])
+  }, [assessment.cognitive, displayedCognitiveQuestions])
 
   const completeness = useMemo(
     () =>
@@ -395,54 +543,114 @@ export function AssessmentWizard() {
           cognitive: assessment.cognitive,
           scores,
         },
-        cognitiveQuestions,
+        displayedCognitiveQuestions,
       ),
-    [assessment.answers, assessment.cognitive, scores, cognitiveQuestions],
+    [assessment.answers, assessment.cognitive, scores, displayedCognitiveQuestions],
   )
 
-  const currentCog = cognitiveQuestions[cogIndex] || cognitiveQuestions[0]
+  const safeCogIndex = Math.min(
+    cogIndex,
+    Math.max(0, displayedCognitiveQuestions.length - 1),
+  )
+  const currentCog =
+    displayedCognitiveQuestions[safeCogIndex] || displayedCognitiveQuestions[0]
   const currentCogValue =
     assessment.cognitive[currentCog.code] ??
-    assessment.cognitive[`2-${cogIndex}`]
+    (currentCog.dimension ? assessment.cognitive[currentCog.dimension] : undefined) ??
+    assessment.cognitive[`2-${safeCogIndex}`]
 
   const goToNextCog = useCallback(() => {
     setCogDirection(1)
-    setCogIndex((p) => Math.min(cognitiveQuestions.length - 1, p + 1))
-  }, [cognitiveQuestions.length])
+    setCogIndex((p) => Math.min(displayedCognitiveQuestions.length - 1, p + 1))
+  }, [displayedCognitiveQuestions.length])
 
   const goToPrevCog = useCallback(() => {
     setCogDirection(-1)
     setCogIndex((p) => Math.max(0, p - 1))
   }, [])
 
-  const handleSelectCognitive = useCallback(
-    (optionKey: string) => {
-      const qKey = currentCog.code || `2-${cogIndex}`
+  const openHistoryAttemptForReview = useCallback(
+    (item: AssessmentHistoryItem, keepCurrentStep = false) => {
+      selectHistoryAttempt(item.id)
+      const nextScores: Record<string, number> = {}
+      ;(item.scores || []).forEach((s) => {
+        if (s.subject && typeof s.score === "number" && Number.isFinite(s.score)) {
+          nextScores[s.subject] = s.score
+        }
+      })
+      const attemptCogQs = resolveCogQuestionsForAttempt(
+        item.cognitive,
+        cognitiveQuestions,
+      )
+      setEditingAttemptId(item.id)
+      setReviewBaselineFingerprint(
+        buildWizardProfileFingerprint(
+          item.answers || {},
+          item.cognitive || {},
+          nextScores,
+          item.aspiration,
+          attemptCogQs,
+        ),
+      )
+      setSaveEditError(null)
+      setScores(nextScores)
+      setIsReviewMode(true)
+      setStep1Mode("list")
+      setStep2Mode("list")
+      setCardIndex(0)
+      setCogIndex(0)
+      setShowHistoryPicker(false)
+      setSessionStarted(true)
+      if (!keepCurrentStep) {
+        setStep(1)
+        window.scrollTo({ top: 0, behavior: "smooth" })
+      }
+    },
+    [selectHistoryAttempt, cognitiveQuestions],
+  )
+
+  const handleSelectCognitiveByIndex = useCallback(
+    (code: string, idx: number, optionKey: string) => {
+      const qKey = code || `2-${idx}`
       update({
         cognitive: {
           ...assessment.cognitive,
           [qKey]: optionKey,
-          [`2-${cogIndex}`]: optionKey,
+          [`2-${idx}`]: optionKey,
+        },
+      })
+    },
+    [assessment.cognitive, update],
+  )
+
+  const handleSelectCognitive = useCallback(
+    (optionKey: string) => {
+      const qKey = currentCog.code || `2-${safeCogIndex}`
+      update({
+        cognitive: {
+          ...assessment.cognitive,
+          [qKey]: optionKey,
+          [`2-${safeCogIndex}`]: optionKey,
         },
       })
 
       if (autoAdvanceTimer.current) window.clearTimeout(autoAdvanceTimer.current)
       autoAdvanceTimer.current = window.setTimeout(() => {
-        if (cogIndex < cognitiveQuestions.length - 1) {
+        if (safeCogIndex < displayedCognitiveQuestions.length - 1) {
           setCogDirection(1)
           setCogIndex((prev) =>
-            Math.min(cognitiveQuestions.length - 1, prev + 1)
+            Math.min(displayedCognitiveQuestions.length - 1, prev + 1),
           )
         }
-      }, 200)
+      }, 350)
     },
     [
       currentCog.code,
-      cogIndex,
+      safeCogIndex,
       assessment.cognitive,
       update,
-      cognitiveQuestions.length,
-    ]
+      displayedCognitiveQuestions.length,
+    ],
   )
 
   // Keyboard navigation: Left/Right arrows ONLY navigate prev/next question; 1-5 rate
@@ -465,7 +673,7 @@ export function AssessmentWizard() {
           e.preventDefault()
           goToPrevCard()
         }
-      } else if (step === 2) {
+      } else if (step === 2 && step2Mode === "swipe") {
         const keyMap: Record<string, string> = {
           "1": "A",
           "2": "B",
@@ -480,9 +688,13 @@ export function AssessmentWizard() {
           C: "C",
           D: "D",
         }
-        if (keyMap[e.key]) {
+        const chosenKey = keyMap[e.key]
+        if (
+          chosenKey &&
+          currentCog?.options.some((opt) => opt.option_key === chosenKey)
+        ) {
           e.preventDefault()
-          handleSelectCognitive(keyMap[e.key])
+          handleSelectCognitive(chosenKey)
         } else if (e.key === "ArrowRight") {
           e.preventDefault()
           goToNextCog()
@@ -497,20 +709,194 @@ export function AssessmentWizard() {
   }, [
     step,
     step1Mode,
+    step2Mode,
     rateCurrentCard,
     goToNextCard,
     goToPrevCard,
     handleSelectCognitive,
     goToNextCog,
     goToPrevCog,
+    currentCog,
   ])
 
   const resetAllAnswers = () => {
     reset()
     setScores({})
+    setStep1Mode("swipe")
+    setStep2Mode("swipe")
     setCardIndex(0)
     setCogIndex(0)
     setStep(1)
+    setIsReviewMode(false)
+    setEditingAttemptId(null)
+    setReviewBaselineFingerprint(null)
+    setSaveEditError(null)
+  }
+
+  const handleSaveReviewChanges = async (
+    navigateAfter: "dashboard" | "stay" | "close",
+  ) => {
+    if (submittingRef.current) return
+    if (!hasReviewChanges) {
+      if (navigateAfter === "dashboard") navigate("/dashboard")
+      else if (navigateAfter === "close") setSessionStarted(false)
+      return
+    }
+    if (!completeness.isComplete) {
+      const firstMissing = completeness.missingSteps[0]
+      if (firstMissing) {
+        setStep(firstMissing)
+        update({ step: firstMissing })
+        window.scrollTo({ top: 0, behavior: "smooth" })
+      }
+      return
+    }
+    if (
+      Object.values(scores).some(
+        (value) => !Number.isFinite(value) || value < 0 || value > 10,
+      )
+    ) {
+      setStep(3)
+      return
+    }
+
+    submittingRef.current = true
+    setSubmitting(true)
+    setSaveEditError(null)
+
+    const finalAnswers: Record<string, number> = {}
+    CANONICAL_30_CODES.forEach((code, idx) => {
+      const value = getValidRiasecAnswer(assessment.answers, code, idx)
+      if (value !== undefined) finalAnswers[code] = value
+    })
+
+    const finalCog: Record<string, string> = {}
+    displayedCognitiveQuestions.forEach((q, idx) => {
+      const val =
+        assessment.cognitive[q.code] ??
+        (q.dimension ? assessment.cognitive[q.dimension] : undefined) ??
+        assessment.cognitive[`2-${idx}`]
+      if (typeof val === "string" && val.trim()) {
+        finalCog[q.code] = val.trim().toUpperCase()
+      }
+    })
+
+    const normalizedScores: SubjectGrade[] = Object.entries(scores)
+      .filter(([, score]) => Number.isFinite(score) && score >= 0 && score <= 10)
+      .map(([subject, score]) => ({ subject, score, zScore: null }))
+
+    const aspirationPayload = {
+      dream_job: aspiration.dreamJob || "",
+      desired_field: aspiration.desiredField || "",
+      work_values: aspiration.workValues || [],
+      preferred_environment: aspiration.preferredEnvironment || "",
+      score_strategy: aspiration.scoreStrategy || "FLEXIBLE_PATHWAY",
+    }
+
+    const targetHistoryId =
+      editingAttemptId || activeHistoryId || history[0]?.id || null
+    const targetSubmissionId = targetHistoryId?.startsWith("db-")
+      ? targetHistoryId.slice(3)
+      : assessment.submissionId
+
+    try {
+      let resolvedHistoryId = targetHistoryId
+      let changedFlag = true
+
+      if (token && targetSubmissionId) {
+        const res = await requestJSON<{
+          submission_id?: string
+          changed?: boolean
+        }>(`/assessment/submissions/${encodeURIComponent(targetSubmissionId)}`, {
+          method: "PUT",
+          body: JSON.stringify({
+            riasec_answers: finalAnswers,
+            cognitive_answers: finalCog,
+            aspiration: aspirationPayload,
+            grades_by_subject: Object.fromEntries(
+              normalizedScores.map(({ subject, score }) => [subject, score]),
+            ),
+            score_context: { kind: "TRANSCRIPT", scale: 10 },
+          }),
+        })
+        changedFlag = res?.changed !== false
+        resolvedHistoryId = targetHistoryId || `db-${res?.submission_id || targetSubmissionId}`
+      } else if (token) {
+        const res = await requestJSON<{ submission_id?: string }>(
+          "/assessment/submit",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              riasec_answers: finalAnswers,
+              cognitive_answers: finalCog,
+              aspiration: aspirationPayload,
+              grades_by_subject: Object.fromEntries(
+                normalizedScores.map(({ subject, score }) => [subject, score]),
+              ),
+              score_context: { kind: "TRANSCRIPT", scale: 10 },
+            }),
+          },
+        )
+        if (res?.submission_id && targetHistoryId) {
+          linkHistoryAttemptSubmission(targetHistoryId, res.submission_id)
+          resolvedHistoryId = `db-${res.submission_id}`
+        } else if (res?.submission_id) {
+          resolvedHistoryId = `db-${res.submission_id}`
+        }
+      }
+
+      if (currentToken() !== token) return
+
+      const nextState: AssessmentState = {
+        ...assessment,
+        step: 4,
+        answers: finalAnswers,
+        cognitive: finalCog,
+        scores: normalizedScores,
+        aspiration: assessment.aspiration,
+        completed: true,
+        syncStatus: resolvedHistoryId?.startsWith("db-")
+          ? "SYNCED"
+          : assessment.syncStatus,
+        submissionId: resolvedHistoryId?.startsWith("db-")
+          ? resolvedHistoryId.slice(3)
+          : assessment.submissionId,
+      }
+
+      if (resolvedHistoryId) {
+        updateHistoryAttempt(resolvedHistoryId, nextState, {
+          bumpRevision: changedFlag,
+        })
+        setEditingAttemptId(resolvedHistoryId)
+      } else {
+        update(nextState)
+      }
+
+      setReviewBaselineFingerprint(
+        buildWizardProfileFingerprint(
+          finalAnswers,
+          finalCog,
+          scores,
+          aspiration,
+          displayedCognitiveQuestions,
+        ),
+      )
+
+      if (navigateAfter === "dashboard") {
+        navigate("/dashboard")
+      } else if (navigateAfter === "close") {
+        setSessionStarted(false)
+      }
+    } catch (err) {
+      setSaveEditError(
+        err instanceof Error && err.message
+          ? err.message
+          : "Chưa lưu được thay đổi vào CSDL. Vui lòng thử lại.",
+      )
+    } finally {
+      submittingRef.current = false
+      setSubmitting(false)
+    }
   }
 
   const handleCompleteAssessment = async (skipAspiration = false) => {
@@ -547,7 +933,7 @@ export function AssessmentWizard() {
         }
       : aspiration
 
-    recordCompletedAttempt({
+    const localAttempt = recordCompletedAttempt({
       ...assessment,
       answers: finalAnswers,
       step: 3,
@@ -580,7 +966,7 @@ export function AssessmentWizard() {
 
     // Local storage is already durable; server success requires a returned snapshot ID.
     const controller = new AbortController()
-    const timeout = window.setTimeout(() => controller.abort(), 8000)
+    const timeout = window.setTimeout(() => controller.abort(), 15000)
     let result: { submission_id?: string } | null = null
     try {
       result = await apiRequest<{ submission_id?: string } | null>("/assessment/submit", null, {
@@ -603,6 +989,7 @@ export function AssessmentWizard() {
     }
     if (currentToken() !== token) return
     if (result?.submission_id) {
+      linkHistoryAttemptSubmission(localAttempt.id, result.submission_id)
       update({ syncStatus: "SYNCED", submissionId: result.submission_id })
       confetti({ particleCount: 75, spread: 65, origin: { y: 0.6 } })
     } else {
@@ -653,9 +1040,123 @@ export function AssessmentWizard() {
   }
 
   // 2. CỔNG CHỌN ĐỐI VỚI TÀI KHOẢN ĐÃ CÓ BÀI TRẮC NGHIỆM:
-  // Giao diện chào rộng rãi, nổi bật, bỏ mã holland, bỏ chữ nhỏ, có nút quay lại
   const hasCompletedAttempt = Boolean(assessment.completed || history.length > 0)
   if (hasCompletedAttempt && !sessionStarted) {
+    if (showHistoryPicker && history.length > 0) {
+      return (
+        <section className="relative flex min-h-[72vh] items-center justify-center overflow-x-clip py-6 sm:py-10">
+          <PageContainer className="relative z-10 w-full max-w-4xl xl:max-w-5xl">
+            <div className="mb-6 flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => setShowHistoryPicker(false)}
+                className="inline-flex items-center gap-2 rounded-2xl border border-white/90 bg-white/75 px-4 py-2.5 text-xs sm:text-sm font-extrabold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700 hover:shadow-md"
+              >
+                <ArrowLeft className="size-4 text-sky-600" />
+                <span>Quay lại</span>
+              </button>
+            </div>
+
+            <div className="rounded-3xl border border-white/85 bg-white/85 p-6 sm:p-10 shadow-[0_24px_60px_rgba(14,165,233,0.14)] backdrop-blur-2xl">
+              <div className="flex items-center gap-4">
+                <div className="grid size-13 sm:size-14 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-500 text-white shadow-md">
+                  <History className="size-6 sm:size-7" />
+                </div>
+                <div>
+                  <h1 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight text-slate-900">
+                    Chọn bài trắc nghiệm muốn xem lại
+                  </h1>
+                  <p className="mt-1.5 text-sm font-medium text-slate-600">
+                    Bạn có {history.length} lần làm bài đã lưu. Chọn một bài bên dưới để xem lại toàn bộ câu trả lời và điểm số.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-7 space-y-3.5">
+                {history.map((item, idx) => {
+                  const attemptNumber = history.length - idx
+                  const riasecCount = Object.keys(item.answers || {}).filter((k) =>
+                    /^[RIASEC][1-5]$/i.test(k),
+                  ).length
+                  const isLegacyItem =
+                    Object.keys(item.cognitive || {}).some((k) =>
+                      /^COG_[1-8]$/.test(k) ||
+                      /^(learning_style|work_environment|problem_solving|interaction_target|gardner_intelligence|pressure_tolerance|output_preference|team_role)$/.test(k),
+                    ) &&
+                    !Object.keys(item.cognitive || {}).some((k) => k.startsWith("COG_V2_"))
+                  const cogTotalForAttempt = isLegacyItem ? 8 : 10
+                  const cogCount = isLegacyItem
+                    ? legacyCognitiveQuestions.filter(
+                        (q) =>
+                          item.cognitive?.[q.code] ||
+                          (q.dimension ? item.cognitive?.[q.dimension] : undefined),
+                      ).length
+                    : defaultCognitiveQuestions.filter(
+                        (q) =>
+                          item.cognitive?.[q.code] ||
+                          (q.dimension ? item.cognitive?.[q.dimension] : undefined),
+                      ).length
+                  const dateLabel = formatAttemptDateTime(item.createdAt)
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => openHistoryAttemptForReview(item, false)}
+                      className="group flex w-full flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-2xl border border-slate-200/90 bg-white/95 p-5 text-left shadow-2xs transition-all hover:-translate-y-0.5 hover:border-sky-400 hover:bg-sky-50/40 hover:shadow-md cursor-pointer"
+                    >
+                      <div className="min-w-0 flex-1 space-y-2">
+                        <div className="flex flex-wrap items-center gap-2.5">
+                          <span className="inline-flex items-center gap-1.5 rounded-xl bg-sky-600 px-3 py-1 text-xs font-black text-white shadow-2xs">
+                            Lần {attemptNumber}
+                          </span>
+                          {idx === 0 && (
+                            <span className="rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-[11px] font-bold text-sky-700">
+                              Mới nhất
+                            </span>
+                          )}
+                          {dateLabel && (
+                            <span className="inline-flex items-center gap-1 text-xs font-semibold text-slate-500">
+                              <Clock className="size-3.5 text-slate-400" />
+                              <span>{dateLabel}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-600">
+                          <span className="rounded-lg bg-slate-100 px-2.5 py-1">
+                            {riasecCount}/30 câu sở thích
+                          </span>
+                          <span className="rounded-lg bg-slate-100 px-2.5 py-1">
+                            {cogCount}/{cogTotalForAttempt} câu tư duy
+                          </span>
+                          {item.bestBlock && item.bestBlock !== "Chưa đủ tổ hợp môn" && (
+                            <span className="rounded-lg bg-sky-50 px-2.5 py-1 text-sky-800">
+                              Khối mạnh nhất: {item.bestBlock}
+                            </span>
+                          )}
+                          {item.hollandCode && (
+                            <span className="rounded-lg bg-sky-50 px-2.5 py-1 text-sky-800">
+                              Holland: {item.hollandCode}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="inline-flex shrink-0 items-center gap-1.5 text-sm font-black text-sky-700 group-hover:translate-x-0.5 transition">
+                        <span>Xem bài này</span>
+                        <ArrowRight className="size-4" />
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </PageContainer>
+        </section>
+      )
+    }
+
     return (
       <section className="relative flex min-h-[72vh] items-center justify-center overflow-x-clip py-6 sm:py-10">
         <PageContainer className="relative z-10 w-full max-w-4xl xl:max-w-5xl">
@@ -692,18 +1193,40 @@ export function AssessmentWizard() {
               <button
                 type="button"
                 onClick={() => {
-                  if (!assessment.completed && history[0]) {
-                    selectHistoryAttempt(history[0].id)
+                  if (history.length > 1) {
+                    setShowHistoryPicker(true)
+                    return
                   }
-                  const sourceScores = !assessment.completed && history[0] ? history[0].scores : assessment.scores
+                  if (history[0]) {
+                    openHistoryAttemptForReview(history[0], false)
+                    return
+                  }
                   const nextScores: Record<string, number> = {}
-                  sourceScores.forEach((item) => {
+                  assessment.scores.forEach((item) => {
                     if (item.subject && typeof item.score === "number" && Number.isFinite(item.score)) {
                       nextScores[item.subject] = item.score
                     }
                   })
                   setScores(nextScores)
+                  setEditingAttemptId(
+                    assessment.submissionId ? `db-${assessment.submissionId}` : null,
+                  )
+                  setReviewBaselineFingerprint(
+                    buildWizardProfileFingerprint(
+                      assessment.answers || {},
+                      assessment.cognitive || {},
+                      nextScores,
+                      assessment.aspiration,
+                      resolveCogQuestionsForAttempt(
+                        assessment.cognitive,
+                        cognitiveQuestions,
+                      ),
+                    ),
+                  )
+                  setSaveEditError(null)
                   setIsReviewMode(true)
+                  setStep1Mode("list")
+                  setStep2Mode("list")
                   setStep(1)
                   setCardIndex(0)
                   setCogIndex(0)
@@ -712,8 +1235,16 @@ export function AssessmentWizard() {
                 className="group flex flex-col justify-between rounded-3xl border border-sky-200/90 bg-gradient-to-br from-white via-sky-50/50 to-sky-100/40 p-6 sm:p-8 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-sky-400 hover:shadow-lg"
               >
                 <div>
-                  <div className="mb-5 grid size-14 place-items-center rounded-2xl bg-sky-600 text-white shadow-md transition group-hover:scale-110">
-                    <ClipboardCheck className="size-7" />
+                  <div className="mb-5 flex items-center justify-between gap-2">
+                    <div className="grid size-14 place-items-center rounded-2xl bg-sky-600 text-white shadow-md transition group-hover:scale-110">
+                      <ClipboardCheck className="size-7" />
+                    </div>
+                    {history.length > 1 && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full border border-sky-200 bg-white/90 px-3 py-1 text-xs font-extrabold text-sky-700 shadow-2xs">
+                        <History className="size-3.5" />
+                        <span>{history.length} bài đã lưu</span>
+                      </span>
+                    )}
                   </div>
                   <h3 className="text-lg sm:text-xl font-black text-slate-900 group-hover:text-sky-700">
                     Xem các câu hỏi đã trả lời
@@ -723,7 +1254,7 @@ export function AssessmentWizard() {
                   </p>
                 </div>
                 <div className="mt-6 flex items-center gap-2 text-sm font-black text-sky-700">
-                  <span>Xem lại câu trả lời</span>
+                  <span>{history.length > 1 ? "Chọn bài để xem lại" : "Xem lại câu trả lời"}</span>
                   <ArrowRight className="size-4 transition group-hover:translate-x-1.5" />
                 </div>
               </button>
@@ -733,10 +1264,16 @@ export function AssessmentWizard() {
                 onClick={() => {
                   reset()
                   setScores({})
+                  setStep1Mode("swipe")
+                  setStep2Mode("swipe")
                   setStep(1)
                   setCardIndex(0)
                   setCogIndex(0)
+                  setShowHistoryPicker(false)
                   setIsReviewMode(false)
+                  setEditingAttemptId(null)
+                  setReviewBaselineFingerprint(null)
+                  setSaveEditError(null)
                   setSessionStarted(true)
                 }}
                 className="group flex flex-col justify-between rounded-3xl border border-slate-200/90 bg-white/90 p-6 sm:p-8 text-left shadow-sm transition-all duration-200 hover:-translate-y-1 hover:border-sky-300 hover:bg-slate-50/90 hover:shadow-lg"
@@ -788,27 +1325,65 @@ export function AssessmentWizard() {
 
       {/* Spacious Container: Default wide responsive stage aligned across monitors */}
       <PageContainer className="relative z-10 max-w-4xl xl:max-w-5xl">
-        {/* Top Row: Separate Back Button + Liquid Glass Step Bar side-by-side */}
-        <div className="mb-3 flex flex-wrap items-center gap-2.5 sm:flex-nowrap">
-          <button
-            type="button"
-            onClick={() => {
-              if (hasCompletedAttempt) {
-                setIsReviewMode(false)
-                setSessionStarted(false)
-                window.scrollTo({ top: 0, behavior: "smooth" })
-              } else {
-                navigate("/dashboard")
-              }
-            }}
-            className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-white/90 bg-white/75 px-4 py-2.5 text-xs font-extrabold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700 hover:shadow-sm sm:text-sm"
-          >
-            <ArrowLeft className="size-4 text-sky-600" />
-            <span>Quay lại</span>
-          </button>
+        {/* Top Rows: Back Button row + History Switcher (in review) + Liquid Glass Step Bar row */}
+        <div className="mb-3 flex flex-col gap-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2.5">
+            <button
+              type="button"
+              onClick={() => {
+                if (hasCompletedAttempt) {
+                  const targetId = editingAttemptId || activeHistoryId
+                  if (isReviewMode && hasReviewChanges && targetId) {
+                    selectHistoryAttempt(targetId)
+                  }
+                  setSaveEditError(null)
+                  setIsReviewMode(false)
+                  setSessionStarted(false)
+                  setShowHistoryPicker(isReviewMode && history.length > 1)
+                  window.scrollTo({ top: 0, behavior: "smooth" })
+                } else {
+                  navigate("/dashboard")
+                }
+              }}
+              className="inline-flex shrink-0 items-center gap-2 rounded-2xl border border-white/90 bg-white/75 px-4 py-2.5 text-xs font-extrabold text-slate-700 shadow-xs backdrop-blur-md transition hover:bg-white hover:text-sky-700 hover:shadow-sm sm:text-sm"
+            >
+              <ArrowLeft className="size-4 text-sky-600" />
+              <span>Quay lại</span>
+            </button>
 
-          {/* Top Liquid Glass Step Bar (separate container) */}
-          <div className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
+            {isReviewMode && history.length > 1 && (
+              <div className="flex flex-wrap items-center gap-1.5 rounded-2xl border border-white/90 bg-white/70 px-2.5 py-1.5 shadow-xs backdrop-blur-xl">
+                <span className="inline-flex items-center gap-1 px-1.5 text-xs font-bold text-slate-500">
+                  <History className="size-3.5 text-sky-600" />
+                  <span>Bài làm:</span>
+                </span>
+                {history.map((item, idx) => {
+                  const attemptNumber = history.length - idx
+                  const isCurrent =
+                    item.id === (activeHistoryId || history[0]?.id)
+                  const shortTime = formatAttemptDateTime(item.createdAt)
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => openHistoryAttemptForReview(item, true)}
+                      title={shortTime || undefined}
+                      className={`inline-flex items-center gap-1.5 rounded-xl px-3 py-1 text-xs font-extrabold transition cursor-pointer ${
+                        isCurrent
+                          ? "bg-sky-600 text-white shadow-xs"
+                          : "bg-white/80 text-slate-600 hover:bg-white hover:text-sky-700"
+                      }`}
+                    >
+                      <span>Lần {attemptNumber}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* Top Liquid Glass Step Bar (separate full-width row) */}
+          <div className="flex w-full min-w-0 flex-wrap items-center justify-between gap-2 rounded-2xl border border-white/85 bg-white/60 px-3.5 py-2 shadow-[inset_0_1px_1px_rgba(255,255,255,0.9),0_10px_28px_rgba(14,165,233,0.08)] backdrop-blur-2xl">
           {/* 3 Main Steps */}
           <div className="flex flex-wrap items-center gap-1.5">
             {[
@@ -914,6 +1489,35 @@ export function AssessmentWizard() {
               </div>
             )}
 
+            {step === 2 && (
+              <div className="flex items-center rounded-xl border border-white/80 bg-white/60 p-0.5 backdrop-blur-xl">
+                <button
+                  type="button"
+                  onClick={() => setStep2Mode("swipe")}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold transition ${
+                    step2Mode === "swipe"
+                      ? "bg-sky-600 text-white shadow-sm"
+                      : "text-slate-600 hover:text-sky-700"
+                  }`}
+                >
+                  <Layers className="size-3.5" />
+                  <span>Thẻ</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStep2Mode("list")}
+                  className={`inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-xs font-extrabold transition ${
+                    step2Mode === "list"
+                      ? "bg-sky-600 text-white shadow-sm"
+                      : "text-slate-600 hover:text-sky-700"
+                  }`}
+                >
+                  <ListChecks className="size-3.5" />
+                  <span>Danh sách</span>
+                </button>
+              </div>
+            )}
+
             {(totalRiasecAnswered > 0 || totalCognitiveAnswered > 0) && (
               <button
                 type="button"
@@ -931,6 +1535,31 @@ export function AssessmentWizard() {
         {loading && step < 3 && (
           <div className="mb-3 flex items-center justify-center gap-2 text-sky-700/70">
             <Loader2 className="size-4 animate-spin" />
+          </div>
+        )}
+
+        {isReviewMode && (hasReviewChanges || saveEditError) && (
+          <div
+            role="status"
+            className={`mb-3 flex flex-wrap items-center justify-between gap-2.5 rounded-2xl border px-4 py-2.5 text-xs sm:text-sm backdrop-blur-md ${
+              saveEditError
+                ? "border-rose-200 bg-rose-50/95 text-rose-900"
+                : "border-sky-200 bg-sky-50/95 text-sky-900"
+            }`}
+          >
+            <span className="font-semibold">
+              {saveEditError
+                ? saveEditError
+                : "Hồ sơ đã lưu có thay đổi. Bấm lưu để cập nhật CSDL, tính lại đề xuất và làm mới giải thích AI."}
+            </span>
+            <Button
+              icon={Check}
+              className="px-3.5 py-1.5 text-xs font-extrabold"
+              disabled={submitting || !completeness.isComplete}
+              onClick={() => handleSaveReviewChanges("dashboard")}
+            >
+              {submitting ? "Đang cập nhật…" : "Lưu thay đổi & Phân tích lại"}
+            </Button>
           </div>
         )}
 
@@ -1055,169 +1684,220 @@ export function AssessmentWizard() {
         {/* ==================== STEP 2: RELATABLE COGNITIVE SCENARIO CARDS ==================== */}
         {step === 2 && currentCog && (
           <div className="space-y-2.5 sm:space-y-3">
-            {/* Compact Step 2 Progress Track */}
-            <div className="mx-auto flex w-full items-center gap-3 px-1 transition-all duration-200">
-              <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
-                <motion.div
-                  animate={{
-                    width: `${Math.round(
-                      (totalCognitiveAnswered /
-                        Math.max(1, cognitiveQuestions.length)) *
-                        100
-                    )}%`,
-                  }}
-                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                  className="h-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-cyan-500"
-                />
-              </div>
-              <span className="text-xs font-black tabular-nums text-sky-900 sm:text-sm">
-                {totalCognitiveAnswered}/{cognitiveQuestions.length}
-              </span>
-            </div>
-
-            <div className="relative mx-auto flex w-full items-center justify-center gap-2.5 sm:gap-4 transition-all duration-200">
-              <motion.button
-                type="button"
-                whileHover={{ scale: 1.08 }}
-                whileTap={{ scale: 0.92 }}
-                disabled={cogIndex === 0}
-                onClick={goToPrevCog}
-                aria-label="Câu trước"
-                className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-md backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
-              >
-                <ChevronLeft className="size-5" />
-              </motion.button>
-
-              <AnimatePresence mode="wait" custom={cogDirection}>
-                <motion.div
-                  key={currentCog.code}
-                  custom={cogDirection}
-                  initial={{ opacity: 0, x: cogDirection * 48, scale: 0.98 }}
-                  animate={{ opacity: 1, x: 0, scale: 1 }}
-                  exit={{ opacity: 0, x: cogDirection * -48, scale: 0.98 }}
-                  transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
-                  drag="x"
-                  dragConstraints={{ left: 0, right: 0 }}
-                  dragElastic={0.35}
-                  onDragEnd={(_, info) => {
-                    if (info.offset.x < -55 || info.velocity.x < -300) {
-                      goToNextCog()
-                    } else if (info.offset.x > 55 || info.velocity.x > 300) {
-                      goToPrevCog()
-                    }
-                  }}
-                  className="mx-auto w-full max-w-3xl xl:max-w-4xl rounded-3xl border border-white/90 bg-white/75 p-4 sm:p-6 lg:p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl"
-                >
-                  {/* Top Header Pills + Mobile Nav */}
-                  <div className="mb-3.5 sm:mb-4 flex items-center justify-between gap-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="rounded-full border border-sky-200/80 bg-white/90 px-3 py-1 text-xs font-black tabular-nums text-sky-800 shadow-2xs">
-                        {cogIndex + 1} / {cognitiveQuestions.length}
-                      </span>
-                      {currentCog.dimension_badge && (
-                        <span className="rounded-full border border-sky-100 bg-sky-50/90 px-3 py-1 text-xs font-bold text-sky-800">
-                          {currentCog.dimension_badge}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex items-center gap-1 sm:hidden">
-                      <button
-                        type="button"
-                        disabled={cogIndex === 0}
-                        onClick={goToPrevCog}
-                        aria-label="Câu trước"
-                        className="grid size-9 place-items-center rounded-full border border-white/80 bg-white/80 text-sky-700 disabled:opacity-30"
-                      >
-                        <ChevronLeft className="size-4" />
-                      </button>
-                      <button
-                        type="button"
-                        disabled={cogIndex >= cognitiveQuestions.length - 1}
-                        onClick={goToNextCog}
-                        aria-label="Câu tiếp theo"
-                        className="grid size-9 place-items-center rounded-full border border-white/80 bg-white/80 text-sky-700 disabled:opacity-30"
-                      >
-                        <ChevronRight className="size-4" />
-                      </button>
-                    </div>
+            {step2Mode === "swipe" && (
+              <>
+                {/* Compact Step 2 Progress Track */}
+                <div className="mx-auto flex w-full items-center gap-3 px-1 transition-all duration-200">
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/80 bg-white/55 p-0.5 backdrop-blur-md">
+                    <motion.div
+                      animate={{
+                        width: `${Math.round(
+                          (totalCognitiveAnswered /
+                            Math.max(1, displayedCognitiveQuestions.length)) *
+                            100
+                        )}%`,
+                      }}
+                      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                      className="h-full rounded-full bg-gradient-to-r from-sky-400 via-sky-500 to-cyan-500"
+                    />
                   </div>
+                  <span className="text-xs font-black tabular-nums text-sky-900 sm:text-sm">
+                    {totalCognitiveAnswered}/{displayedCognitiveQuestions.length}
+                  </span>
+                </div>
 
-                  {/* Relatable Scenario Question */}
-                  <h2 className="mb-4 sm:mb-5 text-base sm:text-lg lg:text-xl font-bold leading-snug text-slate-900">
-                    {currentCog.subtitle}
-                  </h2>
+                <div className="relative mx-auto flex w-full items-center justify-center gap-2.5 sm:gap-4 transition-all duration-200">
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
+                    disabled={safeCogIndex === 0}
+                    onClick={goToPrevCog}
+                    aria-label="Câu trước"
+                    className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-md backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
+                  >
+                    <ChevronLeft className="size-5" />
+                  </motion.button>
 
-                  {/* 4 Two-Tier Context Cards */}
-                  <div className="grid grid-cols-1 gap-2.5 sm:gap-3 sm:grid-cols-2">
-                    {currentCog.options.map((opt) => {
-                      const isSelected =
-                        String(currentCogValue) === opt.option_key
-                      return (
-                        <motion.button
-                          key={opt.option_key}
-                          data-testid={`cognitive-${currentCog.code}-${opt.option_key}`}
-                          type="button"
-                          whileHover={{ y: -2, scale: 1.01 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleSelectCognitive(opt.option_key)
-                          }}
-                          className={`group relative flex min-h-[52px] items-start gap-3.5 rounded-2xl border p-4 sm:p-4.5 text-left backdrop-blur-xl transition-all cursor-pointer active:scale-[0.98] ${
-                            isSelected
-                              ? "border-sky-500 bg-sky-50/90 ring-2 ring-sky-500/25 shadow-sm"
-                              : "border-slate-200/90 bg-white/90 hover:border-sky-300 hover:bg-sky-50/40"
-                          }`}
-                        >
-                          <span
-                            className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
-                              isSelected
-                                ? "bg-sky-500 text-white shadow-xs"
-                                : "bg-slate-100 text-slate-600 group-hover:bg-sky-100 group-hover:text-sky-600"
-                            }`}
-                          >
-                            <CognitiveOptionIcon
-                              name={opt.icon}
-                              className="size-5 stroke-[2]"
-                            />
+                  <AnimatePresence mode="wait" custom={cogDirection}>
+                    <motion.div
+                      key={currentCog.code}
+                      custom={cogDirection}
+                      initial={{ opacity: 0, x: cogDirection * 48, scale: 0.98 }}
+                      animate={{ opacity: 1, x: 0, scale: 1 }}
+                      exit={{ opacity: 0, x: cogDirection * -48, scale: 0.98 }}
+                      transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                      drag="x"
+                      dragConstraints={{ left: 0, right: 0 }}
+                      dragElastic={0.35}
+                      onDragEnd={(_, info) => {
+                        if (info.offset.x < -55 || info.velocity.x < -300) {
+                          goToNextCog()
+                        } else if (info.offset.x > 55 || info.velocity.x > 300) {
+                          goToPrevCog()
+                        }
+                      }}
+                      className="mx-auto w-full max-w-3xl xl:max-w-4xl rounded-3xl border border-white/90 bg-white/75 p-4 sm:p-6 lg:p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl"
+                    >
+                      {/* Top Header Pill + Mobile Nav */}
+                      <div className="mb-3.5 sm:mb-4 flex items-center justify-between gap-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="rounded-full border border-sky-200/80 bg-white/90 px-3 py-1 text-xs font-black tabular-nums text-sky-800 shadow-2xs">
+                            {safeCogIndex + 1} / {displayedCognitiveQuestions.length}
                           </span>
+                        </div>
 
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-start justify-between gap-2">
-                              <h3 className="text-sm sm:text-base font-bold leading-snug text-slate-800">
-                                {opt.label}
-                              </h3>
-                              {isSelected && (
-                                <span className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-black text-white shadow-xs">
-                                  <Check className="size-3 stroke-[2.5]" />
-                                  <span>Đã chọn</span>
-                                </span>
-                              )}
-                            </div>
-                            <p className="mt-1 text-xs sm:text-sm leading-relaxed text-slate-600">
-                              {opt.description}
-                            </p>
-                          </div>
-                        </motion.button>
-                      )
-                    })}
-                  </div>
-                </motion.div>
-              </AnimatePresence>
+                        <div className="flex items-center gap-1 sm:hidden">
+                          <button
+                            type="button"
+                            disabled={safeCogIndex === 0}
+                            onClick={goToPrevCog}
+                            aria-label="Câu trước"
+                            className="grid size-9 place-items-center rounded-full border border-white/80 bg-white/80 text-sky-700 disabled:opacity-30"
+                          >
+                            <ChevronLeft className="size-4" />
+                          </button>
+                          <button
+                            type="button"
+                            disabled={safeCogIndex >= displayedCognitiveQuestions.length - 1}
+                            onClick={goToNextCog}
+                            aria-label="Câu tiếp theo"
+                            className="grid size-9 place-items-center rounded-full border border-white/80 bg-white/80 text-sky-700 disabled:opacity-30"
+                          >
+                            <ChevronRight className="size-4" />
+                          </button>
+                        </div>
+                      </div>
 
-              <motion.button
-                type="button"
-                whileHover={{ scale: 1.08 }}
-                whileTap={{ scale: 0.92 }}
-                disabled={cogIndex >= cognitiveQuestions.length - 1}
-                onClick={goToNextCog}
-                aria-label="Câu tiếp theo"
-                className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-md backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
-              >
-                <ChevronRight className="size-5" />
-              </motion.button>
-            </div>
+                      {/* Relatable Scenario Question */}
+                      <h2 className="mb-4 sm:mb-5 text-base sm:text-lg lg:text-xl font-bold leading-snug text-slate-900">
+                        {currentCog.subtitle}
+                      </h2>
+
+                      {/* Option Cards (compact by default; toggle button reveals details) */}
+                      <div
+                        className={`grid grid-cols-1 gap-2.5 sm:gap-3 ${
+                          currentCog.options.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"
+                        }`}
+                      >
+                        {currentCog.options.map((opt) => {
+                          const isSelected =
+                            String(currentCogValue) === opt.option_key
+                          const expandKey = `${currentCog.code}:${opt.option_key}`
+                          const isExpanded = Boolean(expandedCogOptions[expandKey])
+                          return (
+                            <motion.div
+                              key={opt.option_key}
+                              role="button"
+                              tabIndex={0}
+                              data-testid={`cognitive-${currentCog.code}-${opt.option_key}`}
+                              whileHover={{ y: -2, scale: 1.01 }}
+                              whileTap={{ scale: 0.98 }}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleSelectCognitive(opt.option_key)
+                              }}
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault()
+                                  handleSelectCognitive(opt.option_key)
+                                }
+                              }}
+                              className={`group relative flex min-h-[56px] items-start gap-3.5 rounded-2xl border p-4 sm:p-4.5 text-left backdrop-blur-xl transition-all cursor-pointer active:scale-[0.98] ${
+                                isSelected
+                                  ? "border-sky-500 bg-sky-50/90 ring-2 ring-sky-500/25 shadow-sm"
+                                  : "border-slate-200/90 bg-white/90 hover:border-sky-300 hover:bg-sky-50/40"
+                              }`}
+                            >
+                              <span
+                                className={`flex size-10 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                                  isSelected
+                                    ? "bg-sky-500 text-white shadow-xs"
+                                    : "bg-slate-100 text-slate-600 group-hover:bg-sky-100 group-hover:text-sky-600"
+                                }`}
+                              >
+                                <CognitiveOptionIcon
+                                  name={opt.icon}
+                                  className="size-5 stroke-[2]"
+                                />
+                              </span>
+
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center justify-between gap-2">
+                                  <h3 className="text-sm sm:text-base font-bold leading-snug text-slate-800">
+                                    {opt.label}
+                                  </h3>
+                                  <div className="flex shrink-0 items-center gap-1.5">
+                                    {isSelected && (
+                                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-black text-white shadow-xs">
+                                        <Check className="size-3 stroke-[2.5]" />
+                                        <span>Đã chọn</span>
+                                      </span>
+                                    )}
+                                    {opt.description && (
+                                      <button
+                                        type="button"
+                                        aria-expanded={isExpanded}
+                                        aria-label={isExpanded ? "Ẩn chi tiết đáp án" : "Xem chi tiết đáp án"}
+                                        title={isExpanded ? "Ẩn chi tiết" : "Xem chi tiết"}
+                                        onClick={(e) => {
+                                          e.stopPropagation()
+                                          setExpandedCogOptions((prev) => ({
+                                            ...prev,
+                                            [expandKey]: !prev[expandKey],
+                                          }))
+                                        }}
+                                        className={`grid size-7 place-items-center rounded-full border transition cursor-pointer ${
+                                          isExpanded
+                                            ? "border-sky-300 bg-sky-100 text-sky-700"
+                                            : "border-slate-200 bg-white text-slate-500 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                                        }`}
+                                      >
+                                        <ChevronDown
+                                          className={`size-4 transition-transform duration-150 ${
+                                            isExpanded ? "rotate-180" : ""
+                                          }`}
+                                        />
+                                      </button>
+                                    )}
+                                  </div>
+                                </div>
+                                {isExpanded && opt.description && (
+                                  <p className="mt-2 text-xs sm:text-sm leading-relaxed text-slate-600">
+                                    {opt.description}
+                                  </p>
+                                )}
+                              </div>
+                            </motion.div>
+                          )
+                        })}
+                      </div>
+                    </motion.div>
+                  </AnimatePresence>
+
+                  <motion.button
+                    type="button"
+                    whileHover={{ scale: 1.08 }}
+                    whileTap={{ scale: 0.92 }}
+                    disabled={safeCogIndex >= displayedCognitiveQuestions.length - 1}
+                    onClick={goToNextCog}
+                    aria-label="Câu tiếp theo"
+                    className="hidden sm:grid size-11 shrink-0 place-items-center rounded-full border border-white/90 bg-white/75 text-sky-700 shadow-md backdrop-blur-2xl transition hover:bg-white hover:scale-105 disabled:opacity-30 cursor-pointer"
+                  >
+                    <ChevronRight className="size-5" />
+                  </motion.button>
+                </div>
+              </>
+            )}
+
+            {step2Mode === "list" && (
+              <CognitiveQuestionsListView
+                questions={displayedCognitiveQuestions}
+                answers={assessment.cognitive}
+                answeredCount={totalCognitiveAnswered}
+                onSelect={handleSelectCognitiveByIndex}
+              />
+            )}
           </div>
         )}
 
@@ -1240,7 +1920,7 @@ export function AssessmentWizard() {
               />
             </div>
 
-            {!isReviewMode && !completeness.isComplete && (
+            {!completeness.isComplete && (
               <div
                 role="status"
                 className="rounded-2xl border border-amber-200 bg-amber-50/95 p-4 sm:p-5 text-amber-900 shadow-xs backdrop-blur-md"
@@ -1300,7 +1980,7 @@ export function AssessmentWizard() {
                 goToPrevCard()
                 return
               }
-              if (step === 2 && cogIndex > 0) {
+              if (step === 2 && step2Mode === "swipe" && cogIndex > 0) {
                 goToPrevCog()
                 return
               }
@@ -1356,17 +2036,41 @@ export function AssessmentWizard() {
                     <Button
                       variant="secondary"
                       className="border-slate-300 px-4 py-2.5 text-xs font-bold text-slate-700 hover:bg-slate-100 sm:text-sm"
-                      onClick={() => setSessionStarted(false)}
+                      disabled={submitting}
+                      onClick={() => {
+                        const targetId = editingAttemptId || activeHistoryId
+                        if (hasReviewChanges && targetId) {
+                          selectHistoryAttempt(targetId)
+                        }
+                        setSaveEditError(null)
+                        setSessionStarted(false)
+                      }}
                     >
-                      Đóng xem lại
+                      {hasReviewChanges ? "Hủy thay đổi" : "Đóng xem lại"}
                     </Button>
-                    <Button
-                      icon={LayoutDashboard}
-                      className="bg-sky-600 px-5 py-2.5 text-xs font-black text-white shadow-md hover:bg-sky-700 sm:text-sm"
-                      onClick={() => navigate("/dashboard")}
-                    >
-                      Mở Dashboard kết quả
-                    </Button>
+                    {hasReviewChanges ? (
+                      <Button
+                        icon={Check}
+                        className="bg-sky-600 px-5 py-2.5 text-xs font-black text-white shadow-md hover:bg-sky-700 sm:text-sm"
+                        disabled={submitting || !completeness.isComplete}
+                        title={
+                          !completeness.isComplete
+                            ? "Cần hoàn thành đủ 3 phần trước khi lưu thay đổi"
+                            : undefined
+                        }
+                        onClick={() => handleSaveReviewChanges("dashboard")}
+                      >
+                        {submitting ? "Đang cập nhật…" : "Lưu thay đổi & Phân tích lại"}
+                      </Button>
+                    ) : (
+                      <Button
+                        icon={LayoutDashboard}
+                        className="bg-sky-600 px-5 py-2.5 text-xs font-black text-white shadow-md hover:bg-sky-700 sm:text-sm"
+                        onClick={() => navigate("/dashboard")}
+                      >
+                        Mở Dashboard kết quả
+                      </Button>
+                    )}
                   </>
                 ) : (
                   <Button
@@ -1453,9 +2157,6 @@ function RiasecQuestionsListView({
         {filteredItems.map((item) => {
           const canonicalIdx = CANONICAL_30_CODES.indexOf(item.code)
           const chosenVal = answers[item.code] ?? answers[`1-${canonicalIdx}`]
-          const chosenScale = ONET_REACTION_SCALE.find(
-            (s) => s.value === chosenVal,
-          )
 
           return (
             <div
@@ -1476,12 +2177,7 @@ function RiasecQuestionsListView({
                     <span className="rounded-md bg-slate-100 px-2 py-0.5 text-[10px] font-black text-slate-600 uppercase">
                       {RIASEC_META[item.dimension]?.tag}
                     </span>
-                    {chosenVal ? (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 text-[11px] font-black text-emerald-700">
-                        <Check className="size-3" />
-                        <span>Đã chọn: {chosenScale?.emoji} {chosenScale?.label} ({chosenVal}/5đ)</span>
-                      </span>
-                    ) : (
+                    {!chosenVal && (
                       <span className="text-[11px] font-bold text-amber-600">
                         Chưa trả lời
                       </span>
@@ -1523,6 +2219,174 @@ function RiasecQuestionsListView({
       </div>
     </div>
   )
+}
+
+function CognitiveQuestionsListView({
+  questions,
+  answers,
+  answeredCount,
+  onSelect,
+}: {
+  questions: CognitiveQuestionItem[]
+  answers: Record<string, string | number>
+  answeredCount: number
+  onSelect: (code: string, index: number, optionKey: string) => void
+}) {
+  const [expandedOptions, setExpandedOptions] = useState<Record<string, boolean>>({})
+
+  return (
+    <div className="space-y-4 rounded-3xl border border-white/90 bg-white/70 p-5 sm:p-7 shadow-[inset_0_1px_1px_rgba(255,255,255,0.95),0_18px_44px_rgba(14,165,233,0.12)] backdrop-blur-2xl">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 pb-3.5">
+        <span className="text-xs sm:text-sm font-black text-slate-800">
+          Tất cả câu hỏi tư duy ({questions.length} câu)
+        </span>
+        <span className="text-xs font-bold tabular-nums text-sky-800">
+          {answeredCount}/{questions.length} đã trả lời
+        </span>
+      </div>
+
+      <div className="space-y-4">
+        {questions.map((q, idx) => {
+          const picked =
+            answers[q.code] ??
+            (q.dimension ? answers[q.dimension] : undefined) ??
+            answers[`2-${idx}`]
+          const hasAnswer = picked !== undefined && picked !== null && String(picked).trim() !== ""
+
+          return (
+            <div
+              key={q.code || idx}
+              data-testid={`cognitive-list-${q.code}`}
+              className={`rounded-2xl border p-4 sm:p-5 backdrop-blur-md transition ${
+                hasAnswer
+                  ? "border-sky-200/90 bg-white/95 shadow-2xs"
+                  : "border-slate-200/80 bg-white/75"
+              }`}
+            >
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <span className="rounded-xl bg-sky-100 px-2.5 py-1 text-xs font-black tabular-nums text-sky-800">
+                  Câu {idx + 1}
+                </span>
+                {!hasAnswer && (
+                  <span className="text-[11px] font-bold text-amber-600">
+                    Chưa trả lời
+                  </span>
+                )}
+              </div>
+
+              <h3 className="mb-3.5 text-sm sm:text-base font-extrabold leading-snug text-slate-900">
+                {q.subtitle}
+              </h3>
+
+              <div
+                className={`grid grid-cols-1 gap-2.5 ${
+                  q.options.length === 3 ? "sm:grid-cols-3" : "sm:grid-cols-2"
+                }`}
+              >
+                {q.options.map((opt) => {
+                  const isSelected = String(picked) === opt.option_key
+                  const expandKey = `${q.code}:${opt.option_key}`
+                  const isExpanded = Boolean(expandedOptions[expandKey])
+                  return (
+                    <div
+                      key={opt.option_key}
+                      role="button"
+                      tabIndex={0}
+                      data-testid={`cognitive-${q.code}-${opt.option_key}`}
+                      onClick={() => onSelect(q.code, idx, opt.option_key)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          onSelect(q.code, idx, opt.option_key)
+                        }
+                      }}
+                      className={`group flex items-start gap-3 rounded-2xl border p-3.5 text-left transition-all cursor-pointer active:scale-[0.99] ${
+                        isSelected
+                          ? "border-sky-500 bg-sky-50/90 ring-2 ring-sky-500/25 shadow-xs"
+                          : "border-slate-200/90 bg-white/90 hover:border-sky-300 hover:bg-sky-50/40"
+                      }`}
+                    >
+                      <span
+                        className={`flex size-9 shrink-0 items-center justify-center rounded-xl transition-colors ${
+                          isSelected
+                            ? "bg-sky-500 text-white shadow-xs"
+                            : "bg-slate-100 text-slate-600 group-hover:bg-sky-100 group-hover:text-sky-600"
+                        }`}
+                      >
+                        <CognitiveOptionIcon
+                          name={opt.icon}
+                          className="size-4.5 stroke-[2]"
+                        />
+                      </span>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs sm:text-sm font-bold leading-snug text-slate-800">
+                            {opt.label}
+                          </span>
+                          <div className="flex shrink-0 items-center gap-1.5">
+                            {isSelected && (
+                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-600 px-2 py-0.5 text-[10px] font-black text-white">
+                                <Check className="size-3 stroke-[2.5]" />
+                                <span>Đã chọn</span>
+                              </span>
+                            )}
+                            {opt.description && (
+                              <button
+                                type="button"
+                                aria-expanded={isExpanded}
+                                aria-label={isExpanded ? "Ẩn chi tiết đáp án" : "Xem chi tiết đáp án"}
+                                title={isExpanded ? "Ẩn chi tiết" : "Xem chi tiết"}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  setExpandedOptions((prev) => ({
+                                    ...prev,
+                                    [expandKey]: !prev[expandKey],
+                                  }))
+                                }}
+                                className={`grid size-6.5 place-items-center rounded-full border transition cursor-pointer ${
+                                  isExpanded
+                                    ? "border-sky-300 bg-sky-100 text-sky-700"
+                                    : "border-slate-200 bg-white text-slate-500 hover:border-sky-300 hover:bg-sky-50 hover:text-sky-700"
+                                }`}
+                              >
+                                <ChevronDown
+                                  className={`size-3.5 transition-transform duration-150 ${
+                                    isExpanded ? "rotate-180" : ""
+                                  }`}
+                                />
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        {isExpanded && opt.description && (
+                          <p className="mt-1.5 text-xs leading-relaxed text-slate-600">
+                            {opt.description}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function formatAttemptDateTime(iso?: string): string {
+  if (!iso) return ""
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return ""
+  return d.toLocaleString("vi-VN", {
+    hour: "2-digit",
+    minute: "2-digit",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  })
 }
 
 function VerticalQuestionCard({

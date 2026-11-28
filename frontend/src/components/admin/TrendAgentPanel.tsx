@@ -170,6 +170,7 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
   const [expandedCitations, setExpandedCitations] = useState<Record<string, boolean>>({})
   const [showAllSources, setShowAllSources] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
+  const [runError, setRunError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
@@ -210,23 +211,28 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
     if (operation.current) return
     operation.current = true
     setRunning(true)
+    setRunError(null)
     try {
-      const res = await apiFetch("/api/v1/taxonomy/trend-agent/run", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...getAdminAuthHeader(),
+      const res = await apiFetch(
+        "/api/v1/taxonomy/trend-agent/run",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...getAdminAuthHeader(),
+          },
+          body: JSON.stringify({
+            focus_query: focusQuery.trim() || DEFAULT_TREND_QUERY_2026,
+            auto_save: true,
+          }),
         },
-        body: JSON.stringify({
-          focus_query: focusQuery.trim() || DEFAULT_TREND_QUERY_2026,
-          auto_save: true,
-        }),
-      })
+        120_000,
+      )
       if (res.status === 401 || res.status === 403) {
-        onNotify(
-          "Cần đăng nhập lại bằng tài khoản Admin (JWT hợp lệ) để chạy Agent tìm kiếm.",
-          true,
-        )
+        const msg =
+          "Cần đăng nhập lại bằng tài khoản Admin (JWT hợp lệ) để chạy Agent tìm kiếm."
+        setRunError(msg)
+        onNotify(msg, true)
         return
       }
       if (!res.ok) {
@@ -247,10 +253,10 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
           `Đã cập nhật ${data.total_trending_marked ?? 0} ngành xu hướng mới (phủ ${data.categories_covered ?? 0}/${data.total_categories ?? 23} nhóm ngành) và xóa sạch tag cũ.`,
       )
     } catch (err) {
-      onNotify(
-        err instanceof Error ? err.message : "Không thể chạy Agent tìm xu hướng.",
-        true,
-      )
+      const msg =
+        err instanceof Error ? err.message : "Không thể chạy Agent tìm xu hướng."
+      setRunError(msg)
+      onNotify(msg, true)
     } finally {
       operation.current = false
       if (mounted.current) setRunning(false)
@@ -669,6 +675,51 @@ export function TrendAgentPanel({ onNotify }: TrendAgentPanelProps) {
           </span>
         </div>
       </div>
+
+      {/* Inline Agent Running Status */}
+      {running && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mt-3 flex items-center gap-3 rounded-2xl border border-sky-200 bg-sky-50/90 px-4 py-3 text-xs text-sky-900"
+        >
+          <Loader2 size={16} className="shrink-0 animate-spin text-sky-600" />
+          <div className="leading-relaxed">
+            <span className="font-bold">Agent Navi đang thu thập &amp; phân tích xu hướng 2026: </span>
+            <span className="text-sky-800">
+              Đang quét nguồn tin báo chí, đối chiếu 23 nhóm ngành MOET và phân hạng song song theo từng lô. Quá trình có thể mất 20–60 giây.
+            </span>
+          </div>
+        </div>
+      )}
+
+      {/* Inline Agent Run Error Alert */}
+      {!running && runError && (
+        <div
+          role="alert"
+          className="mt-3 flex items-start justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50/95 px-4 py-3 text-xs text-rose-900"
+        >
+          <div className="flex items-start gap-2.5 leading-relaxed">
+            <span
+              aria-hidden="true"
+              className="mt-0.5 inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-full bg-rose-600 text-[10px] font-black text-white"
+            >
+              !
+            </span>
+            <div>
+              <span className="font-bold">Không thể hoàn tất chạy Agent tìm xu hướng: </span>
+              <span>{runError}</span>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => setRunError(null)}
+            className="shrink-0 rounded-lg border border-rose-200 bg-white px-2.5 py-1 font-semibold text-rose-700 hover:bg-rose-100 cursor-pointer"
+          >
+            Đóng
+          </button>
+        </div>
+      )}
 
       {/* Draft Confirmation Banner */}
       {isDraft && totalMarked > 0 && (

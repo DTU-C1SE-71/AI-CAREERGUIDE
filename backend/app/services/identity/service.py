@@ -110,6 +110,7 @@ async def update_user_profile(db: AsyncSession, user_id: uuid.UUID, payload: Use
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
+    old_grade = (user.grade_level or "").strip()
     if payload.full_name is not None:
         user.full_name = payload.full_name.strip()
     if payload.gender is not None:
@@ -120,6 +121,11 @@ async def update_user_profile(db: AsyncSession, user_id: uuid.UUID, payload: Use
         user.school_class = payload.school_class.strip() if payload.school_class else None
     if payload.school_name is not None:
         user.school_name = payload.school_name.strip() if payload.school_name else None
+
+    if (user.grade_level or "").strip() != old_grade:
+        from app.services.recommender.service import invalidate_user_recommendation_snapshots
+
+        await invalidate_user_recommendation_snapshots(db, user_id)
 
     await db.commit()
     await db.refresh(user)

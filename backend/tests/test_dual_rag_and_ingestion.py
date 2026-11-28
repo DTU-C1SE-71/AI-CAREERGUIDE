@@ -85,10 +85,13 @@ async def seed_staging(db):
 
 
 async def configured_snapshot(db, url, monkeypatch):
-    from test_ai_config_runtime import draft_for
-    from app.services.ai_config.service import apply_config, resolve_snapshot
-    monkeypatch.setattr(settings, "AI_CONFIG_ENCRYPTION_KEY", Fernet.generate_key().decode())
-    await apply_config(db, await draft_for(db, url), "synthetic-config-admin")
+    from app.services.ai_config.service import resolve_snapshot
+    monkeypatch.setattr(settings, "ENVIRONMENT", "test")
+    monkeypatch.setattr(settings, "LLM_BASE_URL", url)
+    monkeypatch.setattr(settings, "LLM_MODEL", "model-a")
+    monkeypatch.setattr(settings, "LLM_PROTOCOL", "openai_compatible")
+    monkeypatch.setattr(settings, "LLM_AUTH_MODE", "BEARER")
+    monkeypatch.setattr(settings, "LLM_API_KEY", "sk-synth-test-only-00001234")
     return await resolve_snapshot(db)
 
 
@@ -406,28 +409,26 @@ class TestAIExplanationAndChatCounselor:
         assert "sk-synth-status-test-only" not in json.dumps(status_info)
 
     @pytest.mark.asyncio
-    async def test_llm_connection_test_without_key_reports_clean_failure(self, ai_runtime_db):
-        from app.schemas.ai_config import AIConfigProbe
-        from app.services.llamaindex_rag_orchestrator.guidance_rag import get_llm_status, test_llm_connection
+    async def test_llm_connection_test_without_key_reports_clean_failure(self, ai_runtime_db, monkeypatch):
+        from app.core.ai_runtime import AIConfigError
+        from app.services.ai_config.service import resolve_snapshot
+        from app.services.llamaindex_rag_orchestrator.guidance_rag import get_llm_status
+        monkeypatch.setattr(settings, "LLM_API_KEY", "")
+        monkeypatch.setattr(settings, "LLM_AUTH_MODE", "BEARER")
         state = await get_llm_status(ai_runtime_db)
-        active = state["active"]
-        req = AIConfigProbe(source_mode="ENV", protocol=active["protocol"], base_url=active["base_url"], model=active["model"], auth_mode="BEARER", credential_action="KEEP", base_revision_token=state["revision_token"], probe_request_id="without-key", draft_digest="draft")
-        result = await test_llm_connection(req, ai_runtime_db, "test-without-key")
-        assert result["success"] is False
-        assert result["status_code"] == 409
-        assert result["code"] == "UNCONFIGURED_CREDENTIAL"
+        assert state["credential"]["state"] == "MISSING"
+        with pytest.raises(AIConfigError) as exc:
+            await resolve_snapshot(ai_runtime_db)
+        assert exc.value.status_code == 409
+        assert exc.value.code == "UNCONFIGURED_CREDENTIAL"
 
     @pytest.mark.asyncio
     async def test_llm_connection_test_with_actual_http_stub(self, ai_runtime_db, stubs, monkeypatch):
-        from app.services.llamaindex_rag_orchestrator.guidance_rag import test_llm_connection
-        from test_ai_config_runtime import draft_for, probe_for
+        from app.services.ai_config import adapter
         a, _ = stubs
-        request = probe_for(await draft_for(ai_runtime_db, a.url, model="synthetic-probe-model"))
-        result = await test_llm_connection(request, ai_runtime_db, "probe-integration")
-        assert result["success"] is True
-        assert result["status_code"] == 200
-        assert result["model_used"] == "synthetic-probe-model"
-        assert result["latency_ms"] >= 0
+        snapshot = await configured_snapshot(ai_runtime_db, a.url, monkeypatch)
+        reply = await adapter.chat(snapshot, [{"role": "user", "content": "Reply OK."}], max_tokens=64, timeout=10)
+        assert reply == "OK"
         assert len(a.received) == 1 and a.received[0]["body"]["max_tokens"] == 64
 
     @pytest.mark.asyncio

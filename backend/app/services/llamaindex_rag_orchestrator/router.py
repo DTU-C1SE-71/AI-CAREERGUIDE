@@ -144,13 +144,14 @@ async def explain_major_recommendation(
 @router.post("/chat/connection", response_model=AIChatConnectionResponse)
 async def check_counselor_connection(
     response: Response,
+    force: bool = Query(default=False),
     current_user: Optional[User] = Depends(get_optional_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """One fixed provider probe when the chat opens; never send student data."""
+    """One fixed provider probe when needed; shares TTL cache across visitors."""
     from app.services.llamaindex_rag_orchestrator.counselor_connection import check_connection
     response.headers["Cache-Control"] = "no-store"
-    return await check_connection(db)
+    return await check_connection(db, force=force)
 
 
 @router.post("/chat", response_model=AIChatResponse)
@@ -205,8 +206,8 @@ async def clear_counselor_chat_sessions(
     return ChatHistoryClearResponse(deleted=deleted)
 
 
-# Alias quản trị dùng cùng DB profile/service với /admin/ai-config.
-from app.schemas.ai_config import AIConfigDraft, AIConfigProbe, AIConfigStatus, AIProbeResult
+# Alias quản trị chỉ đọc cùng nguồn ENV/service với /admin/ai-config.
+from app.schemas.ai_config import AIConfigStatus
 from app.services.ai_config import service as config_service
 from app.services.ai_config.router import no_store
 
@@ -214,13 +215,3 @@ from app.services.ai_config.router import no_store
 async def get_system_llm_status(response: Response, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
     no_store(response)
     return await config_service.get_status(db)
-
-@router.post("/test-llm-connection", response_model=AIProbeResult)
-async def test_llm_api_connection(payload: AIConfigProbe, response: Response, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
-    no_store(response)
-    return await config_service.probe_draft(db,payload,current_user.id)
-
-@router.post("/update-llm-config", response_model=AIConfigStatus)
-async def update_system_llm_config(payload: AIConfigDraft, response: Response, current_user: User = Depends(require_admin), db: AsyncSession = Depends(get_db)):
-    no_store(response)
-    return await config_service.apply_config(db,payload,current_user.id)

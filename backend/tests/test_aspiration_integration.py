@@ -15,8 +15,8 @@ def result(row):
 
 @pytest.mark.asyncio
 async def test_explicit_empty_input_does_not_restore_saved_grades_or_aspiration():
-    saved = SimpleNamespace(id=uuid4(), riasec_scores={"I": 1}, cognitive_preferences={},
-                            raw_responses={"riasec": {"I1": 5}, "aspiration": {"dream_job": "Bác sĩ"}})
+    saved = SimpleNamespace(id=uuid4(), riasec_vector={"I": 1}, cognitive_traits={},
+                            raw_answers={"riasec_answers": {"I1": 5}, "aspiration": {"dream_job": "Bác sĩ"}})
     db = SimpleNamespace(execute=AsyncMock(return_value=result(saved)))
     profile = await resolve_assessment_evidence(db, uuid4(), {
         "grades_by_subject": {}, "aspiration": {}, "riasec_answers": {}, "cognitive_answers": {},
@@ -30,7 +30,7 @@ async def test_explicit_empty_input_does_not_restore_saved_grades_or_aspiration(
 
 @pytest.mark.asyncio
 async def test_selected_assessment_without_grades_cannot_borrow_latest_grades():
-    saved = SimpleNamespace(id=uuid4(), riasec_scores={"I": 1}, cognitive_preferences={}, raw_responses={})
+    saved = SimpleNamespace(id=uuid4(), riasec_vector={"I": 1}, cognitive_traits={}, raw_answers={})
     db = SimpleNamespace(execute=AsyncMock(return_value=result(saved)))
     profile = await resolve_assessment_evidence(db, uuid4(), {"assessment_id": saved.id})
     assert profile["grades_by_subject"] == {}
@@ -157,10 +157,9 @@ async def test_score_context_is_paired_with_grade_source(source):
 
     grades = {"Toán": 9, "Vật lý": 9, "Hóa học": 9}
     exam_context = {"kind": "EXAM", "scale": 10, "examId": "old-exam"}
-    saved = SimpleNamespace(id=uuid4(), riasec_scores={}, cognitive_preferences={},
-                            raw_responses={"score_context": exam_context, "grades_by_subject": grades})
-    current_grade = SimpleNamespace(grades_by_subject=grades)
-    db = SimpleNamespace(execute=AsyncMock(side_effect=[result(saved), result(current_grade)]))
+    saved = SimpleNamespace(id=uuid4(), riasec_vector={}, cognitive_traits={},
+                            raw_answers={"score_context": exam_context, "grades_by_subject": grades})
+    db = SimpleNamespace(execute=AsyncMock(return_value=result(saved)))
     inline = {"grades_by_subject": grades} if source == "inline" else (
         {"assessment_id": saved.id} if source == "snapshot" else {})
     profile = await resolve_assessment_evidence(db, uuid4(), inline)
@@ -184,7 +183,7 @@ async def test_score_context_is_paired_with_grade_source(source):
 async def test_explicit_empty_score_context_does_not_restore_saved_context(context):
     from app.services.recommender.readiness import evaluate_current_readiness
 
-    saved = SimpleNamespace(id=uuid4(), riasec_scores={}, cognitive_preferences={}, raw_responses={
+    saved = SimpleNamespace(id=uuid4(), riasec_vector={}, cognitive_traits={}, raw_answers={
         "score_context": {"kind": "TRANSCRIPT", "scale": 10}})
     db = SimpleNamespace(execute=AsyncMock(return_value=result(saved)))
     profile = await resolve_assessment_evidence(db, uuid4(), {

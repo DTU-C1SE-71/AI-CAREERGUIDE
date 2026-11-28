@@ -181,15 +181,9 @@ export function UserProfileModal({
                     <h2 className="truncate text-lg font-bold text-slate-900 sm:text-xl">
                       {user.name}
                     </h2>
-                    <div className="mt-1 flex flex-wrap items-center gap-2">
-                      <span className="truncate text-xs text-slate-500">
-                        {user.email}
-                      </span>
-                      <span className="inline-flex items-center gap-1 rounded-full border border-sky-200 bg-sky-50 px-2.5 py-0.5 text-xs font-semibold text-sky-700">
-                        <ShieldCheck size={12} />
-                        {user.role === "admin" ? "Quản trị viên" : "Học sinh THPT"}
-                      </span>
-                    </div>
+                    <p className="mt-1 truncate text-xs text-slate-500">
+                      {user.email}
+                    </p>
                   </>
                 )}
               </div>

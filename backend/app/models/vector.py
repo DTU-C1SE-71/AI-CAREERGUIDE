@@ -20,7 +20,10 @@ class KnowledgeEmbedding(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     major_code: Mapped[Optional[str]] = mapped_column(
-        String(20), index=True, nullable=True,
+        String(20),
+        ForeignKey("majors.major_code", ondelete="SET NULL", name="fk_knowledge_embeddings_major_code"),
+        index=True,
+        nullable=True,
         comment="Metadata filter for major-specific semantic queries"
     )
     skill_id: Mapped[Optional[uuid.UUID]] = mapped_column(

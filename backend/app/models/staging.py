@@ -43,7 +43,10 @@ class StagingRecord(Base):
         comment="PENDING, APPROVED, REJECTED"
     )
     major_code: Mapped[Optional[str]] = mapped_column(
-        String(20), index=True, nullable=True,
+        String(20),
+        ForeignKey("majors.major_code", ondelete="SET NULL", name="fk_staging_records_major_code"),
+        index=True,
+        nullable=True,
         comment="Associated Level-IV major code"
     )
     
@@ -73,7 +76,7 @@ class StagingRecord(Base):
     
     # Audit trail
     reviewed_by: Mapped[Optional[uuid.UUID]] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
     )
     reviewed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
     review_notes: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

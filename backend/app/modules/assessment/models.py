@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any, List
-from sqlalchemy import String, DateTime, ForeignKey, Float, Boolean, Text, Integer
+from sqlalchemy import String, DateTime, ForeignKey, Float, Boolean, Index, Text, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -71,6 +71,9 @@ class AssessmentQuestion(Base):
     Individual assessment item. Category is either 'RIASEC' (30 items) or 'COGNITIVE' (8 items).
     """
     __tablename__ = "assessment_questions"
+    __table_args__ = (
+        UniqueConstraint("set_id", "code", name="uq_assessment_questions_set_code"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -138,6 +141,9 @@ class CognitiveQuestionOption(Base):
     Links choices directly to 2-digit MOET educational field codes (Circular 74/2026/TT-BGDĐT).
     """
     __tablename__ = "cognitive_question_options"
+    __table_args__ = (
+        UniqueConstraint("question_id", "option_key", name="uq_cognitive_options_question_key"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -184,6 +190,9 @@ class StudentAssessmentSubmission(Base):
     RIASEC interest vector, cognitive trait selections, and XP rewards.
     """
     __tablename__ = "student_assessment_submissions"
+    __table_args__ = (
+        Index("ix_submissions_user_completed", "user_id", "completed_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -238,6 +247,7 @@ class StudentAssessmentSubmission(Base):
     )
 
     # Relationships
+    user: Mapped["User"] = relationship("User", back_populates="submissions")
     question_set: Mapped[Optional["AssessmentQuestionSet"]] = relationship(
         "AssessmentQuestionSet", back_populates="submissions"
     )
@@ -253,6 +263,9 @@ class StudentAssessmentResponse(Base):
     Granular audit log of each individual question answered by a student.
     """
     __tablename__ = "student_assessment_responses"
+    __table_args__ = (
+        UniqueConstraint("submission_id", "question_id", name="uq_student_responses_submission_question"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -265,7 +278,7 @@ class StudentAssessmentResponse(Base):
     )
     question_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("assessment_questions.id", ondelete="CASCADE"),
+        ForeignKey("assessment_questions.id", ondelete="RESTRICT", name="fk_student_assessment_responses_question_id"),
         nullable=False,
         index=True
     )

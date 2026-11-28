@@ -68,3 +68,58 @@ async def test_catalog_database_error_is_not_success_or_seed():
         await service.list_majors(db)
     assert caught.value.status_code==503
     assert "synthetic-sensitive" not in str(caught.value.detail)
+
+
+@pytest.mark.asyncio
+async def test_list_majors_includes_moet_floor_and_imported_benchmark_score(catalog_db):
+    from app.services.taxonomy.tt74_reference import parse_excel_or_csv_sheets
+
+    sessions, _, _ = catalog_db
+    csv_bytes = (
+        "field_code,field_name,group_code,group_name,major_code,major_name,benchmark_score\n"
+        "72,SỨC KHỎE,7201,Y học,7720101,Y khoa,\n"
+        "14,KHOA HỌC GIÁO DỤC,1402,Đào tạo giáo viên,7140201,Giáo dục Mầm non,\n"
+        "38,PHÁP LUẬT,3801,Luật,7380101,Luật,\n"
+        "48,CNTT,4801,Máy tính,7480101,Khoa học máy tính,\n"
+        "48,CNTT,4802,CNTT,7480201,Công nghệ thông tin,26.5\n"
+    ).encode("utf-8")
+
+    _, parsed_majors, _ = parse_excel_or_csv_sheets(csv_bytes, "sample.csv")
+    assert len(parsed_majors) == 5
+
+    async with sessions() as db:
+        await service.bulk_sync_majors(db, parsed_majors, deactivate_missing=True)
+        listed = await service.list_majors(db)
+
+    by_code = {item["major_code"]: item for item in listed}
+    assert by_code["7720101"]["benchmark_score"] == 22.5
+    assert by_code["7720101"]["benchmark_source"] == "MOET_FLOOR"
+    assert by_code["7140201"]["benchmark_score"] == 19.0
+    assert by_code["7380101"]["benchmark_score"] == 18.0
+    assert by_code["7480101"]["benchmark_score"] == 15.0
+    assert by_code["7480201"]["benchmark_score"] == 26.5
+    assert by_code["7480201"]["cutoff_score"] == 26.5
+    assert by_code["7480201"]["benchmark_source"] == "IMPORTED"
+
+
+def test_excel_template_includes_benchmark_score_columns():
+    from pathlib import Path
+    from app.services.taxonomy.tt74_reference import _parse_xlsx_all_sheets
+
+    template_path = (
+        Path(__file__).resolve().parent.parent
+        / "app"
+        / "db"
+        / "seeds"
+        / "MOET_Major_Import_Template_Standard.xlsx"
+    )
+    sheets, _ = _parse_xlsx_all_sheets(template_path.read_bytes())
+    by_name = {name: rows for name, rows in sheets}
+
+    sheet1_headers = by_name["MAU_NHAP_NGANH_CHUAN"][0]
+    assert len(sheet1_headers) == 21
+    assert sheet1_headers[-1] == "benchmark_score"
+
+    sheet2_headers = by_name["BANG_TRA_CUU_CIP_RIASEC"][0]
+    assert sheet2_headers[-1] == "default_benchmark_score"
+    assert any("benchmark_score" in cell for row in by_name["HUONG_DAN_VA_PROMPT_AI"] for cell in row if cell)

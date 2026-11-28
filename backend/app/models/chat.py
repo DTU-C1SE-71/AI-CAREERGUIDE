@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional
-from sqlalchemy import DateTime, ForeignKey, String, Text
+from sqlalchemy import DateTime, ForeignKey, Index, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,6 +11,9 @@ from app.core.database import Base
 class ChatSession(Base):
     """Lưu phiên trò chuyện giữa người dùng và Cố vấn AI Hướng nghiệp."""
     __tablename__ = "chat_sessions"
+    __table_args__ = (
+        Index("ix_chat_sessions_user_updated", "user_id", "updated_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -22,7 +25,12 @@ class ChatSession(Base):
         index=True,
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
-    major_code: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    major_code: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        ForeignKey("majors.major_code", ondelete="SET NULL", name="fk_chat_sessions_major_code"),
+        nullable=True,
+        index=True,
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -47,6 +55,9 @@ class ChatSession(Base):
 class ChatMessage(Base):
     """Từng lượt tin nhắn trong một phiên trò chuyện AI."""
     __tablename__ = "chat_messages"
+    __table_args__ = (
+        Index("ix_chat_messages_session_created", "session_id", "created_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

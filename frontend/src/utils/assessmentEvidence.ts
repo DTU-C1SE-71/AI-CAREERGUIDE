@@ -20,6 +20,19 @@ const blocks: Array<[string, string[]]> = [
 ]
 
 export const CANONICAL_COGNITIVE_SLOTS: ReadonlyArray<{ code: string; dimension: string }> = [
+  { code: "COG_V2_1", dimension: "analytical_1" },
+  { code: "COG_V2_2", dimension: "abstract_1" },
+  { code: "COG_V2_3", dimension: "spatial_1" },
+  { code: "COG_V2_4", dimension: "linguistic_1" },
+  { code: "COG_V2_5", dimension: "analytical_2" },
+  { code: "COG_V2_6", dimension: "abstract_2" },
+  { code: "COG_V2_7", dimension: "spatial_2" },
+  { code: "COG_V2_8", dimension: "linguistic_2" },
+  { code: "COG_V2_9", dimension: "learning_environment" },
+  { code: "COG_V2_10", dimension: "teamwork_intensity" },
+]
+
+export const LEGACY_COGNITIVE_SLOTS: ReadonlyArray<{ code: string; dimension: string }> = [
   { code: "COG_1", dimension: "learning_style" },
   { code: "COG_2", dimension: "work_environment" },
   { code: "COG_3", dimension: "problem_solving" },
@@ -116,9 +129,20 @@ export function evaluateAssessmentCompleteness(
   })
   const riasecComplete = riasecAnswered === riasecTotal
 
-  const cognitiveTotal = cognitiveSpecs.length
+  const hasV2Keys = CANONICAL_COGNITIVE_SLOTS.some(
+    (s) => s.code in cognitive || (s.dimension !== "learning_environment" && s.dimension !== "teamwork_intensity" && s.dimension in cognitive),
+  )
+  const hasLegacyKeys = LEGACY_COGNITIVE_SLOTS.some(
+    (s) => s.code in cognitive || s.dimension in cognitive,
+  )
+  const effectiveCognitiveSpecs =
+    cognitiveSpecs === CANONICAL_COGNITIVE_SLOTS && !hasV2Keys && hasLegacyKeys
+      ? LEGACY_COGNITIVE_SLOTS
+      : cognitiveSpecs
+
+  const cognitiveTotal = effectiveCognitiveSpecs.length
   let cognitiveAnswered = 0
-  cognitiveSpecs.forEach((spec, idx) => {
+  effectiveCognitiveSpecs.forEach((spec, idx) => {
     const candidates = [
       cognitive[spec.code],
       spec.dimension ? cognitive[spec.dimension] : undefined,

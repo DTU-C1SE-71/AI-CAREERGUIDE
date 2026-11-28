@@ -93,7 +93,7 @@ async def test_saved_explicit_empty_cognition_cannot_revive_legacy_default_trait
     from unittest.mock import AsyncMock
     from app.services.recommender.service import resolve_assessment_evidence
     legacy = {"abstract_thinking": "high", "analytical_reasoning": "high", "spatial_perception": "high", "linguistic_ability": "high", "learning_environment": "structured", "teamwork_intensity": "balanced"}
-    row = SimpleNamespace(id=uuid4(), raw_responses={"cognitive": {}}, cognitive_preferences=legacy, riasec_scores={})
+    row = SimpleNamespace(id=uuid4(), raw_answers={"cognitive_answers": {}}, cognitive_traits=legacy, riasec_vector={})
     db = SimpleNamespace(execute=AsyncMock(return_value=SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: row))))
     profile = await resolve_assessment_evidence(db, uuid4(), {"assessment_id": row.id})
     assert profile["cognitive_preferences"] == {}

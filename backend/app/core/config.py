@@ -70,7 +70,7 @@ class Settings(BaseSettings):
     AI_PROBE_LIMIT_PER_MINUTE: int = 6
     LLM_API_KEY: str = ""
     LLM_BASE_URL: str = "https://codex.fosta.app/v1"
-    LLM_MODEL: str = "gpt-6-luna"
+    LLM_MODEL: str = "cohere/command-a-plus"
     LLM_AVAILABLE_MODELS: str = ""
     LLM_TIMEOUT_SECONDS: float = 120.0
     LLM_MAX_TOKENS: int = 128000

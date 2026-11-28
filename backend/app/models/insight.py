@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, String, Text, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -23,7 +23,11 @@ class MajorInsight(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     major_code: Mapped[str] = mapped_column(
-        String(20), unique=True, index=True, nullable=False,
+        String(20),
+        ForeignKey("majors.major_code", ondelete="CASCADE", name="fk_major_insights_major_code"),
+        unique=True,
+        index=True,
+        nullable=False,
         comment="Mã ngành MOET cấp IV, ví dụ 7480101"
     )
     major_name: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -65,7 +69,21 @@ class StudentSkillInsight(Base):
     """
     __tablename__ = "student_skill_insights"
     __table_args__ = (
-        UniqueConstraint("profile_hash", "major_code", name="uq_student_skill_insight_profile_major"),
+        UniqueConstraint(
+            "profile_hash",
+            "insight_scope",
+            "major_code",
+            name="uq_student_skill_insight_profile_scope_major",
+        ),
+        Index(
+            "uq_student_skill_insight_profile_scope_null_major",
+            "profile_hash",
+            "insight_scope",
+            unique=True,
+            postgresql_where=text("major_code IS NULL"),
+            sqlite_where=text("major_code IS NULL"),
+        ),
+        Index("ix_student_skill_insights_scope", "insight_scope"),
     )
 
     id: Mapped[uuid.UUID] = mapped_column(
@@ -78,12 +96,19 @@ class StudentSkillInsight(Base):
         index=True
     )
     profile_hash: Mapped[str] = mapped_column(
-        String(64), index=True, nullable=False,
+        String(64), nullable=False,
         comment="SHA-256 của hồ sơ năng lực đã ẩn danh"
     )
-    major_code: Mapped[str] = mapped_column(
-        String(20), default="", nullable=False, index=True,
-        comment="Ngành mục tiêu, rỗng nếu phân tích tổng quát"
+    insight_scope: Mapped[str] = mapped_column(
+        String(32), default="MAJOR", server_default="MAJOR", nullable=False,
+        comment="MAJOR, GENERAL hoặc ASPIRATION_AI"
+    )
+    major_code: Mapped[Optional[str]] = mapped_column(
+        String(20),
+        ForeignKey("majors.major_code", ondelete="SET NULL", name="fk_student_skill_insights_major_code"),
+        nullable=True,
+        index=True,
+        comment="Ngành mục tiêu; NULL nếu phân tích GENERAL hoặc ASPIRATION_AI"
     )
 
     summary: Mapped[str] = mapped_column(
@@ -131,11 +156,14 @@ class MajorExplanationInsight(Base):
         index=True,
     )
     profile_hash: Mapped[str] = mapped_column(
-        String(64), index=True, nullable=False,
+        String(64), nullable=False,
         comment="SHA-256 của hồ sơ năng lực đã ẩn danh"
     )
     major_code: Mapped[str] = mapped_column(
-        String(20), nullable=False, index=True,
+        String(20),
+        ForeignKey("majors.major_code", ondelete="CASCADE", name="fk_major_explanation_insights_major_code"),
+        nullable=False,
+        index=True,
         comment="Mã ngành MOET"
     )
     major_name: Mapped[str] = mapped_column(String(255), nullable=False)

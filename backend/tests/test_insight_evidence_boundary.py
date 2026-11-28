@@ -75,11 +75,9 @@ def test_roadmap_template_has_no_fabricated_sources():
 @pytest.mark.anyio
 async def test_grades_do_not_confirm_mastery_and_undeclared_skills_are_unknown():
     major = SimpleNamespace(name="Ngành thử", major_skills=[])
-    grade = SimpleNamespace(grades_by_subject={"Toán": 9})
+    submission = SimpleNamespace(id=uuid.uuid4(), riasec_vector={}, cognitive_traits={}, raw_answers={"grades_by_subject": {"Toán": 9}})
     results = [SimpleNamespace(scalar_one_or_none=lambda: major),
-               # Snapshot query precedes legacy grades when no current snapshot exists.
-               SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: None)),
-               SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: grade)),
+               SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda: submission)),
                SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: [])),
                SimpleNamespace(scalars=lambda: SimpleNamespace(all=lambda: []))]
     db = AsyncMock()

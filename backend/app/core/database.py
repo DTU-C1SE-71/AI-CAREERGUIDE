@@ -1,7 +1,6 @@
 import logging
 import sqlite3
 import uuid
-from pathlib import Path
 from typing import AsyncGenerator, Optional
 from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.dialects.postgresql import UUID, JSONB
@@ -43,21 +42,7 @@ class Base(DeclarativeBase):
 # ---------------------------------------------------------------------------
 # Database Engine Initialization
 # ---------------------------------------------------------------------------
-BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
-DEFAULT_SQLITE_PATH = BACKEND_DIR / "backend" / "app" / "db" / "careerguide_active.db"
-if not DEFAULT_SQLITE_PATH.exists():
-    DEFAULT_SQLITE_PATH = BACKEND_DIR / "app" / "db" / "careerguide_active.db"
-
-raw_url = settings.DATABASE_URL or ""
-
-# Resolve relative sqlite paths if needed
-if "careerguide_active.db" in raw_url:
-    db_url = f"sqlite+aiosqlite:///{DEFAULT_SQLITE_PATH.as_posix()}"
-elif raw_url.startswith("sqlite"):
-    db_url = raw_url
-else:
-    db_url = raw_url
-
+db_url = settings.DATABASE_URL or ""
 is_sqlite = db_url.startswith("sqlite")
 
 if is_sqlite:

@@ -294,23 +294,38 @@ async def test_all_existing_admin_actions_reject_guest_and_student(auth_client, 
         ("post", "/rag-governance/ingest/stream-a/upload", {"files": {"file": ("test.pdf", b"synthetic", "application/pdf")}}),
         ("post", "/rag-governance/discover/stream-b", {"json": {"major_code": "7480101", "major_title": "Computer Science"}}),
         ("get", "/rag-governance/llm-status", {}),
-        ("post", "/rag-governance/test-llm-connection", {"json": {}}),
-        ("post", "/rag-governance/update-llm-config", {"json": {}}),
+        ("get", "/admin/ai-config", {}),
     ]
     for headers, expected in (({}, 401), (student, 403)):
         for method, path, kwargs in actions:
             response = await getattr(client, method)(prefix + path, headers=headers, **kwargs)
             assert response.status_code == expected, (method, path, response.status_code)
 
+    admin = await login(client, prefix, "admin@example.com")
+    for removed_path in ("/rag-governance/test-llm-connection", "/rag-governance/update-llm-config"):
+        removed = await client.post(prefix + removed_path, headers=admin, json={})
+        assert removed.status_code in (404, 405), (removed_path, removed.status_code)
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("prefix", PREFIXES)
 async def test_cross_user_assessment_and_guidance_are_private(auth_client, prefix):
-    from app.models.assessment import StudentAssessment
+    from app.models.assessment import StudentAssessmentSubmission
     client, sessions = auth_client
     assessment_id = uuid.uuid4()
     async with sessions() as db:
-        db.add(StudentAssessment(id=assessment_id, user_id=OTHER_ID, riasec_scores={}, cognitive_preferences={}, raw_responses={"private_marker": "other-user-only"}))
+        db.add(
+            StudentAssessmentSubmission(
+                id=assessment_id,
+                user_id=OTHER_ID,
+                riasec_vector={},
+                riasec_raw_scores={},
+                cognitive_traits={},
+                cognitive_answers={},
+                raw_answers={"private_marker": "other-user-only"},
+                dominant_traits=[],
+            )
+        )
         await db.commit()
     student = await login(client, prefix, "student@example.com")
     for path, body in [
@@ -322,6 +337,9 @@ async def test_cross_user_assessment_and_guidance_are_private(auth_client, prefi
         assert "other-user-only" not in denied.text
         guest = await client.post(prefix + path, json=body)
         assert guest.status_code == 401
+    for sub_path in (f"/assessment/submissions/{assessment_id}", f"/assessments/submissions/{assessment_id}"):
+        assert (await client.get(prefix + sub_path, headers=student)).status_code == 404
+        assert (await client.get(prefix + sub_path)).status_code == 401
     for path, body in [
         ("/rag-governance/chat", {"message": "Ngành học phù hợp", "user_id": str(OTHER_ID)}),
         ("/rag-governance/guidance-personalize", {"major_code": "7480101", "user_id": str(OTHER_ID)}),

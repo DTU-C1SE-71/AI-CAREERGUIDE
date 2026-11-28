@@ -45,14 +45,16 @@ async def test_closed_chat_handles_real_security_career_and_injection():
 
 @pytest.mark.asyncio
 async def test_no_stored_key_sent_to_custom_origin(monkeypatch, ai_runtime_db):
-    from app.schemas.ai_config import AIConfigProbe
+    import json
+    from app.core.ai_runtime import AIConfigError
+    from app.services.ai_config.service import _snapshot
     monkeypatch.setattr(service.settings, "LLM_API_KEY", "sk-synth-bound-origin-only")
     current = await service.get_llm_status(ai_runtime_db)
-    request = AIConfigProbe(source_mode="DATABASE", protocol="openai_compatible", auth_mode="BEARER", base_url="https://example.org/v1", model="synthetic-model", credential_action="KEEP", base_revision_token=current["revision_token"], probe_request_id="custom-origin", draft_digest="draft")
-    with pytest.raises(HTTPException) as err:
-        await service.test_llm_connection(request, ai_runtime_db, "synthetic-admin")
-    assert err.value.status_code == 422
-    assert err.value.detail["code"] == "TARGET_BINDING_CHANGED"
+    assert "sk-synth-bound-origin-only" not in json.dumps(current)
+    tampered = {**current["active"], "base_url": "https://other-origin.example/v1"}
+    with pytest.raises(AIConfigError) as err:
+        _snapshot(tampered, "sk-synth-bound-origin-only", current["revision_token"])
+    assert err.value.code == "TARGET_BINDING_MISMATCH"
 
 
 @pytest.mark.asyncio
@@ -71,9 +73,11 @@ async def test_personalization_ignores_client_skills_and_uses_weekly_budget(monk
 def test_sensitive_routes_require_admin():
     from app.services.llamaindex_rag_orchestrator.router import router
     from app.services.llamaindex_rag_orchestrator.router import require_admin
-    for suffix in ("/llm-status", "/test-llm-connection"):
-        route = next(route for route in router.routes if route.path.endswith(suffix))
-        assert any(dep.call == require_admin for dep in route.dependant.dependencies)
+    paths = [route.path for route in router.routes]
+    route = next(route for route in router.routes if route.path.endswith("/llm-status"))
+    assert any(dep.call == require_admin for dep in route.dependant.dependencies)
+    assert not any(path.endswith("/test-llm-connection") for path in paths)
+    assert not any(path.endswith("/update-llm-config") for path in paths)
 
 
 @pytest.mark.asyncio

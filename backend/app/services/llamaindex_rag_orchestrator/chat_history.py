@@ -11,6 +11,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.chat import ChatMessage, ChatSession
+from app.models.taxonomy import Major
 from app.schemas.rag import ChatMessageRecord, ChatSessionDetail, ChatSessionSummary
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,17 @@ async def persist_chat_turn(
     if db is None or user_id is None:
         return None, None
     try:
+        safe_major_code: Optional[str] = None
+        if major_code:
+            candidate_code = str(major_code).strip()
+            if candidate_code:
+                matched_code = (
+                    await db.execute(
+                        select(Major.major_code).where(Major.major_code == candidate_code)
+                    )
+                ).scalar_one_or_none()
+                safe_major_code = matched_code
+
         session = await verify_session_owner(db, user_id, session_id)
         now = datetime.now(timezone.utc)
         if session is None:
@@ -66,15 +78,15 @@ async def persist_chat_turn(
                 id=uuid.uuid4(),
                 user_id=user_id,
                 title=derive_session_title(user_message),
-                major_code=major_code,
+                major_code=safe_major_code,
                 created_at=now,
                 updated_at=now,
             )
             db.add(session)
             await db.flush()
         else:
-            if major_code:
-                session.major_code = major_code
+            if safe_major_code:
+                session.major_code = safe_major_code
             session.updated_at = now
 
         db.add(

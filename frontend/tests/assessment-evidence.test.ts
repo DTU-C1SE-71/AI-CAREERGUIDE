@@ -2,6 +2,7 @@ import { test } from "node:test"
 import assert from "node:assert/strict"
 import {
   CANONICAL_COGNITIVE_SLOTS,
+  LEGACY_COGNITIVE_SLOTS,
   completeTranscriptBlocks,
   evaluateAssessmentCompleteness,
   getValidRiasecAnswer,
@@ -73,15 +74,15 @@ test("thiếu 1 câu RIASEC (29/30) vẫn bị chặn phân tích dù đủ Tư 
   assert.deepEqual(res.missingSteps, [1])
 })
 
-test("thiếu 1 câu Tư duy (7/8) bị chặn phân tích dù đủ RIASEC và Điểm", () => {
+test("thiếu 1 câu Tư duy (9/10) bị chặn phân tích dù đủ RIASEC và Điểm", () => {
   const cognitive = fullCognitiveByCode()
-  delete cognitive.COG_8
+  delete cognitive.COG_V2_10
   const res = evaluateAssessmentCompleteness({
     answers: complete(4),
     cognitive,
     scores: blockA00Scores,
   })
-  assert.equal(res.cognitiveAnswered, 7)
+  assert.equal(res.cognitiveAnswered, 9)
   assert.equal(res.cognitiveComplete, false)
   assert.equal(res.isComplete, false)
   assert.deepEqual(res.missingSteps, [2])
@@ -111,7 +112,21 @@ test("có điểm ngoài khoảng 0-10 bị chặn dù đã đủ 1 tổ hợp h
   assert.deepEqual(res.missingSteps, [3])
 })
 
-test("đủ 30 câu RIASEC, 8 câu Tư duy theo nhiều dạng khóa và 1 tổ hợp hợp lệ (C03/D01) cho phép phân tích", () => {
+test("hỗ trợ tương thích ngược hồ sơ Tư duy cũ 8 câu (COG_1..COG_8)", () => {
+  const legacyCognitive = Object.fromEntries(
+    LEGACY_COGNITIVE_SLOTS.map((slot) => [slot.code, "A"]),
+  )
+  const res = evaluateAssessmentCompleteness({
+    answers: complete(4),
+    cognitive: legacyCognitive,
+    scores: blockA00Scores,
+  })
+  assert.equal(res.cognitiveTotal, 8)
+  assert.equal(res.cognitiveAnswered, 8)
+  assert.equal(res.isComplete, true)
+})
+
+test("đủ 30 câu RIASEC, 10 câu Tư duy theo nhiều dạng khóa và 1 tổ hợp hợp lệ (C03/D01) cho phép phân tích", () => {
   const cognitiveByIndex = Object.fromEntries(
     CANONICAL_COGNITIVE_SLOTS.map((_, idx) => [`2-${idx}`, "B"]),
   )

@@ -39,7 +39,7 @@ SYSTEM_HELP_GUIDE = """
   + **Khám phá ngành**: Xem kết quả đề xuất ngành học cá nhân hóa theo 2 chế độ:
     * **Thuật toán đề xuất** (mặc định, tức thì, không dùng AI): Hiển thị biểu đồ Radar RIASEC, Top 3 nhóm sở thích, tổ hợp môn tốt nhất (Z-Score) và Phễu 2 tầng (**Lĩnh vực để tìm hiểu** và **Ngành đào tạo đề xuất**).
     * **Đề xuất ngành có AI** (bấm để mở khi muốn phân tích sâu): AI đối chiếu nguyện vọng, phân tích điểm mạnh/yếu và kỹ năng cần rèn luyện. Kết quả được lưu trong lịch sử nên mở lại cùng hồ sơ sẽ tải ngay mà không phải chờ lâu.
-    * Các nút góc trên bên phải: **Lịch sử** (xem lại các lần làm trước), **Làm lại** (tạo bài đánh giá mới), **Xuất PDF**.
+    * Các nút góc trên bên phải: **Lịch sử** (xem lại các lần làm trước) và **Làm lại** (tạo bài đánh giá mới).
   + **Danh mục ngành**: Tra cứu toàn bộ 435 ngành đào tạo chuẩn Bộ GD&ĐT bằng ô tìm kiếm mã/tên ngành hoặc bộ lọc lĩnh vực; bấm **Xem chi tiết** để xem chương trình học, tổ hợp môn và cơ hội nghề nghiệp.
   + **Lộ trình 4 tuần**: Xem kế hoạch trải nghiệm, tìm hiểu ngành và ôn tập theo từng tuần.
   + **Trợ lý AI** (trên menu) hoặc nút **Cố vấn AI** (góc dưới bên phải): Mở khung trò chuyện để hỏi về ngành học, kiến thức học tập và cách dùng hệ thống.
@@ -48,12 +48,13 @@ SYSTEM_HELP_GUIDE = """
 """.strip()
 
 SYSTEM_HELP_PROMPT = (
-    "Bạn là Trợ lý Hỗ trợ Người dùng của hệ thống **AI CareerGuide**.\n"
+    "Thầy/cô là Giáo viên Cố vấn của hệ thống **AI CareerGuide**, hỗ trợ học sinh sử dụng các tính năng trên giao diện.\n"
     "Nhiệm vụ chính:\n"
-    "1. Giải đáp chính xác, dễ hiểu các thắc mắc về tính năng, quy trình và cách sử dụng AI CareerGuide.\n"
-    "2. Hướng dẫn người dùng thao tác từng bước rõ ràng bằng gạch đầu dòng, ưu tiên dùng đúng tên menu/nút bấm trên giao diện.\n"
-    "3. Nếu câu hỏi còn quá chung chung (chưa rõ muốn thao tác phần nào), hướng dẫn nhanh 3 bước bắt đầu và hỏi lại 1 câu ngắn để làm rõ (ví dụ người dùng đang ở màn hình nào).\n"
-    "4. Bảo vệ tuyệt đối thông tin nội bộ và dữ liệu nhạy cảm của hệ thống.\n\n"
+    "1. Luôn tự xưng \"thầy/cô\" và gọi học sinh là \"em\" một cách nhất quán, thân thiện và tận tâm.\n"
+    "2. Giải đáp chính xác, dễ hiểu các thắc mắc của em về tính năng, quy trình và cách sử dụng AI CareerGuide.\n"
+    "3. Hướng dẫn em thao tác từng bước rõ ràng bằng gạch đầu dòng, ưu tiên dùng đúng tên menu/nút bấm trên giao diện.\n"
+    "4. Nếu câu hỏi còn quá chung chung (chưa rõ em muốn thao tác phần nào), hướng dẫn nhanh 3 bước bắt đầu và hỏi lại 1 câu ngắn để làm rõ (ví dụ em đang ở màn hình nào).\n"
+    "5. Bảo vệ tuyệt đối thông tin nội bộ và dữ liệu nhạy cảm của hệ thống.\n\n"
     f"{SECURITY_BOUNDARIES_PROMPT}\n\n"
     f"{SYSTEM_HELP_GUIDE}"
 )
@@ -105,7 +106,7 @@ def build_static_system_help_reply(message: str) -> tuple[str, list[str]]:
             "- **Bước 1:** Chọn mục **Khám phá ngành** trên thanh menu bên trái.\n"
             "- **Bước 2:** Mặc định hệ thống mở **Thuật toán đề xuất** (hiển thị tức thì biểu đồ Radar RIASEC và danh sách ngành phù hợp).\n"
             "- **Bước 3:** Nếu muốn AI phân tích sâu về điểm mạnh/yếu và đối chiếu nguyện vọng, bấm tab **Đề xuất ngành có AI** (hoặc nút **Mở đề xuất ngành có AI** ở cuối trang).\n"
-            "- Ở góc trên bên phải có các nút **Lịch sử**, **Làm lại** và **Xuất PDF** để xem lại hoặc tải báo cáo.",
+            "- Ở góc trên bên phải có các nút **Lịch sử** và **Làm lại** để xem lại các lần làm trước hoặc tạo bài đánh giá mới.",
             ["Làm sao tra cứu 435 ngành đào tạo?", "Cách kiểm tra hồ sơ cá nhân?"],
         )
 
@@ -123,7 +124,7 @@ def build_static_system_help_reply(message: str) -> tuple[str, list[str]]:
             "Để xem **Lộ trình 4 tuần** trên **AI CareerGuide**:\n"
             "- **Bước 1:** Chọn mục **Lộ trình 4 tuần** trên thanh menu bên trái (hoặc bấm **Khám phá chi tiết & lộ trình** từ một ngành đề xuất).\n"
             "- **Bước 2:** Theo dõi các đầu việc gợi ý theo từng tuần để tìm hiểu ngành và ôn tập đúng trọng tâm.",
-            ["Cách làm bài trắc nghiệm hướng nghiệp?", "Cách xuất kết quả ra PDF?"],
+            ["Cách làm bài trắc nghiệm hướng nghiệp?", "Xem kết quả đề xuất ngành ở đâu?"],
         )
 
     if re.search(r"\b(ho so|profile|dang nhap|dang ky|dang xuat|google|tai khoan|khoi lop|gioi tinh|cap nhat|diem so|hoc ba)\b", text):

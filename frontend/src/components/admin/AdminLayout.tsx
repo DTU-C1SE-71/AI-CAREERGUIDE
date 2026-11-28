@@ -13,7 +13,7 @@ const navigationGroups = [
   ] },
   { title: "AI", items: [
     { path: "/admin/trends", title: "Xu hướng nghề nghiệp", icon: Radar },
-    { path: "/admin/ai-settings", title: "Cấu hình AI & API", icon: Cpu },
+    { path: "/admin/ai-settings", title: "Thông tin AI & API", icon: Cpu },
   ] },
 ]
 const navigation = navigationGroups.flatMap(group => group.items)

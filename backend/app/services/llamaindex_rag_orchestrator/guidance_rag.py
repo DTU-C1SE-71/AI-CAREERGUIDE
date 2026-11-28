@@ -24,7 +24,6 @@ from app.schemas.rag import (
     AIChatRequest,
     AIChatResponse,
 )
-from app.models.assessment import StudentAssessment, StudentGrade, StudentDiagnosticTest
 from app.services.recommender.engine import RIASEC_NAMES_VI, RIASEC_DIMENSIONS, calculate_riasec_cosine_similarity
 from app.services.gap_roadmap_engine.gap_engine import (
     infer_mastered_skills_from_diagnostic_tests,
@@ -258,8 +257,11 @@ async def explain_recommendation_with_ai(db, payload: AIExplanationRequest, curr
     canonical_profile = {
         "owner": str(current_user_id or "guest"),
         "riasec_scores": profile.get("riasec_scores") or {},
+        "riasec_answers": profile.get("riasec_answers") or {},
         "grades": profile.get("grades_by_subject") or {},
         "cognitive": profile.get("cognitive_preferences") or {},
+        "cognitive_answers": getattr(payload, "cognitive_answers", None) or {},
+        "grade_level": getattr(payload, "grade_level", None) or "",
         "aspiration": profile.get("aspiration") or {},
     }
     profile_hash = hashlib.sha256(
@@ -312,16 +314,16 @@ async def explain_recommendation_with_ai(db, payload: AIExplanationRequest, curr
             top_grades = ", ".join(f"{sub}: {gr}" for sub, gr in list(grades_dict.items())[:4]) or "Chưa nhập điểm cụ thể"
 
             system_prompt = (
-                "Bạn là Chuyên gia Cố vấn Hướng nghiệp AI CareerGuide.\n"
-                f"Nhiệm vụ: Phân tích ngắn gọn vì sao ngành **{item.major_name} ({item.major_code})** phù hợp với học sinh.\n\n"
+                "Thầy/cô là Giáo viên Cố vấn Hướng nghiệp của hệ thống AI CareerGuide.\n"
+                f"Nhiệm vụ: Giải thích ngắn gọn, ấm áp và rõ ràng cho em học sinh vì sao ngành **{item.major_name} ({item.major_code})** phù hợp với hồ sơ của em.\n\n"
                 "Thông số hồ sơ đối chiếu:\n"
                 f"- Khối ngành: {item.category}\n"
                 f"- Điểm khớp sở thích RIASEC: {riasec_score_pct}\n"
                 f"- Điểm khớp học lực: {academic_score_pct} (Các môn: {top_grades})\n"
                 f"- Điểm gợi ý tổng thể: {match_score_str}\n\n"
-                "Quy tắc tối ưu:\n"
-                "1. Trả lời súc tích trong 2-3 đoạn ngắn (tối đa 180-220 từ).\n"
-                "2. Nêu bật thế mạnh, lý do thực tế ngành phù hợp và môn/kỹ năng cần phát huy.\n"
+                "Quy tắc phản hồi:\n"
+                "1. Tự xưng nhất quán là \"thầy/cô\" và gọi học sinh là \"em\", giọng điệu tận tâm, khích lệ và sư phạm.\n"
+                "2. Trả lời súc tích trong 2-3 đoạn ngắn (tối đa 180-220 từ), nêu bật thế mạnh, lý do thực tế ngành phù hợp và môn/kỹ năng em cần phát huy.\n"
                 "3. Viết tự nhiên, truyền cảm hứng, không dùng câu rập khuôn, không bịa điểm chuẩn hay hứa hẹn đỗ."
             )
             ai_text = await adapter.chat(
@@ -471,9 +473,9 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
         context = None
     elif academic:
         # Tutoring does not require a catalog match or a private student profile.
-        static_reply = "Đây là câu hỏi học tập phù hợp. Hiện chưa nhận được lời giải từ AI; bạn có thể kiểm tra kết nối rồi gửi lại câu hỏi."
+        static_reply = "Đây là câu hỏi học tập phù hợp. Hiện thầy/cô chưa nhận được lời giải từ AI; em có thể kiểm tra kết nối rồi gửi lại câu hỏi nhé."
         context = payload.major_code
-        followups = ["Cho mình một ví dụ dễ hiểu", "Giải thích từng bước"]
+        followups = ["Cho em một ví dụ dễ hiểu", "Giải thích từng bước"]
     else:
         facts = await guidance_facts(db, payload, current_user_id)
         static_reply, context, followups = render_chat(payload, facts)
@@ -484,17 +486,18 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
         try:
             snapshot = await resolve_snapshot(db)
             system_instruction = (
-                "Bạn là Cố vấn AI Hướng nghiệp thông minh, thân thiện và tận tâm của hệ thống AI CareerGuide.\n"
-                "Nhiệm vụ: Tư vấn, giải đáp câu hỏi của học sinh/sinh viên về định hướng nghề nghiệp, các ngành học, "
-                "mức độ phù hợp với sở thích/năng lực, học tập, cách sử dụng hệ thống và mục tiêu tương lai.\n\n"
+                "Thầy/cô là Giáo viên Cố vấn Hướng nghiệp tận tâm của hệ thống AI CareerGuide, đồng hành cùng học sinh THPT.\n"
+                "Nhiệm vụ: Tư vấn, giải đáp câu hỏi của em học sinh về định hướng nghề nghiệp, các ngành học, "
+                "mức độ phù hợp với sở thích/năng lực, phương pháp học tập, cách sử dụng hệ thống và mục tiêu tương lai.\n\n"
                 "Quy tắc phản hồi:\n"
-                "1. Trả lời bằng tiếng Việt tự nhiên, nhiệt tình, súc tích, mạch lạc, giọng điệu khuyến khích và truyền cảm hứng.\n"
+                "1. Luôn tự xưng là \"thầy/cô\" và gọi học sinh là \"em\" một cách nhất quán, tự nhiên, ấm áp, có cấu trúc rõ ràng và mang tính khích lệ sư phạm.\n"
                 "2. Sử dụng thông tin từ [DỮ LIỆU THAM CHIẾU HỆ THỐNG] dưới đây làm căn cứ chuẩn xác "
                 "(về tên ngành, mã ngành, chuẩn đầu ra, điểm tham chiếu tuyển sinh, kết quả sở thích Holland nếu có). "
-                "Tuyệt đối KHÔNG tự bịa đặt thông tin tuyển sinh sai lệch.\n"
-                "3. Trả lời trực tiếp vào trọng tâm câu hỏi của người dùng (ví dụ: giải thích ngắn gọn bản chất ngành nghề, so sánh các ngành liên quan, hoặc hướng dẫn lộ trình), "
+                "Tuyệt đối KHÔNG tự bịa đặt điểm chuẩn hay hứa hẹn/cam kết đỗ tuyển sinh.\n"
+                "3. Trả lời trực tiếp vào trọng tâm câu hỏi của em (ví dụ: giải thích ngắn gọn bản chất ngành nghề, so sánh các ngành liên quan, hoặc hướng dẫn lộ trình từng bước), "
                 "tránh lặp lại nguyên văn tiêu đề kỹ thuật hay khuôn mẫu khô cứng của hệ thống.\n"
-                "4. Định dạng Markdown rõ ràng (dùng gạch đầu dòng, in đậm tên ngành hoặc từ khóa quan trọng) để học sinh dễ đọc.\n\n"
+                "4. Định dạng Markdown rõ ràng (dùng gạch đầu dòng, in đậm tên ngành hoặc từ khóa quan trọng) để em dễ đọc.\n"
+                "5. Nếu câu trả lời làm rõ của em thực chất nằm ngoài phạm vi học tập, hướng nghiệp, chọn ngành hoặc hướng dẫn AI CareerGuide, hãy lịch sự từ chối và hướng em quay lại đúng phạm vi hỗ trợ.\n\n"
                 f"{SECURITY_BOUNDARIES_PROMPT}"
             )
 
@@ -502,14 +505,16 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
                 system_instruction = f"{SYSTEM_HELP_PROMPT}\n\n{length_directive}"
             elif academic:
                 system_instruction = (
-                    "Bạn là trợ giảng học tập trong AI CareerGuide, hỗ trợ kiến thức phổ thông và lập trình.\n"
-                    "Trả lời trực tiếp câu hỏi hiện tại bằng tiếng Việt, rõ ràng và đúng trình độ câu hỏi.\n"
-                    "Với phép tính hoặc biểu thức ngắn, hãy giải hoặc tính kết quả; không bắt buộc người dùng phải nói từ 'học'.\n"
+                    "Thầy/cô là Giáo viên Cố vấn Học tập trong AI CareerGuide, hỗ trợ kiến thức phổ thông và lập trình cho học sinh.\n"
+                    "Luôn tự xưng \"thầy/cô\" và gọi học sinh là \"em\" một cách nhất quán, gần gũi và sư phạm.\n"
+                    "Trả lời trực tiếp câu hỏi hiện tại bằng tiếng Việt, rõ ràng và đúng trình độ của em.\n"
+                    "Với phép tính hoặc biểu thức ngắn, hãy giải hoặc tính kết quả; không bắt buộc em phải nói từ 'học'.\n"
                     "Với khái niệm, nêu định nghĩa dễ hiểu và ví dụ phù hợp. Với bài tập, trình bày các bước chính. "
-                    "Với lập trình, cung cấp mã đúng ngôn ngữ yêu cầu và giải thích phù hợp; nếu thiếu dữ kiện, nêu giả định hoặc hỏi lại cụ thể.\n"
+                    "Với lập trình, cung cấp mã đúng ngôn ngữ yêu cầu và giải thích phù hợp; nếu thiếu dữ kiện, nêu giả định hoặc hỏi lại em cụ thể.\n"
                     "Không chuyển câu hỏi học tập sang tư vấn chọn ngành, không yêu cầu chọn ngành và không lặp lại "
                     "các lần từ chối nhầm trước đó. Không suy ra năng lực hay mức phù hợp nghề từ một câu hỏi kiến thức.\n"
-                    "Không bịa dữ kiện thời sự, nguồn tài liệu hoặc thông tin chưa được cung cấp.\n\n"
+                    "Không bịa dữ kiện thời sự, nguồn tài liệu hoặc thông tin chưa được cung cấp.\n"
+                    "Nếu câu trả lời làm rõ của em thực chất nằm ngoài phạm vi học tập, hướng nghiệp, chọn ngành hoặc hướng dẫn AI CareerGuide, hãy lịch sự từ chối và hướng em quay lại đúng phạm vi hỗ trợ.\n\n"
                     f"{length_directive}\n\n"
                     f"{SECURITY_BOUNDARIES_PROMPT}"
                 )
@@ -599,16 +604,6 @@ async def chat_with_career_counselor(db, payload: AIChatRequest, current_user_id
 
 
 async def get_llm_status(db):
-    """Compatibility facade: cùng nguồn DB với Admin, không đọc settings ghép trường."""
+    """Compatibility facade: cùng nguồn ENV với Admin, không đọc settings ghép trường."""
     from app.services.ai_config.service import get_status
     return await get_status(db)
-
-
-async def test_llm_connection(payload, db, actor_id):
-    from app.services.ai_config.service import probe_draft
-    return await probe_draft(db,payload,actor_id)
-
-
-async def update_llm_config(payload, db, actor_id):
-    from app.services.ai_config.service import apply_config
-    return await apply_config(db,payload,actor_id)

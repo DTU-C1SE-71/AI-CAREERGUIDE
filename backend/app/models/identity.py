@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 import enum
 from typing import List, Optional
-from sqlalchemy import String, Boolean, DateTime, Enum, ForeignKey, Integer, Text
+from sqlalchemy import String, Boolean, DateTime, Enum, ForeignKey, Index, Integer, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -45,11 +45,8 @@ class User(Base):
     consents: Mapped[List["UserConsent"]] = relationship(
         "UserConsent", back_populates="user", cascade="all, delete-orphan"
     )
-    assessments: Mapped[List["StudentAssessment"]] = relationship(
-        "StudentAssessment", back_populates="user", cascade="all, delete-orphan"
-    )
-    grades: Mapped[List["StudentGrade"]] = relationship(
-        "StudentGrade", back_populates="user", cascade="all, delete-orphan"
+    submissions: Mapped[List["StudentAssessmentSubmission"]] = relationship(
+        "StudentAssessmentSubmission", back_populates="user", cascade="all, delete-orphan"
     )
 
 
@@ -90,6 +87,9 @@ class EmailVerificationCode(Base):
     and password reset. Never stores plaintext OTPs or plaintext passwords.
     """
     __tablename__ = "email_verification_codes"
+    __table_args__ = (
+        Index("ix_email_otp_lookup", "email", "purpose", "expires_at"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

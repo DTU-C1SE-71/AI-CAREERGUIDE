@@ -37,6 +37,8 @@ interface CatalogMajor {
   cutoff_score?: number | string | null
   benchmark_score?: number | string | null
   min_score?: number | string | null
+  benchmark_label?: string | null
+  benchmark_source?: string | null
   is_trending?: boolean
   trend_tier?: string | null
   trend_label?: string | null
@@ -445,7 +447,7 @@ export function MajorsCatalogPanel({
                         <th className="min-w-[220px] px-3 py-3">Tên ngành</th>
                         <th className="min-w-[170px] px-3 py-3">Nhóm lĩnh vực</th>
                         <th className="min-w-[165px] px-3 py-3">Tổ hợp xét tuyển</th>
-                        <th className="w-28 px-3 py-3 text-right">Điểm chuẩn</th>
+                        <th className="w-36 px-3 py-3 text-right whitespace-nowrap">Điểm tham chiếu</th>
                         <th className="min-w-[140px] px-3 py-3">Xu hướng</th>
                         <th className="w-16 px-3 py-3 text-center">Chi tiết</th>
                       </tr>
@@ -502,11 +504,22 @@ export function MajorsCatalogPanel({
                                   <span className="text-xs text-slate-400">—</span>
                                 )}
                               </td>
-                              <td className="px-3 py-2.5 text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap">
+                              <td
+                                className="px-3 py-2.5 text-right text-sm font-bold text-slate-900 tabular-nums whitespace-nowrap"
+                                title={major.benchmark_label || undefined}
+                              >
                                 {cutoffDisplay === "—" ? (
                                   <span className="font-normal text-slate-400">—</span>
                                 ) : (
-                                  cutoffDisplay
+                                  <span
+                                    className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs font-bold tabular-nums ring-1 ring-inset ${
+                                      major.benchmark_source === "IMPORTED"
+                                        ? "bg-sky-50 text-sky-700 ring-sky-200/80"
+                                        : "bg-slate-50 text-slate-700 ring-slate-200/80"
+                                    }`}
+                                  >
+                                    {cutoffDisplay}đ
+                                  </span>
                                 )}
                               </td>
                               <td className="px-3 py-2.5">
@@ -573,6 +586,17 @@ export function MajorsCatalogPanel({
                                             <strong className="font-semibold text-slate-900">
                                               {major.degree_level || "Đại học"}
                                             </strong>
+                                          </span>
+                                          <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1 font-medium text-slate-700">
+                                            Điểm tham chiếu:{" "}
+                                            <strong className="font-mono font-semibold text-sky-700 tabular-nums">
+                                              {cutoffDisplay === "—" ? "—" : `${cutoffDisplay}đ`}
+                                            </strong>
+                                            {cutoffDisplay !== "—" && (
+                                              <span className="text-slate-500">
+                                                ({major.benchmark_source === "IMPORTED" ? "Theo tệp nhập" : "Sàn Bộ GD&ĐT"})
+                                              </span>
+                                            )}
                                           </span>
                                           <span className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200/80 bg-white px-2.5 py-1 font-medium text-slate-700">
                                             Holland ưu thế:{" "}

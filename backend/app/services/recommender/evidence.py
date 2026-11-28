@@ -26,11 +26,27 @@ def _cognitive_questions():
     return data['cognitive_questions']
 
 
+LEGACY_V1_COG_SPECS = (
+    ("COG_1", "learning_style", {"LEARN_VISUAL_SPATIAL", "LEARN_THEORETICAL_ANALYTICAL", "LEARN_HANDS_ON_PRACTICAL", "LEARN_INTERACTIVE_CASE"}),
+    ("COG_2", "work_environment", {"ENV_LAB_DIGITAL_QUIET", "ENV_DYNAMIC_CORPORATE", "ENV_FIELD_INDUSTRIAL", "ENV_INSTITUTIONAL_SERVICE"}),
+    ("COG_3", "problem_solving", {"SOLVE_QUANTITATIVE_LOGIC", "SOLVE_CREATIVE_DIVERGENT", "SOLVE_HUMAN_EMPATHY", "SOLVE_PROCEDURAL_STRATEGIC"}),
+    ("COG_4", "interaction_target", {"TARGET_SYSTEMS_MACHINES", "TARGET_DATA_FINANCE_LAW", "TARGET_PEOPLE_COMMUNITY", "TARGET_NATURE_BIO_ART"}),
+    ("COG_5", "gardner_intelligence", {"GARDNER_LOGICAL_MATH", "GARDNER_LINGUISTIC_INTERPERSONAL", "GARDNER_SPATIAL_MUSICAL", "GARDNER_NATURALIST_KINESTHETIC"}),
+    ("COG_6", "pressure_tolerance", {"PRESSURE_HIGH_STAKES_VITAL", "PRESSURE_MARKET_DEADLINE", "PRESSURE_DEEP_RND_COMPLEXITY", "PRESSURE_STABLE_SUSTAINABLE"}),
+    ("COG_7", "output_preference", {"OUTPUT_TANGIBLE_TECH_SYSTEM", "OUTPUT_ECONOMIC_LEGAL_VALUE", "OUTPUT_HUMAN_WELLBEING", "OUTPUT_CREATIVE_SCIENTIFIC_WORK"}),
+    ("COG_8", "team_role", {"ROLE_TECHNICAL_SPECIALIST", "ROLE_STRATEGIC_LEADER", "ROLE_CREATIVE_COMMUNICATOR", "ROLE_QUALITY_CONTROLLER"}),
+)
+
+
 def cognitive_evidence(raw: Any) -> dict:
     raw = raw if isinstance(raw, dict) else {}
     questions = _cognitive_questions()
-    quiz_keys = {q['code'] for q in questions} | {q['dimension_key'] for q in questions}
-    if any(key in raw for key in quiz_keys):
+    v2_exclusive_keys = {q['code'] for q in questions} | {
+        q['dimension_key']
+        for q in questions
+        if q['dimension_key'] not in ('learning_environment', 'teamwork_intensity')
+    }
+    if any(key in raw for key in v2_exclusive_keys):
         valid = {}
         for question in questions:
             code, dim = question['code'], question['dimension_key']
@@ -43,10 +59,28 @@ def cognitive_evidence(raw: Any) -> dict:
                     valid[code] = option['option_key']
                     break
         count = len(valid)
+        total = len(questions)
+        traits = normalize_student_cognitive_traits(valid) if count == total else {}
+        return {'status': 'COMPLETE' if count == total else 'PARTIAL' if count else 'MISSING',
+                'answered': count, 'total': total, 'basis': 'SELF_REPORTED_PREFERENCES',
+                'traits': {k: traits[k] for k in COGNITIVE_DIMENSIONS if k in traits}}
+
+    legacy_keys = {code for code, _, _ in LEGACY_V1_COG_SPECS} | {dim for _, dim, _ in LEGACY_V1_COG_SPECS}
+    if any(key in raw for key in legacy_keys):
+        valid = {}
+        for code, dim, trait_codes in LEGACY_V1_COG_SPECS:
+            answer = raw[code] if code in raw else raw.get(dim)
+            if not isinstance(answer, str):
+                continue
+            answer = answer.strip().upper()
+            if answer in {"A", "B", "C", "D"} or answer in trait_codes:
+                valid[code] = answer
+        count = len(valid)
         traits = normalize_student_cognitive_traits(valid) if count == 8 else {}
         return {'status': 'COMPLETE' if count == 8 else 'PARTIAL' if count else 'MISSING',
                 'answered': count, 'total': 8, 'basis': 'SELF_REPORTED_PREFERENCES',
                 'traits': {k: traits[k] for k in COGNITIVE_DIMENSIONS if k in traits}}
+
     valid = {k: v for k, v in raw.items() if k in COGNITIVE_DIMENSIONS and isinstance(v, str) and v in COGNITIVE_DIMENSIONS[k]}
     count = len(valid)
     return {'status': 'COMPLETE' if count == 6 else 'PARTIAL' if count else 'MISSING',

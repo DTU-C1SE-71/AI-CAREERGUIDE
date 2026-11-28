@@ -586,7 +586,7 @@ export function Login() {
               {[
                 "Trắc nghiệm Holland 30 câu",
                 "Chuẩn hóa Z-Score 435 ngành",
-                "Cố vấn AI & xuất báo cáo PDF",
+                "Giáo viên cố vấn AI & lộ trình học tập",
               ].map((point) => (
                 <div
                   key={point}

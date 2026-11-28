@@ -501,7 +501,7 @@ class TestEnhancedThreePillarAndImporter:
         assert bd_low["safety_tier"] == "TARGET"
         assert score_low > score_high
 
-    def test_asymmetric_cognitive_overqualification_is_not_penalized(self):
+    def test_asymmetric_cognitive_overqualification_is_calibrated(self):
         from app.services.recommender.engine import calculate_asymmetric_cognitive_fit
 
         high_student = {
@@ -520,8 +520,19 @@ class TestEnhancedThreePillarAndImporter:
             "learning_environment": "structured",
             "teamwork_intensity": "balanced",
         }
-        score = calculate_asymmetric_cognitive_fit(high_student, medium_major)
-        assert pytest.approx(score, rel=1e-4) == 1.0
+        high_major = {
+            "abstract_thinking": "high",
+            "analytical_reasoning": "high",
+            "spatial_perception": "high",
+            "linguistic_ability": "high",
+            "learning_environment": "structured",
+            "teamwork_intensity": "balanced",
+        }
+        score_over = calculate_asymmetric_cognitive_fit(high_student, medium_major)
+        score_exact = calculate_asymmetric_cognitive_fit(high_student, high_major)
+        assert score_over >= 0.85
+        assert score_exact == pytest.approx(1.0, rel=1e-4)
+        assert score_exact > score_over
 
     def test_related_pathway_substitution_matching(self):
         from app.services.recommender.engine import are_majors_related_pathway
@@ -609,6 +620,66 @@ class TestEnhancedThreePillarAndImporter:
         }
         fit_score = calculate_asymmetric_cognitive_fit(raw_cog, cs_major_attr)
         assert fit_score >= 0.85
+
+    def test_pa3_10_normative_scoring_damping_and_evidence(self):
+        from app.services.recommender.engine import (
+            normalize_student_cognitive_traits,
+            calculate_asymmetric_cognitive_fit,
+        )
+        from app.services.recommender.evidence import cognitive_evidence
+
+        # Multi-talented student: high analytical (Q1=D, Q5=D) AND high linguistic (Q4=D, Q8=C -> 4+3=7)
+        balanced_v2 = {
+            "COG_V2_1": "D",
+            "COG_V2_2": "B",
+            "COG_V2_3": "B",
+            "COG_V2_4": "D",
+            "COG_V2_5": "D",
+            "COG_V2_6": "C",
+            "COG_V2_7": "B",
+            "COG_V2_8": "C",
+            "COG_V2_9": "A",   # structured
+            "COG_V2_10": "A",  # balanced
+        }
+        mapped = normalize_student_cognitive_traits(balanced_v2)
+        assert mapped["analytical_reasoning"] == "high"
+        assert mapped["linguistic_ability"] == "high"
+        assert mapped["abstract_thinking"] == "medium"
+        assert mapped["spatial_perception"] == "medium"
+        assert mapped["learning_environment"] == "structured"
+        assert mapped["teamwork_intensity"] == "balanced"
+        assert cognitive_evidence(balanced_v2)["status"] == "COMPLETE"
+        assert cognitive_evidence(balanced_v2)["total"] == 10
+
+        partial_v2 = dict(balanced_v2)
+        partial_v2.pop("COG_V2_10")
+        ev_partial = cognitive_evidence(partial_v2)
+        assert ev_partial["status"] == "PARTIAL"
+        assert ev_partial["answered"] == 9
+        assert ev_partial["traits"] == {}
+
+        # Flat all-D profile gets damped vs genuine selective peak profile
+        all_d = {f"COG_V2_{i}": "D" for i in range(1, 9)}
+        all_d["COG_V2_9"] = "A"
+        all_d["COG_V2_10"] = "A"
+        target_major = {
+            "analytical_reasoning": "high",
+            "abstract_thinking": "medium",
+            "spatial_perception": "medium",
+            "linguistic_ability": "high",
+            "learning_environment": "structured",
+            "teamwork_intensity": "balanced",
+        }
+        fit_selective = calculate_asymmetric_cognitive_fit(balanced_v2, target_major)
+        fit_flat = calculate_asymmetric_cognitive_fit(all_d, target_major)
+        assert fit_selective > fit_flat
+
+        # IDF weight: matching rare 'structured' environment + matching other traits yields full 1.0,
+        # and mismatching 'structured' drops score more than mismatching 'exploratory'
+        struct_major = dict(target_major, learning_environment="structured")
+        expl_major = dict(target_major, learning_environment="exploratory")
+        student_collab = dict(balanced_v2, COG_V2_9="C")
+        assert calculate_asymmetric_cognitive_fit(student_collab, struct_major) < calculate_asymmetric_cognitive_fit(student_collab, expl_major)
 
 
 # =========================================================================

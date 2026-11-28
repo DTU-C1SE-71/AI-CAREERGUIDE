@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "framer-motion"
+import { motion } from "framer-motion"
 import {
   ArrowRight,
   BarChart3,
@@ -12,11 +12,12 @@ import {
   Sparkles,
   Target,
 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Link } from "react-router"
 import { Button } from "../components/common/Button"
 import { Card } from "../components/common/Card"
 import { PageContainer } from "../components/layout/PageContainer"
+import { requestJSON } from "../services/api"
 
 const pillars = [
   {
@@ -32,7 +33,7 @@ const pillars = [
     weight: "Trụ cột 2 · Hệ số động",
     category: "Năng lực học tập",
     title: "Chuẩn hóa Z-Score",
-    text: "Đối chiếu điểm số học bạ và thi cử theo các tổ hợp môn xét tuyển, chuẩn hóa độ lệch điểm để dự báo chính xác cơ hội trúng tuyển.",
+    text: "Đối chiếu điểm số theo các tổ hợp môn xét tuyển và chuẩn hóa độ lệch điểm để ước lượng mức độ khả thi mang tính tham khảo.",
     actionText: "Nhập điểm và kiểm tra",
   },
   {
@@ -47,39 +48,53 @@ const pillars = [
 
 const heroImages = [
   {
-    src: "https://images.unsplash.com/photo-1598981457915-aea220950616?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=85&w=1200",
-    alt: "Học sinh đang tập trung học tập",
-    label: "Khám phá tiềm năng",
+    src: "/images/hero/vn-dtu-overview.jpg",
+    alt: "Toàn cảnh khuôn viên Đại học Duy Tân tại Đà Nẵng",
+    label: "ĐH Duy Tân · Đà Nẵng",
   },
   {
-    src: "https://images.unsplash.com/photo-1758270705290-62b6294dd044?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=85&w=1200",
-    alt: "Nhóm sinh viên trao đổi thảo luận",
-    label: "Đối chiếu dữ liệu",
+    src: "/images/hero/vn-dtu-library.jpg",
+    alt: "Thư viện hiện đại Đại học Duy Tân",
+    label: "Thư viện ĐH Duy Tân",
   },
   {
-    src: "https://images.unsplash.com/photo-1782388713336-fcb8aa6db8f0?crop=entropy&cs=tinysrgb&fit=crop&fm=jpg&q=85&w=1200",
-    alt: "Sinh viên hợp tác dự án công nghệ",
-    label: "Kiến tạo tương lai",
+    src: "/images/hero/vn-hust-campus.jpg",
+    alt: "Khuôn viên Đại học Bách khoa Hà Nội",
+    label: "ĐH Bách khoa Hà Nội",
+  },
+  {
+    src: "/images/hero/vn-dtu-campus.jpg",
+    alt: "Khu giảng đường Đại học Duy Tân",
+    label: "Cơ sở ĐH Duy Tân",
+  },
+  {
+    src: "/images/hero/vn-vnuhcm-campus.jpg",
+    alt: "Nhà điều hành Đại học Quốc gia TP. Hồ Chí Minh",
+    label: "ĐH Quốc gia TP.HCM",
   },
 ]
 
 const capabilities = [
   {
+    id: "catalog",
     icon: Database,
-    title: "435 ngành đào tạo chuẩn hóa",
+    title: "ngành đào tạo chuẩn hóa",
     desc: "Cập nhật đồng bộ theo danh mục đào tạo của Bộ GD&ĐT cùng xu hướng tuyển dụng thị trường lao động.",
   },
   {
+    id: "xai",
     icon: Eye,
     title: "Giải thích minh bạch (XAI)",
     desc: "Bóc tách rõ ràng tỷ trọng đóng góp từ sở thích, điểm số tổ hợp và phong cách tư duy trong từng gợi ý.",
   },
   {
+    id: "advisor",
     icon: BookOpenCheck,
-    title: "Cố vấn AI & Xuất báo cáo PDF",
-    desc: "Đối chiếu nghề mơ ước với hồ sơ năng lực, hỏi đáp cùng cố vấn AI và tải báo cáo hướng nghiệp A4 hoàn chỉnh.",
+    title: "Giáo viên Cố vấn AI",
+    desc: "Đối chiếu nghề mơ ước với hồ sơ năng lực, phân tích kỹ năng và hỏi đáp trực tiếp cùng Giáo viên Cố vấn AI.",
   },
   {
+    id: "universities",
     icon: GraduationCap,
     title: "Bản đồ trường đại học",
     desc: "Tra cứu điểm sàn, phương thức xét tuyển và cơ hội học bổng của các cơ sở đào tạo uy tín toàn quốc.",
@@ -88,14 +103,54 @@ const capabilities = [
 
 export function Home() {
   const [activeImage, setActiveImage] = useState(0)
+  const [isHovered, setIsHovered] = useState(false)
+  const [majorCount, setMajorCount] = useState<number | null>(null)
+
+  const loadCatalogStats = useCallback(async (signal?: AbortSignal) => {
+    try {
+      const stats = await requestJSON<{ total_majors?: number }>(
+        "/v1/taxonomy/catalog-stats",
+        { signal },
+      )
+      if (!signal?.aborted && typeof stats?.total_majors === "number") {
+        setMajorCount(stats.total_majors)
+      }
+    } catch {
+      // Keep previous or placeholder count on transient error
+    }
+  }, [])
 
   useEffect(() => {
+    const controller = new AbortController()
+    void loadCatalogStats(controller.signal)
+
+    const refreshIfVisible = () => {
+      if (document.visibilityState === "visible") {
+        void loadCatalogStats()
+      }
+    }
+
+    window.addEventListener("focus", refreshIfVisible)
+    document.addEventListener("visibilitychange", refreshIfVisible)
+
+    return () => {
+      controller.abort()
+      window.removeEventListener("focus", refreshIfVisible)
+      document.removeEventListener("visibilitychange", refreshIfVisible)
+    }
+  }, [loadCatalogStats])
+
+  useEffect(() => {
+    if (isHovered) return
     const timer = window.setInterval(
       () => setActiveImage((current) => (current + 1) % heroImages.length),
-      4800,
+      5200,
     )
     return () => window.clearInterval(timer)
-  }, [])
+  }, [isHovered])
+
+  const majorCountText =
+    majorCount !== null ? majorCount.toLocaleString("vi-VN") : "—"
 
   return (
     <div className="relative overflow-hidden">
@@ -114,16 +169,16 @@ export function Home() {
             className="flex flex-col lg:col-span-7"
           >
             <h1 className="max-w-2xl text-4xl font-black leading-[1.12] tracking-[-0.035em] text-slate-900 sm:text-5xl lg:text-[56px] xl:text-[62px]">
-              Không chỉ chọn ngành.
+              Hiểu rõ bản thân.
               <span className="mt-1 block text-sky-600">
-                Chọn đúng tương lai.
+                Gợi mở hướng đi phù hợp.
               </span>
             </h1>
 
             <p className="mt-5 max-w-xl text-base leading-relaxed text-slate-600 sm:text-lg">
-              Kết nối sở thích nghề nghiệp, học lực chuẩn hóa và phong cách tư
-              duy để định vị chính xác ngành học tương thích cùng phân tích năng
-              lực rõ ràng.
+              Kết hợp sở thích nghề nghiệp, điểm số học tập và phong cách tư duy
+              để gợi ý các ngành học phù hợp cùng góc nhìn phân tích năng lực
+              mang tính tham khảo.
             </p>
 
             <div className="mt-8 flex flex-col gap-3.5 sm:flex-row sm:items-center">
@@ -151,7 +206,7 @@ export function Home() {
             <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2.5 pt-2 text-xs font-semibold text-slate-600 sm:text-sm">
               {[
                 "10 phút thực hiện",
-                "435 ngành chuẩn hóa",
+                `${majorCountText} ngành chuẩn hóa`,
                 "Giải thích AI minh bạch",
               ].map((item) => (
                 <div key={item} className="inline-flex items-center gap-2">
@@ -164,81 +219,148 @@ export function Home() {
             </div>
           </motion.div>
 
-          {/* Right Column: Hero Visual Showcase */}
+          {/* Right Column: Interactive Stacked Photo Deck Showcase */}
           <motion.div
             initial={{ opacity: 0, scale: 0.97 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ delay: 0.08, duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
-            className="relative lg:col-span-5"
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+            className="relative mx-auto w-full max-w-[440px] py-4 sm:py-6 lg:col-span-5 lg:max-w-none"
           >
-            <div className="relative h-[400px] overflow-hidden rounded-3xl border border-slate-200/90 bg-slate-900 shadow-xl shadow-sky-950/10 sm:h-[460px] lg:h-[490px] xl:h-[530px]">
-              <AnimatePresence mode="popLayout">
-                <motion.img
-                  key={heroImages[activeImage].src}
-                  src={heroImages[activeImage].src}
-                  alt={heroImages[activeImage].alt}
-                  initial={{ opacity: 0, scale: 1.04 }}
-                  animate={{ opacity: 0.88, scale: 1 }}
-                  exit={{ opacity: 0, scale: 0.98 }}
-                  transition={{
-                    opacity: { duration: 0.7 },
-                    scale: { duration: 4.8 },
-                  }}
-                  className="absolute inset-0 h-full w-full object-cover"
-                />
-              </AnimatePresence>
+            <div className="relative mx-auto h-[400px] w-[88%] sm:h-[450px] sm:w-[86%] lg:h-[470px] xl:h-[500px]">
+              {heroImages.map((image, index) => {
+                const depth =
+                  (index - activeImage + heroImages.length) % heroImages.length
+                const isFront = depth === 0
+                const isVisibleStackCard =
+                  depth === 0 || depth === 1 || depth === heroImages.length - 1
+                const stackStyle =
+                  depth === 0
+                    ? { x: 0, y: 0, rotate: 0, scale: 1, opacity: 1, zIndex: 30 }
+                    : depth === 1
+                      ? {
+                          x: 26,
+                          y: 14,
+                          rotate: 5,
+                          scale: 0.94,
+                          opacity: 0.92,
+                          zIndex: 20,
+                        }
+                      : depth === heroImages.length - 1
+                        ? {
+                            x: -22,
+                            y: 22,
+                            rotate: -5,
+                            scale: 0.89,
+                            opacity: 0.82,
+                            zIndex: 10,
+                          }
+                        : {
+                            x: 0,
+                            y: 26,
+                            rotate: 0,
+                            scale: 0.84,
+                            opacity: 0,
+                            zIndex: 0,
+                          }
 
-              {/* Contrast scrim */}
-              <div className="absolute inset-0 bg-gradient-to-t from-slate-950/90 via-slate-950/25 to-transparent" />
+                return (
+                  <motion.div
+                    key={image.src}
+                    initial={false}
+                    animate={stackStyle}
+                    transition={{
+                      type: "spring",
+                      stiffness: 260,
+                      damping: 26,
+                    }}
+                    onClick={() =>
+                      setActiveImage(
+                        isFront
+                          ? (activeImage + 1) % heroImages.length
+                          : index,
+                      )
+                    }
+                    className={`absolute inset-0 overflow-hidden rounded-3xl border-4 border-white bg-slate-900 shadow-2xl shadow-sky-950/15 ${
+                      isVisibleStackCard
+                        ? "cursor-pointer"
+                        : "pointer-events-none"
+                    }`}
+                  >
+                    <img
+                      src={image.src}
+                      alt={image.alt}
+                      className="h-full w-full object-cover object-center"
+                    />
 
-              {/* Image context badge */}
-              <div className="absolute left-5 top-5 rounded-full border border-white/20 bg-slate-900/60 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-white backdrop-blur-md">
-                {heroImages[activeImage].label}
-              </div>
+                    {/* Contrast scrim */}
+                    <div
+                      className={`absolute inset-0 transition-opacity duration-300 ${
+                        isFront
+                          ? "bg-gradient-to-t from-slate-950/85 via-slate-950/20 to-transparent"
+                          : "bg-slate-950/20"
+                      }`}
+                    />
 
-              {/* Bottom statistics and indicators */}
-              <div className="absolute bottom-0 left-0 right-0 p-6 sm:p-7 text-white">
-                <div className="flex items-end justify-between">
-                  <div>
-                    <span className="text-3xl sm:text-4xl font-black tabular-nums tracking-tight">
-                      435
-                    </span>
-                    <span className="ml-2 text-xs sm:text-sm font-medium text-sky-200">
-                      ngành đào tạo đại học
-                    </span>
-                  </div>
+                    {isFront && (
+                      <>
+                        {/* Image context badge */}
+                        <div className="absolute left-5 top-5 rounded-full border border-white/25 bg-slate-900/60 px-3.5 py-1.5 text-xs font-bold uppercase tracking-wider text-white backdrop-blur-md">
+                          {image.label}
+                        </div>
 
-                  <div className="flex items-center gap-2">
-                    {heroImages.map((image, index) => (
-                      <button
-                        key={image.src}
-                        type="button"
-                        onClick={() => setActiveImage(index)}
-                        aria-label={`Xem ảnh ${index + 1}`}
-                        className={`h-2 rounded-full transition-all duration-200 ${
-                          activeImage === index
-                            ? "w-8 bg-white"
-                            : "w-2 bg-white/40 hover:bg-white/70"
-                        }`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              </div>
+                        {/* Bottom statistics and indicators */}
+                        <div className="absolute bottom-0 left-0 right-0 p-6 text-white sm:p-7">
+                          <div className="flex items-end justify-between gap-3">
+                            <div>
+                              <span className="text-3xl font-black tabular-nums tracking-tight sm:text-4xl">
+                                {majorCountText}
+                              </span>
+                              <span className="ml-2 text-xs font-medium text-sky-200 sm:text-sm">
+                                ngành đào tạo đại học
+                              </span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              {heroImages.map((dotImage, dotIndex) => (
+                                <button
+                                  key={dotImage.src}
+                                  type="button"
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    setActiveImage(dotIndex)
+                                  }}
+                                  aria-label={`Xem ảnh ${dotIndex + 1}`}
+                                  className={`h-2 rounded-full transition-all duration-200 cursor-pointer ${
+                                    activeImage === dotIndex
+                                      ? "w-8 bg-white"
+                                      : "w-2 bg-white/40 hover:bg-white/70"
+                                  }`}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </motion.div>
+                )
+              })}
             </div>
 
             {/* Floating accuracy highlight badge */}
-            <div className="glass-panel absolute -left-4 sm:-left-6 top-6 sm:top-8 rounded-2xl border border-slate-200/80 p-3.5 sm:p-4 shadow-lg shadow-sky-950/5">
+            <div className="glass-panel pointer-events-none absolute -right-2 -top-2 z-40 rounded-2xl border border-slate-200/80 p-3 shadow-lg shadow-sky-950/5 sm:-right-4 sm:top-2 sm:p-3.5">
               <div className="flex items-center gap-3">
-                <span className="grid size-11 place-items-center rounded-xl bg-sky-50 text-sky-600 border border-sky-100">
+                <span className="grid size-10 place-items-center rounded-xl border border-sky-100 bg-sky-50 text-sky-600 sm:size-11">
                   <Target size={22} />
                 </span>
                 <div>
                   <p className="text-xs font-semibold text-slate-500">
-                    Độ tương thích đề xuất
+                    Gợi ý đa tiêu chí
                   </p>
-                  <p className="text-sm sm:text-base font-black text-slate-900 tabular-nums">
-                    94% chuẩn xác
+                  <p className="text-sm font-black tabular-nums text-slate-900 sm:text-base">
+                    Minh bạch · Tham khảo
                   </p>
                 </div>
               </div>
@@ -255,8 +377,8 @@ export function Home() {
               Hiểu mình trước khi chọn ngành
             </h2>
             <p className="mt-4 text-base leading-relaxed text-slate-600 sm:text-lg">
-              Mô hình đánh giá 3 chiều kết hợp khoa học tâm lý học, kết quả học
-              tập và phong cách nhận thức để đưa ra lựa chọn vững chắc nhất.
+              Mô hình đánh giá 3 chiều kết hợp trắc nghiệm sở thích, kết quả học
+              tập và phong cách nhận thức làm cơ sở tham khảo cho lựa chọn của bạn.
             </p>
           </div>
 
@@ -338,22 +460,28 @@ export function Home() {
 
               {/* Right Column: 4 Capabilities Grid */}
               <div className="grid gap-4 sm:grid-cols-2 lg:col-span-7">
-                {capabilities.map((cap) => (
-                  <div
-                    key={cap.title}
-                    className="group rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md hover:shadow-sky-500/5 sm:p-6"
-                  >
-                    <span className="grid size-11 place-items-center rounded-xl border border-sky-100 bg-sky-50 text-sky-600 transition-colors group-hover:bg-sky-600 group-hover:text-white">
-                      <cap.icon size={22} />
-                    </span>
-                    <h3 className="mt-4 text-base font-bold text-slate-900">
-                      {cap.title}
-                    </h3>
-                    <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-slate-500">
-                      {cap.desc}
-                    </p>
-                  </div>
-                ))}
+                {capabilities.map((cap) => {
+                  const capTitle =
+                    cap.id === "catalog"
+                      ? `${majorCountText} ${cap.title}`
+                      : cap.title
+                  return (
+                    <div
+                      key={cap.id}
+                      className="group rounded-2xl border border-slate-200/80 bg-white/90 p-5 shadow-xs transition-all duration-200 hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-md hover:shadow-sky-500/5 sm:p-6"
+                    >
+                      <span className="grid size-11 place-items-center rounded-xl border border-sky-100 bg-sky-50 text-sky-600 transition-colors group-hover:bg-sky-600 group-hover:text-white">
+                        <cap.icon size={22} />
+                      </span>
+                      <h3 className="mt-4 text-base font-bold text-slate-900">
+                        {capTitle}
+                      </h3>
+                      <p className="mt-1.5 text-xs sm:text-sm leading-relaxed text-slate-500">
+                        {cap.desc}
+                      </p>
+                    </div>
+                  )
+                })}
               </div>
             </div>
           </div>

@@ -55,7 +55,7 @@ class AssessmentQuestionSetConfig(BaseModel):
     estimated_minutes: int = 6
     questions_per_riasec_page: int = 5
     total_riasec_questions: int = 30
-    total_cognitive_questions: int = 8
+    total_cognitive_questions: int = 10
     weights: Dict[str, float] = Field(
         default_factory=lambda: {"riasec": 0.45, "academic": 0.35, "cognitive_preference": 0.20}
     )
@@ -115,3 +115,42 @@ class AssessmentSubmissionResponse(BaseModel):
     xp_earned: int = Field(default=1150)
     summary: str
     completed_at: datetime
+    changed: bool = Field(default=True, description="True nếu hồ sơ có thay đổi so với bản đã lưu")
+    ai_cache_invalidated: bool = Field(default=False, description="True nếu đã xóa cache đề xuất và phân tích AI cũ")
+
+
+class AssessmentResponseItem(BaseModel):
+    id: uuid.UUID
+    question_id: uuid.UUID
+    question_code: str
+    likert_value: Optional[int] = None
+    option_key: Optional[str] = None
+    selected_trait_code: Optional[str] = None
+    answered_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AssessmentSubmissionSummary(BaseModel):
+    submission_id: uuid.UUID
+    set_id: Optional[uuid.UUID] = None
+    set_code: Optional[str] = None
+    version: Optional[str] = None
+    riasec_vector: Dict[str, float] = Field(default_factory=dict)
+    riasec_raw_scores: Dict[str, int] = Field(default_factory=dict)
+    cognitive_traits: Dict[str, str] = Field(default_factory=dict)
+    cognitive_answers: Dict[str, str] = Field(default_factory=dict)
+    riasec_answers: Dict[str, Any] = Field(default_factory=dict)
+    raw_cognitive_answers: Dict[str, Any] = Field(default_factory=dict)
+    grades_by_subject: Dict[str, Any] = Field(default_factory=dict)
+    aspiration: Dict[str, Any] = Field(default_factory=dict)
+    score_context: Dict[str, Any] = Field(default_factory=dict)
+    dominant_traits: List[str] = Field(default_factory=list)
+    xp_earned: int = 0
+    completion_time_seconds: int = 360
+    completed_at: datetime
+
+
+class AssessmentSubmissionDetail(AssessmentSubmissionSummary):
+    raw_answers: Dict[str, Any] = Field(default_factory=dict)
+    responses: List[AssessmentResponseItem] = Field(default_factory=list)

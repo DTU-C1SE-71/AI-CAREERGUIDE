@@ -1,20 +1,32 @@
-"""HTTP adapter với DNS pinning, không redirect, ngân sách và lỗi đã khử bí mật."""
+"""HTTP adapter với DNS pinning, không redirect, retry lỗi tạm thời, ngân sách và lỗi đã khử bí mật."""
 import asyncio
 import json
+import logging
 import math
 import queue
+import random
 import threading
 import time
 import weakref
+from typing import Callable, TypeVar
 from urllib.parse import quote, urlsplit
 import httpx
 from app.core.ai_runtime import AIConfigError, ConfigSnapshot, canonical_target, resolve_target_addresses, validate_model, validate_credential
 
 
+logger = logging.getLogger(__name__)
+_T = TypeVar("_T")
+
 _MAX_BODY_BYTES = 2 * 1024 * 1024
 _MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+_MAX_TRANSIENT_RETRIES = 2
+_TRANSIENT_RETRY_CODES = frozenset({"PROVIDER_ERROR", "RATE_LIMITED", "NETWORK_ERROR"})
 _SEMAPHORES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 _SYNC_SLOTS = threading.BoundedSemaphore(3)
+
+
+class _EmptyContentError(Exception):
+    """Tín hiệu nội bộ khi provider trả HTTP 200 nhưng content trống để retry an toàn."""
 
 
 def _semaphore() -> asyncio.Semaphore:
@@ -110,61 +122,159 @@ def _body(data: dict | None) -> bytes | None:
     return body
 
 
-async def _request_json(snapshot: ConfigSnapshot, suffix: str, data: dict | None = None, *, timeout: float = 20) -> dict:
-    _validate_snapshot(snapshot)
-    body = _body(data)
-    async def run():
-        async with _semaphore():
-            addresses = await asyncio.to_thread(resolve_target_addresses, snapshot.base_url, snapshot.binding)
-            url, headers, extensions = _pinned_request(snapshot, addresses[0], suffix)
-            async with httpx.AsyncClient(timeout=httpx.Timeout(min(max(timeout, 1), 90)), follow_redirects=False, trust_env=False) as client:
-                async with client.stream("POST" if data is not None else "GET", url, headers=headers, content=body, extensions=extensions) as response:
-                    # Cấm redirect trước cả khi đọc body.
-                    if 300 <= response.status_code < 400:
-                        return _safe_json(b"{}", response.status_code)
-                    chunks = bytearray()
-                    async for chunk in response.aiter_bytes():
-                        chunks.extend(chunk)
-                        if len(chunks) > _MAX_RESPONSE_BYTES:
-                            raise AIConfigError("RESPONSE_LIMIT", "Phản hồi provider vượt giới hạn.", 502)
-                    return _redact(_safe_json(bytes(chunks), response.status_code), snapshot.credential)
-    try:
-        return await asyncio.wait_for(run(), timeout=min(max(timeout, 1), 90))
-    except (asyncio.TimeoutError, httpx.TimeoutException):
-        raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ.", 504) from None
-    except httpx.RequestError:
-        raise AIConfigError("NETWORK_ERROR", "Không kết nối được máy chủ AI.", 503) from None
+def _compute_retry_delay(attempt: int, err_code: str, deadline: float) -> float | None:
+    if attempt >= _MAX_TRANSIENT_RETRIES:
+        return None
+    if err_code not in _TRANSIENT_RETRY_CODES and err_code not in {"TIMEOUT", "EMPTY_RESPONSE"}:
+        return None
+    remaining = deadline - time.monotonic()
+    if remaining < 2.5:
+        return None
+    if err_code == "TIMEOUT" and remaining < 4.0:
+        return None
+    base_delay = 0.8 if attempt == 0 else 1.8
+    jitter = random.uniform(0.0, 0.25)
+    max_delay = remaining - 2.0
+    if max_delay <= 0:
+        return None
+    return min(base_delay + jitter, max_delay)
 
 
-def _request_json_sync_worker(snapshot: ConfigSnapshot, suffix: str, data: dict | None = None, *, timeout: float = 20) -> dict:
-    _validate_snapshot(snapshot)
-    body = _body(data)
-    deadline = time.monotonic() + min(max(timeout, 1), 90)
-    addresses = resolve_target_addresses(snapshot.base_url, snapshot.binding)
-    if time.monotonic() >= deadline:
-        raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ trước khi kết nối.", 504)
-    url, headers, extensions = _pinned_request(snapshot, addresses[0], suffix)
-    try:
-        with httpx.Client(timeout=httpx.Timeout(min(max(timeout, 1), 90)), follow_redirects=False, trust_env=False) as client:
-            with client.stream("POST" if data is not None else "GET", url, headers=headers, content=body, extensions=extensions) as response:
+async def _single_async_attempt(snapshot: ConfigSnapshot, suffix: str, body: bytes | None, attempt_timeout: float) -> dict:
+    async with _semaphore():
+        addresses = await asyncio.to_thread(resolve_target_addresses, snapshot.base_url, snapshot.binding)
+        url, headers, extensions = _pinned_request(snapshot, addresses[0], suffix)
+        async with httpx.AsyncClient(timeout=httpx.Timeout(min(max(attempt_timeout, 0.1), 90)), follow_redirects=False, trust_env=False) as client:
+            async with client.stream("POST" if body is not None else "GET", url, headers=headers, content=body, extensions=extensions) as response:
+                # Cấm redirect trước cả khi đọc body.
                 if 300 <= response.status_code < 400:
                     return _safe_json(b"{}", response.status_code)
                 chunks = bytearray()
-                for chunk in response.iter_bytes():
-                    if time.monotonic() >= deadline:
-                        raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ.", 504)
+                async for chunk in response.aiter_bytes():
                     chunks.extend(chunk)
                     if len(chunks) > _MAX_RESPONSE_BYTES:
                         raise AIConfigError("RESPONSE_LIMIT", "Phản hồi provider vượt giới hạn.", 502)
                 return _redact(_safe_json(bytes(chunks), response.status_code), snapshot.credential)
-    except httpx.TimeoutException:
-        raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ.", 504) from None
-    except httpx.RequestError:
-        raise AIConfigError("NETWORK_ERROR", "Không kết nối được máy chủ AI.", 503) from None
+
+
+async def _request_json(
+    snapshot: ConfigSnapshot,
+    suffix: str,
+    data: dict | None = None,
+    *,
+    timeout: float = 20,
+    post_process: Callable[[dict], _T] | None = None,
+) -> dict | _T:
+    _validate_snapshot(snapshot)
+    body = _body(data)
+    budget = min(max(timeout, 1), 90)
+    deadline = time.monotonic() + budget
+    for attempt in range(_MAX_TRANSIENT_RETRIES + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ.", 504)
+        attempt_timeout = min(remaining, budget)
+        err: AIConfigError | None = None
+        err_code: str = ""
+        try:
+            payload = await asyncio.wait_for(_single_async_attempt(snapshot, suffix, body, attempt_timeout), timeout=attempt_timeout)
+            return post_process(payload) if post_process is not None else payload
+        except _EmptyContentError:
+            err = AIConfigError("PROTOCOL_ERROR", "Provider không trả nội dung chat hợp lệ.", 502)
+            err_code = "EMPTY_RESPONSE"
+        except (asyncio.TimeoutError, httpx.TimeoutException):
+            err = AIConfigError("TIMEOUT", "API AI quá thời gian chờ.", 504)
+            err_code = "TIMEOUT"
+        except httpx.RequestError:
+            err = AIConfigError("NETWORK_ERROR", "Không kết nối được máy chủ AI.", 503)
+            err_code = "NETWORK_ERROR"
+        except AIConfigError as exc:
+            err = exc
+            err_code = exc.code
+
+        delay = _compute_retry_delay(attempt, err_code, deadline)
+        if delay is None:
+            raise err from None
+        logger.warning(
+            "Transient AI miss (%s) on %s (attempt %d/%d); retrying in %.2fs",
+            err_code, suffix, attempt + 1, _MAX_TRANSIENT_RETRIES + 1, delay,
+        )
+        # Semaphore đã được giải phóng trước khi ngủ backoff để không làm nghẽn request khác.
+        await asyncio.sleep(delay)
+    raise AIConfigError("PROVIDER_ERROR", "Không thể xử lý phản hồi AI.", 502)
+
+
+def _request_json_sync_worker(
+    snapshot: ConfigSnapshot,
+    suffix: str,
+    data: dict | None = None,
+    *,
+    timeout: float = 20,
+    post_process: Callable[[dict], _T] | None = None,
+) -> dict | _T:
+    _validate_snapshot(snapshot)
+    body = _body(data)
+    budget = min(max(timeout, 1), 90)
+    deadline = time.monotonic() + budget
+    for attempt in range(_MAX_TRANSIENT_RETRIES + 1):
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ.", 504)
+        attempt_timeout = min(remaining, budget)
+        err: AIConfigError | None = None
+        err_code: str = ""
+        try:
+            addresses = resolve_target_addresses(snapshot.base_url, snapshot.binding)
+            if time.monotonic() >= deadline:
+                raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ trước khi kết nối.", 504)
+            url, headers, extensions = _pinned_request(snapshot, addresses[0], suffix)
+            with httpx.Client(timeout=httpx.Timeout(min(max(attempt_timeout, 0.1), 90)), follow_redirects=False, trust_env=False) as client:
+                with client.stream("POST" if body is not None else "GET", url, headers=headers, content=body, extensions=extensions) as response:
+                    if 300 <= response.status_code < 400:
+                        payload = _safe_json(b"{}", response.status_code)
+                    else:
+                        chunks = bytearray()
+                        for chunk in response.iter_bytes():
+                            if time.monotonic() >= deadline:
+                                raise AIConfigError("TIMEOUT", "API AI quá thời gian chờ.", 504)
+                            chunks.extend(chunk)
+                            if len(chunks) > _MAX_RESPONSE_BYTES:
+                                raise AIConfigError("RESPONSE_LIMIT", "Phản hồi provider vượt giới hạn.", 502)
+                        payload = _redact(_safe_json(bytes(chunks), response.status_code), snapshot.credential)
+            return post_process(payload) if post_process is not None else payload
+        except _EmptyContentError:
+            err = AIConfigError("PROTOCOL_ERROR", "Provider không trả nội dung chat hợp lệ.", 502)
+            err_code = "EMPTY_RESPONSE"
+        except httpx.TimeoutException:
+            err = AIConfigError("TIMEOUT", "API AI quá thời gian chờ.", 504)
+            err_code = "TIMEOUT"
+        except httpx.RequestError:
+            err = AIConfigError("NETWORK_ERROR", "Không kết nối được máy chủ AI.", 503)
+            err_code = "NETWORK_ERROR"
+        except AIConfigError as exc:
+            err = exc
+            err_code = exc.code
+
+        delay = _compute_retry_delay(attempt, err_code, deadline)
+        if delay is None:
+            raise err from None
+        logger.warning(
+            "Transient AI sync miss (%s) on %s (attempt %d/%d); retrying in %.2fs",
+            err_code, suffix, attempt + 1, _MAX_TRANSIENT_RETRIES + 1, delay,
+        )
+        time.sleep(delay)
+    raise AIConfigError("PROVIDER_ERROR", "Không thể xử lý phản hồi AI.", 502)
 
 
 
-def _request_json_sync(snapshot: ConfigSnapshot, suffix: str, data: dict | None = None, *, timeout: float = 20) -> dict:
+def _request_json_sync(
+    snapshot: ConfigSnapshot,
+    suffix: str,
+    data: dict | None = None,
+    *,
+    timeout: float = 20,
+    post_process: Callable[[dict], _T] | None = None,
+) -> dict | _T:
     # Cả DNS lẫn HTTP sync phải có deadline. Worker daemon giữ slot tới khi
     # đóng client; DNS hệ điều hành bị treo không sinh vô hạn worker mới.
     _validate_snapshot(snapshot)
@@ -175,7 +285,7 @@ def _request_json_sync(snapshot: ConfigSnapshot, suffix: str, data: dict | None 
     outcome = queue.Queue(maxsize=1)
     def work():
         try:
-            outcome.put((_request_json_sync_worker(snapshot, suffix, data, timeout=budget), None))
+            outcome.put((_request_json_sync_worker(snapshot, suffix, data, timeout=budget, post_process=post_process), None))
         except AIConfigError as error:
             outcome.put((None, error))
         except Exception:
@@ -210,25 +320,42 @@ def _chat_body(snapshot: ConfigSnapshot, messages: list[dict], max_tokens: int, 
     return body
 
 
-def _chat_text(data: dict) -> str:
+def _chat_text(data: dict, *, allow_empty_retry: bool = False) -> str:
     choices = data.get("choices")
     if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
         raise AIConfigError("PROTOCOL_ERROR", "Provider thiếu choices trong phản hồi chat.", 502)
     choice = choices[0]
     message = choice.get("message")
-    if not isinstance(message, dict) or not isinstance(message.get("content"), str) or not message["content"].strip():
+    if not isinstance(message, dict):
         raise AIConfigError("PROTOCOL_ERROR", "Provider không trả nội dung chat hợp lệ.", 502)
     if choice.get("finish_reason") in {"length", "content_filter", "tool_calls", "function_call"}:
         raise AIConfigError("INCOMPLETE_OUTPUT", "Phản hồi AI chưa hoàn tất hoặc bị chặn; không dùng như kết quả hoàn chỉnh.", 502)
-    return message["content"]
+    content = message.get("content")
+    if not isinstance(content, str) or not content.strip():
+        if allow_empty_retry:
+            raise _EmptyContentError()
+        raise AIConfigError("PROTOCOL_ERROR", "Provider không trả nội dung chat hợp lệ.", 502)
+    return content
 
 
 async def chat(snapshot: ConfigSnapshot, messages: list[dict], *, max_tokens: int = 1024, timeout: float = 20, response_format: dict | None = None) -> str:
-    return _chat_text(await _request_json(snapshot, "/chat/completions", _chat_body(snapshot, messages, max_tokens, response_format), timeout=timeout))
+    return await _request_json(
+        snapshot,
+        "/chat/completions",
+        _chat_body(snapshot, messages, max_tokens, response_format),
+        timeout=timeout,
+        post_process=lambda payload: _chat_text(payload, allow_empty_retry=True),
+    )
 
 
 def chat_sync(snapshot: ConfigSnapshot, messages: list[dict], *, max_tokens: int = 1024, timeout: float = 20, response_format: dict | None = None) -> str:
-    return _chat_text(_request_json_sync(snapshot, "/chat/completions", _chat_body(snapshot, messages, max_tokens, response_format), timeout=timeout))
+    return _request_json_sync(
+        snapshot,
+        "/chat/completions",
+        _chat_body(snapshot, messages, max_tokens, response_format),
+        timeout=timeout,
+        post_process=lambda payload: _chat_text(payload, allow_empty_retry=True),
+    )
 
 
 async def embeddings(snapshot: ConfigSnapshot, text: str, *, dimensions: int = 1536) -> list[float]:

@@ -59,6 +59,7 @@ def format_major_dict(
     trend_map: Optional[Dict[str, Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Formats a Major ORM entity into a standardized frontend & API response dictionary."""
+    from app.services.recommender.engine import classify_major_academic_benchmark
     from app.services.taxonomy.trend_agent import get_major_trend_info
 
     blocks: List[str] = []
@@ -78,6 +79,17 @@ def format_major_dict(
     outlook = major.industry_outlook or ""
     t_info = get_major_trend_info(major.major_code, trend_map=trend_map, cognitive_attributes=cog)
 
+    raw_bm = cog.get("_benchmark_score")
+    override_score: Optional[float] = None
+    if isinstance(raw_bm, (int, float)) and not isinstance(raw_bm, bool) and 0 < float(raw_bm) <= 30.0:
+        override_score = round(float(raw_bm), 2)
+    bm = classify_major_academic_benchmark(
+        major.major_code,
+        major.name,
+        getattr(major, "category", "") or "",
+        benchmark_override=override_score,
+    )
+
     return {
         "id": major.id,
         "major_code": major.major_code,
@@ -95,6 +107,10 @@ def format_major_dict(
         "industry_outlook": outlook,
         "description": major.description,
         "is_active": major.is_active,
+        "benchmark_score": bm["benchmark_cutoff"],
+        "cutoff_score": bm["benchmark_cutoff"],
+        "benchmark_label": bm["tier_label"],
+        "benchmark_source": "IMPORTED" if override_score is not None else "MOET_FLOOR",
         **t_info,
     }
 
@@ -113,6 +129,24 @@ def _attach_seed_trend_info(
     )
     enriched.update(t_info)
     return enriched
+
+
+async def get_catalog_stats(db: AsyncSession) -> Dict[str, int]:
+    """Returns live active major and category counts directly from PostgreSQL."""
+    from fastapi import HTTPException
+    try:
+        total_majors = await db.scalar(
+            select(func.count(Major.id)).where(Major.is_active.is_(True))
+        )
+        total_categories = await db.scalar(
+            select(func.count(func.distinct(Major.category))).where(Major.is_active.is_(True))
+        )
+        return {
+            "total_majors": int(total_majors or 0),
+            "total_categories": int(total_categories or 0),
+        }
+    except Exception as exc:
+        raise HTTPException(503, "Không đọc được thống kê danh mục.") from exc
 
 
 async def list_majors(db: AsyncSession, search: Optional[str] = None,
@@ -182,16 +216,16 @@ async def purge_old_major_catalog_data(db: AsyncSession) -> int:
     """
     Xóa sạch toàn bộ dữ liệu ngành & nhóm ngành cũ trong CSDL trước khi nạp file Excel mới:
     - Xóa bảng liên kết tổ hợp môn (major_subject_blocks), nghề nghiệp (careers), kỹ năng ngành (major_skills)
-    - Xóa toàn bộ bảng ngành cũ (majors)
-    - Xóa cache phân tích ngành (major_insights), lộ trình ngành (major_roadmaps),
-      lịch sử đề xuất cũ (recommendation_history), vector tri thức ngành cũ (knowledge_embeddings)
-      và bản ghi staging danh mục cũ (staging_records).
+    - Xóa cache phân tích ngành (major_insights), giải thích ngành (major_explanation_insights),
+      phân tích kỹ năng theo ngành (student_skill_insights với major_code IS NOT NULL),
+      lộ trình & tiến độ ngành (major_roadmaps, student_roadmap_progress),
+      vector tri thức ngành cũ (knowledge_embeddings) và bản ghi staging STREAM_A_MOET cũ.
+    - Xóa toàn bộ bảng ngành cũ (majors).
     - Giữ nguyên tài khoản người dùng (users), câu hỏi trắc nghiệm và bài làm của học sinh.
     Không commit riêng lẻ để đảm bảo tính nguyên tử (rollback an toàn nếu bước insert sau đó gặp lỗi).
     """
-    from app.models.insight import MajorInsight, StudentSkillInsight
-    from app.models.roadmap import MajorRoadmap
-    from app.models.recommender import RecommendationHistory
+    from app.models.insight import MajorExplanationInsight, MajorInsight, StudentSkillInsight
+    from app.models.roadmap import MajorRoadmap, StudentRoadmapProgress
     from app.models.vector import KnowledgeEmbedding
     from app.models.staging import StagingRecord, StagingStreamType
 
@@ -203,9 +237,10 @@ async def purge_old_major_catalog_data(db: AsyncSession) -> int:
     await db.execute(delete(Career))
     await db.execute(delete(MajorSkill))
     await db.execute(delete(MajorInsight))
-    await db.execute(delete(StudentSkillInsight).where(StudentSkillInsight.major_code != ""))
+    await db.execute(delete(MajorExplanationInsight))
+    await db.execute(delete(StudentSkillInsight).where(StudentSkillInsight.major_code.is_not(None)))
+    await db.execute(delete(StudentRoadmapProgress))
     await db.execute(delete(MajorRoadmap))
-    await db.execute(delete(RecommendationHistory))
     await db.execute(delete(KnowledgeEmbedding).where(KnowledgeEmbedding.major_code.is_not(None)))
     await db.execute(delete(StagingRecord).where(StagingRecord.stream_type == StagingStreamType.STREAM_A_MOET))
     await db.execute(delete(Major))
@@ -329,10 +364,12 @@ async def bulk_sync_majors(
 
         major_obj = existing_majors.get(code)
         if major_obj is not None:
-            # Preserve persisted _trend marker if incoming Excel/payload doesn't include it
+            # Preserve persisted _trend / _benchmark_score if incoming Excel/payload doesn't include them
             old_cog = major_obj.cognitive_attributes if isinstance(major_obj.cognitive_attributes, dict) else {}
             if "_trend" in old_cog and "_trend" not in cognitive:
                 cognitive["_trend"] = old_cog["_trend"]
+            if "_benchmark_score" in old_cog and "_benchmark_score" not in cognitive:
+                cognitive["_benchmark_score"] = old_cog["_benchmark_score"]
 
             major_obj.name = name
             major_obj.category = category

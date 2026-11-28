@@ -17,7 +17,8 @@ import {
   X,
 } from "lucide-react"
 import { AnimatePresence, motion } from "framer-motion"
-import { type ReactNode, useEffect, useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 import { Link, NavLink, useNavigate } from "react-router"
 import { useAuth } from "../../context/AuthContext"
 import { UserProfileModal } from "../profile/UserProfileModal"
@@ -59,29 +60,12 @@ const mainLinks: Array<{
   },
 ]
 
-function SidebarLabel({
-  children,
-  collapsed,
-}: {
-  children: ReactNode
-  collapsed: boolean
-}) {
-  return (
-    <AnimatePresence initial={false}>
-      {!collapsed && (
-        <motion.span
-          initial={{ opacity: 0, width: 0 }}
-          animate={{ opacity: 1, width: "auto" }}
-          exit={{ opacity: 0, width: 0 }}
-          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-          className="overflow-hidden whitespace-nowrap"
-        >
-          {children}
-        </motion.span>
-      )}
-    </AnimatePresence>
-  )
-}
+const labelRevealClass = (collapsed: boolean) =>
+  `whitespace-nowrap transition-[opacity,transform] ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none ${
+    collapsed
+      ? "pointer-events-none -translate-x-1.5 opacity-0 duration-[120ms]"
+      : "translate-x-0 opacity-100 duration-200 delay-75"
+  }`
 
 function SidebarBody({
   collapsed,
@@ -101,16 +85,29 @@ function SidebarBody({
   const [showSettingsMenu, setShowSettingsMenu] = useState(false)
   const [showProfileModal, setShowProfileModal] = useState(false)
   const menuRef = useRef<HTMLDivElement | null>(null)
+  const popoverRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     if (!showSettingsMenu) return
     const handleOutside = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setShowSettingsMenu(false)
+      const target = event.target as Node
+      if (
+        menuRef.current?.contains(target) ||
+        popoverRef.current?.contains(target)
+      ) {
+        return
       }
+      setShowSettingsMenu(false)
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setShowSettingsMenu(false)
     }
     document.addEventListener("mousedown", handleOutside)
-    return () => document.removeEventListener("mousedown", handleOutside)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      document.removeEventListener("mousedown", handleOutside)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
   }, [showSettingsMenu])
 
   const handleQuickSearch = () => {
@@ -118,85 +115,189 @@ function SidebarBody({
     navigate("/majors?search=1")
   }
 
+  const settingsMenuNode = (
+    <AnimatePresence>
+      {user && showSettingsMenu && (
+        <motion.div
+          ref={popoverRef}
+          initial={{ opacity: 0, y: 8, scale: 0.98 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: 6, scale: 0.98 }}
+          transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
+          className={`space-y-2 rounded-2xl border border-slate-200/90 bg-white p-3 text-sm shadow-xl ${
+            collapsed
+              ? "fixed bottom-3 left-[88px] z-[90] w-68"
+              : "mb-2.5 w-full"
+          }`}
+        >
+          <button
+            type="button"
+            onClick={() => {
+              setShowSettingsMenu(false)
+              setShowProfileModal(true)
+            }}
+            className="flex w-full items-center gap-3 rounded-xl border-b border-slate-100 p-1.5 pb-3 text-left transition hover:bg-slate-50"
+          >
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 text-xs font-bold text-white">
+              {user.name.slice(0, 2).toUpperCase()}
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-bold text-slate-900">
+                {user.name}
+              </p>
+              <p className="truncate text-xs text-slate-500">
+                {user.email}
+              </p>
+            </div>
+          </button>
+
+          <div className="space-y-1">
+            <button
+              type="button"
+              onClick={() => {
+                setShowSettingsMenu(false)
+                setShowProfileModal(true)
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
+            >
+              <UserCheck size={15} className="text-sky-600" />
+              <span>Chỉnh sửa hồ sơ</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setShowSettingsMenu(false)
+                onNavigate?.()
+                navigate("/dashboard")
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
+            >
+              <Compass size={15} className="text-sky-600" />
+              <span>Kết quả định hướng</span>
+            </button>
+
+            {user.role === "admin" && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowSettingsMenu(false)
+                  onNavigate?.()
+                  navigate("/admin")
+                }}
+                className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
+              >
+                <ShieldCheck size={15} className="text-sky-600" />
+                <span>Quản trị hệ thống</span>
+              </button>
+            )}
+          </div>
+
+          <div className="border-t border-slate-100 pt-1.5">
+            <button
+              type="button"
+              onClick={() => {
+                setShowSettingsMenu(false)
+                logout()
+              }}
+              className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
+            >
+              <LogOut size={15} />
+              <span>Đăng xuất</span>
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  )
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       {/* Brand Header */}
-      <div
-        className={`flex shrink-0 items-center ${
-          collapsed ? "flex-col justify-start gap-2.5 py-1" : "flex-wrap gap-2 px-1"
-        }`}
-      >
+      <div className="shrink-0">
         <Link
           to="/"
           onClick={onNavigate}
-          className={`flex min-w-0 items-center gap-2.5 ${
-            collapsed ? "" : "w-full py-1"
-          }`}
+          className="flex h-[44px] w-full items-center overflow-hidden"
           title={collapsed ? "AI CareerGuide" : undefined}
         >
-          <span className="relative grid size-10 shrink-0 place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm shadow-sky-600/20">
-            <BrainCircuit size={20} />
-          </span>
-          <SidebarLabel collapsed={collapsed}>
-            <span className="block text-base font-extrabold tracking-tight text-slate-900">
-              AI Career<span className="text-sky-600">Guide</span>
+          <span className="grid w-[46px] shrink-0 place-items-center">
+            <span className="relative grid size-[40px] place-items-center rounded-2xl bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm shadow-sky-600/20">
+              <BrainCircuit size={20} />
             </span>
-          </SidebarLabel>
+          </span>
+          <span
+            aria-hidden={collapsed}
+            className={`pl-1.5 text-base font-extrabold tracking-tight text-slate-900 ${labelRevealClass(collapsed)}`}
+          >
+            AI Career<span className="text-sky-600">Guide</span>
+          </span>
         </Link>
 
-        {!collapsed && (
-          <button
-            type="button"
-            onClick={handleQuickSearch}
-            className="sidebar-icon-button"
-            title="Tra cứu danh mục ngành"
-            aria-label="Tìm kiếm nhanh"
-          >
-            <Search size={17} />
-          </button>
-        )}
+        <div className="mt-2 flex h-[40px] w-full items-center overflow-hidden">
+          <span className="grid w-[46px] shrink-0 place-items-center">
+            <button
+              type="button"
+              onClick={onToggle}
+              className={`grid size-[40px] cursor-pointer place-items-center rounded-xl transition-colors duration-200 ${
+                collapsed
+                  ? "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                  : "bg-transparent text-slate-600 hover:bg-sky-50 hover:text-sky-700"
+              }`}
+              title={collapsed ? "Mở rộng thanh bên" : "Thu gọn thanh bên"}
+              aria-label={collapsed ? "Mở rộng thanh bên" : "Thu gọn thanh bên"}
+            >
+              {mobile ? (
+                <X size={18} />
+              ) : collapsed ? (
+                <PanelLeftOpen size={18} />
+              ) : (
+                <PanelLeftClose size={18} />
+              )}
+            </button>
+          </span>
 
-        <button
-          type="button"
-          onClick={onToggle}
-          className={
-            collapsed
-              ? "grid size-10 shrink-0 place-items-center rounded-xl bg-sky-50 text-sky-700 transition hover:bg-sky-100"
-              : "sidebar-icon-button"
-          }
-          title={collapsed ? "Mở rộng thanh bên" : "Thu gọn thanh bên"}
-          aria-label={collapsed ? "Mở rộng thanh bên" : "Thu gọn thanh bên"}
-        >
-          {mobile ? (
-            <X size={18} />
-          ) : collapsed ? (
-            <PanelLeftOpen size={18} />
-          ) : (
-            <PanelLeftClose size={18} />
-          )}
-        </button>
+          <div className={`flex items-center pl-1.5 ${labelRevealClass(collapsed)}`}>
+            <button
+              type="button"
+              onClick={handleQuickSearch}
+              tabIndex={collapsed ? -1 : 0}
+              aria-hidden={collapsed}
+              className="sidebar-icon-button cursor-pointer"
+              title="Tra cứu danh mục ngành"
+              aria-label="Tìm kiếm nhanh"
+            >
+              <Search size={17} />
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* Quick AI Assistant Action */}
-      <div className="mt-4 shrink-0 px-0.5">
+      <div className="mt-4 shrink-0">
         <button
           type="button"
           onClick={onOpenChat}
           title={collapsed ? "Trợ lý AI" : undefined}
-          className={`group flex h-11 w-full items-center rounded-2xl border border-sky-200/80 bg-sky-50/75 font-bold text-sky-700 transition hover:border-sky-300 hover:bg-sky-100/70 active:scale-[0.985] ${
-            collapsed ? "justify-center px-0" : "gap-2.5 px-3.5 text-sm"
-          }`}
+          className="group flex h-[44px] w-full cursor-pointer items-center overflow-hidden rounded-2xl border border-sky-200/80 bg-sky-50/75 font-bold text-sky-700 transition-colors duration-200 hover:border-sky-300 hover:bg-sky-100/70 active:scale-[0.985]"
         >
-          <Sparkles
-            size={17}
-            className="shrink-0 text-sky-600 transition-transform duration-200 group-hover:scale-110"
-          />
-          <SidebarLabel collapsed={collapsed}>Trợ lý AI</SidebarLabel>
+          <span className="grid w-[44px] shrink-0 place-items-center">
+            <Sparkles
+              size={17}
+              className="text-sky-600 transition-transform duration-200 group-hover:scale-110"
+            />
+          </span>
+          <span
+            aria-hidden={collapsed}
+            className={`pl-1 pr-3 text-sm ${labelRevealClass(collapsed)}`}
+          >
+            Trợ lý AI
+          </span>
         </button>
       </div>
 
       {/* Primary Navigation */}
-      <div className="sidebar-scroll mt-5 min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-0.5">
+      <div className="sidebar-scroll mt-5 min-h-0 flex-1 overflow-x-hidden overflow-y-auto">
         <nav aria-label="Điều hướng chính">
           <div className="space-y-1.5">
             {mainLinks.map(({ label, href, icon: Icon, badge }) => (
@@ -206,9 +307,7 @@ function SidebarBody({
                 end={href === "/"}
                 onClick={onNavigate}
                 title={collapsed ? label : undefined}
-                className={`relative flex h-11 items-center rounded-2xl text-sm font-semibold transition-colors ${
-                  collapsed ? "justify-center px-0" : "gap-3 px-3.5"
-                }`}
+                className="relative flex h-[44px] w-full items-center overflow-hidden rounded-2xl text-sm font-semibold transition-colors"
               >
                 {({ isActive }) => (
                   <>
@@ -223,15 +322,20 @@ function SidebarBody({
                         }}
                       />
                     )}
-                    <Icon
-                      size={18}
-                      className={`relative z-10 shrink-0 transition-colors ${
-                        isActive ? "text-sky-600" : "text-slate-500"
-                      }`}
-                    />
-                    {!collapsed && (
+                    <span className="relative z-10 grid w-[46px] shrink-0 place-items-center">
+                      <Icon
+                        size={18}
+                        className={`transition-colors ${
+                          isActive ? "text-sky-600" : "text-slate-500"
+                        }`}
+                      />
+                    </span>
+                    <span
+                      aria-hidden={collapsed}
+                      className={`relative z-10 flex min-w-0 flex-1 items-center gap-2 pr-3 ${labelRevealClass(collapsed)}`}
+                    >
                       <span
-                        className={`relative z-10 min-w-0 flex-1 truncate transition-colors ${
+                        className={`min-w-0 flex-1 truncate transition-colors ${
                           isActive
                             ? "font-bold text-slate-900"
                             : "text-slate-600 hover:text-slate-900"
@@ -239,12 +343,12 @@ function SidebarBody({
                       >
                         {label}
                       </span>
-                    )}
-                    {!collapsed && badge && (
-                      <span className="relative z-10 shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-sky-700">
-                        {badge}
-                      </span>
-                    )}
+                      {badge && (
+                        <span className="shrink-0 rounded-full border border-sky-200 bg-sky-50 px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-sky-700">
+                          {badge}
+                        </span>
+                      )}
+                    </span>
                   </>
                 )}
               </NavLink>
@@ -255,9 +359,7 @@ function SidebarBody({
                 to="/admin"
                 onClick={onNavigate}
                 title={collapsed ? "Quản trị hệ thống" : undefined}
-                className={`relative flex h-11 items-center rounded-2xl text-sm font-semibold transition-colors ${
-                  collapsed ? "justify-center px-0" : "gap-3 px-3.5"
-                }`}
+                className="relative flex h-[44px] w-full items-center overflow-hidden rounded-2xl text-sm font-semibold transition-colors"
               >
                 {({ isActive }) => (
                   <>
@@ -272,15 +374,20 @@ function SidebarBody({
                         }}
                       />
                     )}
-                    <ShieldCheck
-                      size={18}
-                      className={`relative z-10 shrink-0 ${
-                        isActive ? "text-sky-600" : "text-slate-500"
-                      }`}
-                    />
-                    {!collapsed && (
+                    <span className="relative z-10 grid w-[46px] shrink-0 place-items-center">
+                      <ShieldCheck
+                        size={18}
+                        className={`transition-colors ${
+                          isActive ? "text-sky-600" : "text-slate-500"
+                        }`}
+                      />
+                    </span>
+                    <span
+                      aria-hidden={collapsed}
+                      className={`relative z-10 flex min-w-0 flex-1 items-center pr-3 ${labelRevealClass(collapsed)}`}
+                    >
                       <span
-                        className={`relative z-10 truncate ${
+                        className={`truncate transition-colors ${
                           isActive
                             ? "font-bold text-slate-900"
                             : "text-slate-600 hover:text-slate-900"
@@ -288,7 +395,7 @@ function SidebarBody({
                       >
                         Quản trị hệ thống
                       </span>
-                    )}
+                    </span>
                   </>
                 )}
               </NavLink>
@@ -304,98 +411,9 @@ function SidebarBody({
       >
         {user ? (
           <>
-            <AnimatePresence>
-              {showSettingsMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 6, scale: 0.98 }}
-                  transition={{ duration: 0.16, ease: [0.22, 1, 0.36, 1] }}
-                  className={`mb-2.5 space-y-2 rounded-2xl border border-slate-200/90 bg-white p-3 text-sm shadow-xl ${
-                    collapsed
-                      ? "fixed bottom-4 left-21 z-[90] w-68"
-                      : "w-full"
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowSettingsMenu(false)
-                      setShowProfileModal(true)
-                    }}
-                    className="flex w-full items-center gap-3 rounded-xl border-b border-slate-100 p-1.5 pb-3 text-left transition hover:bg-slate-50"
-                  >
-                    <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 text-xs font-bold text-white">
-                      {user.name.slice(0, 2).toUpperCase()}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-bold text-slate-900">
-                        {user.name}
-                      </p>
-                      <p className="truncate text-xs text-slate-500">
-                        {user.email}
-                      </p>
-                    </div>
-                  </button>
-
-                  <div className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowSettingsMenu(false)
-                        setShowProfileModal(true)
-                      }}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
-                    >
-                      <UserCheck size={15} className="text-sky-600" />
-                      <span>Chỉnh sửa hồ sơ</span>
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowSettingsMenu(false)
-                        onNavigate?.()
-                        navigate("/dashboard")
-                      }}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
-                    >
-                      <Compass size={15} className="text-sky-600" />
-                      <span>Kết quả định hướng</span>
-                    </button>
-
-                    {user.role === "admin" && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowSettingsMenu(false)
-                          onNavigate?.()
-                          navigate("/admin")
-                        }}
-                        className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-slate-700 transition hover:bg-sky-50 hover:text-sky-700"
-                      >
-                        <ShieldCheck size={15} className="text-sky-600" />
-                        <span>Quản trị hệ thống</span>
-                      </button>
-                    )}
-                  </div>
-
-                  <div className="border-t border-slate-100 pt-1.5">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setShowSettingsMenu(false)
-                        logout()
-                      }}
-                      className="flex w-full items-center gap-2.5 rounded-xl px-3 py-2 text-left text-xs font-semibold text-rose-600 transition hover:bg-rose-50"
-                    >
-                      <LogOut size={15} />
-                      <span>Đăng xuất</span>
-                    </button>
-                  </div>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {collapsed && typeof document !== "undefined"
+              ? createPortal(settingsMenuNode, document.body)
+              : settingsMenuNode}
 
             <div
               onClick={() => setShowSettingsMenu((v) => !v)}
@@ -408,52 +426,60 @@ function SidebarBody({
                 }
               }}
               title={user.name}
-              className={`flex items-center rounded-2xl border border-slate-200/80 bg-white/75 p-2 transition hover:border-sky-200 hover:bg-white ${
-                collapsed ? "justify-center" : "gap-2.5"
-              }`}
+              className="flex h-[46px] w-full cursor-pointer items-center overflow-hidden rounded-2xl border border-slate-200/80 bg-white/75 transition-colors duration-200 hover:border-sky-200 hover:bg-white"
             >
-              <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 text-xs font-bold text-white">
-                {user.name.slice(0, 2).toUpperCase()}
+              <span className="grid w-[44px] shrink-0 place-items-center">
+                <span className="grid size-[36px] place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 text-xs font-bold text-white">
+                  {user.name.slice(0, 2).toUpperCase()}
+                </span>
               </span>
-              {!collapsed && (
-                <>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-slate-800">
-                      {user.name}
-                    </p>
-                    <p className="truncate text-xs text-slate-500">
-                      {user.role === "admin" ? "Quản trị viên" : user.grade_level || "Học sinh"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      setShowSettingsMenu(false)
-                      setShowProfileModal(true)
-                    }}
-                    title="Chỉnh sửa hồ sơ"
-                    className="group grid size-8 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
-                  >
-                    <Settings
-                      size={16}
-                      className="transition-transform duration-200 group-hover:rotate-45"
-                    />
-                  </button>
-                </>
-              )}
+              <div
+                aria-hidden={collapsed}
+                className={`flex min-w-0 flex-1 items-center gap-1.5 pl-1 pr-2 ${labelRevealClass(collapsed)}`}
+              >
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-[13px] font-bold leading-tight text-slate-800">
+                    {user.name}
+                  </p>
+                  <p className="truncate text-[11px] leading-tight text-slate-500">
+                    {user.role === "admin" ? "Quản trị viên" : user.grade_level || "Học sinh"}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  tabIndex={collapsed ? -1 : 0}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowSettingsMenu(false)
+                    setShowProfileModal(true)
+                  }}
+                  title="Chỉnh sửa hồ sơ"
+                  aria-label="Chỉnh sửa hồ sơ"
+                  className="group grid size-8 shrink-0 place-items-center rounded-xl text-slate-400 transition hover:bg-slate-100 hover:text-sky-600"
+                >
+                  <Settings
+                    size={16}
+                    className="transition-transform duration-200 group-hover:rotate-45"
+                  />
+                </button>
+              </div>
             </div>
           </>
         ) : (
           <Link
             to="/login"
             title={collapsed ? "Đăng nhập" : undefined}
-            className={`flex h-11 items-center rounded-2xl border border-slate-200/80 bg-white/80 text-sm font-bold text-slate-700 transition hover:border-sky-300 hover:bg-white ${
-              collapsed ? "justify-center" : "gap-3 px-3.5"
-            }`}
+            className="flex h-[44px] w-full items-center overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 text-sm font-bold text-slate-700 transition-colors duration-200 hover:border-sky-300 hover:bg-white"
           >
-            <LogIn size={17} className="text-sky-600" />
-            <SidebarLabel collapsed={collapsed}>Đăng nhập</SidebarLabel>
+            <span className="grid w-[44px] shrink-0 place-items-center">
+              <LogIn size={17} className="text-sky-600" />
+            </span>
+            <span
+              aria-hidden={collapsed}
+              className={`pl-1 pr-3 ${labelRevealClass(collapsed)}`}
+            >
+              Đăng nhập
+            </span>
           </Link>
         )}
       </div>
@@ -503,18 +529,16 @@ export function Sidebar({
         </button>
       </header>
 
-      <motion.aside
-        initial={false}
-        animate={{ width: collapsed ? 68 : 244 }}
-        transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
-        className="glass-sidebar fixed bottom-3 left-3 top-3 z-50 hidden overflow-hidden rounded-3xl p-3 lg:block"
+      <aside
+        style={{ width: collapsed ? 68 : 244 }}
+        className="glass-sidebar fixed bottom-3 left-3 top-3 z-50 hidden overflow-hidden rounded-3xl p-[10px] transition-[width] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] will-change-[width] motion-reduce:transition-none lg:block"
       >
         <SidebarBody
           collapsed={collapsed}
           onToggle={onToggle}
           onOpenChat={onOpenChat}
         />
-      </motion.aside>
+      </aside>
 
       <AnimatePresence>
         {mobileOpen && (

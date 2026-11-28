@@ -74,7 +74,7 @@ _ACADEMIC_CONCEPT = re.compile(
     r"sinh hoc|te bao|quang hop|adn|di truyen|"
     r"ngu van|van hoc|bai tho|van ban|nhan vat|bien phap tu tu|"
     r"ngu phap|danh tu|dong tu|tinh tu|thi hien tai|thi qua khu|"
-    r"lich su|dia ly|khi hau|weather|"
+    r"lich su|chien tranh the gioi|cach mang thang tam|dien bien phu|khoi nghia|dia ly|khi hau|weather|"
     r"vong lap|thuat toan|cau truc du lieu|ham de quy|"
     r"code la gi|con tro|syntaxerror|typeerror|traceback|"
     r"arithmetic|algebra|geometry|equation|fraction|grammar|programming)\b"
@@ -97,11 +97,32 @@ _FOLLOWUP = re.compile(
     r"(?:tai sao(?: lai (?:nhu vay|the))?|vi sao(?: lai (?:nhu vay|the))?|cu the(?: hon)?|noi ro(?: hon)?|giai thich them|"
     r"cho (?:em |minh )?(?:mot )?vi du(?: de hieu)?|them vi du|con gi nua|"
     r"giai thich tung buoc|giai thich chi tiet|"
+    r"tiep di|noi tiep|giai thich tiep|phan tiep theo|y tiep theo|so sanh ca hai|ca hai|"
     r"(?:vay )?(?:em |minh )?(?:nen )?bat dau tu dau|mat bao lau|"
     r"co kho khong|cai nao phu hop hon|nganh do|nghe do|"
     r"why|more|tell me more|how long)(?: a| nhe| duoc khong)?[?!. ]*"
 )
 _GREETING = re.compile(r"(?:xin chao|chao(?: ban)?|hello|hi|alo|cam on|thank you)[!?. ]*")
+_LOCAL_BOILERPLATE_MARKERS = (
+    "minh chua hieu ro cau hoi",
+    "thay/co chua hieu ro cau hoi",
+    "chao ban! minh ho tro huong nghiep",
+    "chao em! thay/co ho tro em ve huong nghiep",
+    "minh chi ho tro chon nganh",
+    "chua nhan duoc loi giai tu ai",
+    "chua nhan duoc phan hoi tu van",
+    "toi khong the cung cap",
+)
+_CLARIFICATION_QUESTION_CUE = re.compile(
+    r"\b(giai thich ro hon|noi ro hon|cho minh biet|ban muon|ban dang|"
+    r"thuoc linh vuc|ngu canh nao|chon huong nao|chon muc nao|cu the hon|ban co the)\b"
+)
+_OFFTOPIC_CHATTER = re.compile(
+    r"\b(nham|nham nhi|vo van|tao lao|xam xi|choi game|lien minh|lien quan|"
+    r"pubg|valorant|xem phim|bong da|ca do|ban gai|ban trai|nguoi yeu|that tinh|"
+    r"an com|di ngu|buon ngu|mua sam|du lich|ca si|dien vien|tiktok|facebook)\b"
+)
+_KEYBOARD_MASH = re.compile(r"(?:asdf|qwer|zxcv|hjkl|uiop|fghj|vbnm)|(.)\1{3,}")
 # Compositional detector for AI CareerGuide UI / usage / troubleshooting questions.
 _PLATFORM_ENTITY = re.compile(
     r"\b(ai careerguide|careerguide|web nay|trang web nay|trang nay|website nay|app nay|ung dung nay|"
@@ -202,6 +223,78 @@ def _has_topic(message: str) -> bool:
                 or re.search(r"\bnghề\b", message.casefold()))
 
 
+def _is_local_boilerplate(text: str) -> bool:
+    folded = _fold(text)
+    return any(marker in folded for marker in _LOCAL_BOILERPLATE_MARKERS)
+
+
+def _assistant_asked_clarification(text: str) -> bool:
+    if not text or not text.strip() or _is_local_boilerplate(text):
+        return False
+    return "?" in text or bool(_CLARIFICATION_QUESTION_CUE.search(_fold(text)))
+
+
+def _is_meaningful_reply(message: str) -> bool:
+    text = _fold(message)
+    if not text or len(text) > 180:
+        return False
+    words = [w for w in text.split() if w]
+    if not words or len(words) > 25:
+        return False
+    if (
+        _unrelated_request(text)
+        or _GREETING.fullmatch(text)
+        or _OFFTOPIC_CHATTER.search(text)
+        or _KEYBOARD_MASH.search(text)
+    ):
+        return False
+    if re.fullmatch(r"(?:[1-9]|10|[a-d])", text):
+        return True
+    alpha_tokens = [re.sub(r"[^a-z]", "", w) for w in words]
+    alpha_tokens = [tok for tok in alpha_tokens if tok]
+    if not alpha_tokens or not any(re.search(r"[aeiouy]", tok) for tok in alpha_tokens):
+        return False
+    long_alpha = [tok for tok in alpha_tokens if len(tok) >= 3]
+    if long_alpha:
+        no_vowel_long = sum(1 for tok in long_alpha if not re.search(r"[aeiouy]", tok))
+        if no_vowel_long > len(long_alpha) / 2:
+            return False
+    return True
+
+
+def _is_clarification_answer(message: str, history) -> bool:
+    if not history:
+        return False
+    last_entry = history[-1]
+    if getattr(last_entry, "role", None) != "assistant":
+        return False
+    return _assistant_asked_clarification(getattr(last_entry, "content", "")) and _is_meaningful_reply(message)
+
+
+def _is_followup_turn(message: str, history) -> bool:
+    text = _fold(message)
+    if _unrelated_request(text):
+        return False
+    return bool(_FOLLOWUP.fullmatch(text) or _is_clarification_answer(message, history))
+
+
+def _find_anchor_user_content(history) -> str | None:
+    recent = list((history or [])[-12:])
+    for idx in range(len(recent) - 1, -1, -1):
+        entry = recent[idx]
+        if entry.role != "user":
+            continue
+        previous = _fold(entry.content)
+        if _unrelated_request(previous):
+            return None
+        if _has_topic(entry.content):
+            return entry.content
+        if _is_followup_turn(entry.content, recent[:idx]):
+            continue
+        return None
+    return None
+
+
 def is_system_help_question(message: str, history=None) -> bool:
     """Detect user-support / UI how-to questions about AI CareerGuide."""
     text = _fold(message)
@@ -209,17 +302,10 @@ def is_system_help_question(message: str, history=None) -> bool:
         return False
     if _has_system_help_topic(message):
         return True
-    if _FOLLOWUP.fullmatch(text):
-        for entry in reversed((history or [])[-12:]):
-            if entry.role != "user":
-                continue
-            previous = _fold(entry.content)
-            if _unrelated_request(previous):
-                break
-            if _has_system_help_topic(entry.content):
-                return True
-            if not _FOLLOWUP.fullmatch(previous):
-                break
+    if _is_followup_turn(message, history):
+        anchor = _find_anchor_user_content(history)
+        if anchor is not None and _has_system_help_topic(anchor):
+            return True
     return False
 
 
@@ -231,18 +317,16 @@ def is_academic_question(message: str, history=None) -> bool:
         return False
     if _has_academic_topic(message):
         return True
-    if _FOLLOWUP.fullmatch(text):
-        for entry in reversed((history or [])[-12:]):
-            if entry.role != "user":
-                continue
-            previous = _fold(entry.content)
-            if (_unrelated_request(previous) or _CAREER_CONTEXT.search(previous)
-                    or re.search(r"\b(?:nghề|lương)\b", entry.content.casefold())):
-                break
-            if _has_academic_topic(entry.content):
-                return True
-            if not _FOLLOWUP.fullmatch(previous):
-                break
+    if _is_followup_turn(message, history):
+        anchor = _find_anchor_user_content(history)
+        if (
+            anchor is not None
+            and not _CAREER_CONTEXT.search(_fold(anchor))
+            and not re.search(r"\b(?:nghề|lương)\b", anchor.casefold())
+            and not _has_system_help_topic(anchor)
+            and _has_academic_topic(anchor)
+        ):
+            return True
     return False
 
 
@@ -255,19 +339,9 @@ def classify_chat_message(message: str, history=None) -> ScopeDecision:
         return "allow"
     if _GREETING.fullmatch(text):
         return "greeting"
-    if _FOLLOWUP.fullmatch(text):
-        # Follow-up chains may inherit a real user topic, but stop at an
-        # unrelated/unclear turn rather than mining old assistant boilerplate.
-        for entry in reversed((history or [])[-12:]):
-            if entry.role != "user":
-                continue
-            previous = _fold(entry.content)
-            if _unrelated_request(previous):
-                break
-            if _has_topic(entry.content):
-                return "allow"
-            if not _FOLLOWUP.fullmatch(previous):
-                break
+    if _is_followup_turn(message, history):
+        if _find_anchor_user_content(history) is not None:
+            return "allow"
     return "clarify"
 
 
@@ -350,5 +424,5 @@ def response_length_guidance(mode: ResponseLengthMode) -> tuple[str, int]:
 
 def local_scope_reply(decision: ScopeDecision) -> str:
     if decision == "greeting":
-        return "Chào bạn! Mình hỗ trợ hướng nghiệp, học tập, tìm hiểu nghề nghiệp và hướng dẫn sử dụng các tính năng trên AI CareerGuide. Bạn muốn tìm hiểu vấn đề nào?"
-    return "Mình chưa hiểu rõ câu hỏi. Bạn hãy viết rõ hơn điều muốn hỏi về học tập, chọn ngành, nghề nghiệp hoặc cách sử dụng hệ thống AI CareerGuide để mình hỗ trợ đúng nhé."
+        return "Chào em! Thầy/cô hỗ trợ em về hướng nghiệp, học tập, tìm hiểu nghề nghiệp và hướng dẫn sử dụng các tính năng trên AI CareerGuide. Em đang muốn tìm hiểu vấn đề nào?"
+    return "Thầy/cô chưa hiểu rõ câu hỏi của em. Em hãy viết rõ hơn điều muốn hỏi về học tập, chọn ngành, nghề nghiệp hoặc cách sử dụng hệ thống AI CareerGuide để thầy/cô hỗ trợ đúng nhé."

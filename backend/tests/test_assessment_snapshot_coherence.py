@@ -18,7 +18,7 @@ async def test_snapshot_roundtrip_preserves_grade_precision_context_and_missing_
         grades_by_subject={"Toán":7.999, "Ngữ văn":7.999, "Tiếng Anh":7.999},
         score_context={"kind":"EXAM", "scale":10, "examId":"test"}, aspiration={"dream_job":"Y khoa"})
     response = await process_assessment_submission(db, uuid4(), payload)
-    saved = next(call.args[0] for call in db.add.call_args_list if hasattr(call.args[0], "raw_responses"))
+    saved = next(call.args[0] for call in db.add.call_args_list if hasattr(call.args[0], "raw_answers"))
     assert saved.id == response.submission_id
     db.execute = AsyncMock(return_value=SimpleNamespace(scalars=lambda: SimpleNamespace(first=lambda:saved)))
     profile = await resolve_assessment_evidence(db, uuid4(), {"assessment_id":response.submission_id})
@@ -29,7 +29,7 @@ async def test_snapshot_roundtrip_preserves_grade_precision_context_and_missing_
     assert response.dominant_traits == []
     assert response.xp_earned == 25
     assert db.add.call_args_list[1].args[0].question_id == question.id
-    assert len(db.add.call_args_list) == 3  # submission + one actual answer + legacy snapshot
+    assert len(db.add.call_args_list) == 2  # canonical submission + one granular response
 
 
 @pytest.mark.asyncio
@@ -82,12 +82,11 @@ def test_display_and_save_query_select_single_deterministic_set():
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("grades", [{}, {"Toán":7.999}])
-async def test_current_snapshot_grade_keys_prevent_borrowing_stale_grade_table(grades):
+async def test_current_snapshot_grade_keys_are_authoritative_in_single_query(grades):
     context={"kind":"EXAM", "scale":10, "examId":"snapshot-exam"}
-    row=SimpleNamespace(id=uuid4(),raw_responses={"grades_by_subject":grades,"score_context":context,"cognitive":{}},riasec_scores={},cognitive_preferences={})
-    stale=SimpleNamespace(grades_by_subject={"Toán":10,"Ngữ văn":10,"Tiếng Anh":10})
+    row=SimpleNamespace(id=uuid4(),raw_answers={"grades_by_subject":grades,"score_context":context,"cognitive_answers":{}},riasec_vector={},cognitive_traits={})
     result=lambda value:SimpleNamespace(scalars=lambda:SimpleNamespace(first=lambda:value))
-    db=SimpleNamespace(execute=AsyncMock(side_effect=[result(row),result(stale)]))
+    db=SimpleNamespace(execute=AsyncMock(return_value=result(row)))
     profile=await resolve_assessment_evidence(db,uuid4())
     assert profile["grades_by_subject"] == grades
     assert profile["score_context"] == context
@@ -96,12 +95,11 @@ async def test_current_snapshot_grade_keys_prevent_borrowing_stale_grade_table(g
 
 
 @pytest.mark.asyncio
-async def test_current_legacy_snapshot_without_grade_key_still_uses_grade_table():
-    row=SimpleNamespace(id=uuid4(),raw_responses={"cognitive":{}},riasec_scores={},cognitive_preferences={})
-    legacy=SimpleNamespace(grades_by_subject={"Toán":8})
+async def test_submission_without_grade_key_defaults_empty_in_single_query():
+    row=SimpleNamespace(id=uuid4(),raw_answers={"cognitive_answers":{}},riasec_vector={},cognitive_traits={})
     result=lambda value:SimpleNamespace(scalars=lambda:SimpleNamespace(first=lambda:value))
-    db=SimpleNamespace(execute=AsyncMock(side_effect=[result(row),result(legacy)]))
+    db=SimpleNamespace(execute=AsyncMock(return_value=result(row)))
     profile=await resolve_assessment_evidence(db,uuid4())
-    assert profile["grades_by_subject"] == {"Toán":8}
+    assert profile["grades_by_subject"] == {}
     assert profile["score_context"] == {"kind":"TRANSCRIPT","scale":10}
-    assert db.execute.await_count == 2
+    assert db.execute.await_count == 1

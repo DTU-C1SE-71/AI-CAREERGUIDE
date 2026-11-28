@@ -1271,11 +1271,11 @@ def normalize_student_cognitive_traits(
     raw_traits: Optional[Dict[str, Any]]
 ) -> Dict[str, Any]:
     """
-    Deterministically maps the 8 Cognitive Assessment answers (COG_1..COG_8 /
-    learning_style..team_role) into the 6 canonical cognitive attributes used
-    by Pillar 3 (abstract_thinking, analytical_reasoning, spatial_perception,
+    Deterministically maps Cognitive Assessment answers into the 6 canonical cognitive
+    attributes used by Pillar 3 (abstract_thinking, analytical_reasoning, spatial_perception,
     linguistic_ability, learning_environment, teamwork_intensity).
-    Preserves any explicit canonical keys already provided.
+    Supports both PA3-10 v2 (`COG_V2_1..COG_V2_10`) and legacy v1 (`COG_1..COG_8`),
+    while preserving any explicit canonical keys already provided.
     """
     if not raw_traits:
         return {}
@@ -1288,7 +1288,108 @@ def normalize_student_cognitive_traits(
         "learning_environment",
         "teamwork_intensity",
     }
-    # If caller already supplied canonical keys and no COG_1..8 keys, return as-is
+
+    v2_exclusive_keys = {
+        "COG_V2_1", "COG_V2_2", "COG_V2_3", "COG_V2_4", "COG_V2_5",
+        "COG_V2_6", "COG_V2_7", "COG_V2_8", "COG_V2_9", "COG_V2_10",
+        "analytical_1", "abstract_1", "spatial_1", "linguistic_1",
+        "analytical_2", "abstract_2", "spatial_2", "linguistic_2",
+    }
+
+    # --- PA3-10 v2 normative branch (10 cohesive questions) ---
+    if any(k in raw_traits for k in v2_exclusive_keys):
+        score_map = {"A": 1, "B": 2, "C": 3, "D": 4}
+
+        def _raw_v2(code_key: str, dim_key: str) -> str:
+            val = raw_traits[code_key] if code_key in raw_traits else raw_traits.get(dim_key)
+            return str(val or "").upper().strip()
+
+        def _pick_v2_score(code_key: str, dim_key: str) -> Optional[int]:
+            val = _raw_v2(code_key, dim_key)
+            if val in score_map:
+                return score_map[val]
+            for lvl in ("1", "2", "3", "4"):
+                if val.endswith(f"_L{lvl}"):
+                    return int(lvl)
+            return None
+
+        def _pick_v2_env() -> Optional[str]:
+            val = _raw_v2("COG_V2_9", "learning_environment")
+            env_map = {
+                "A": "structured",
+                "ENV_STRUCTURED": "structured",
+                "STRUCTURED": "structured",
+                "B": "exploratory",
+                "ENV_EXPLORATORY": "exploratory",
+                "EXPLORATORY": "exploratory",
+                "C": "collaborative",
+                "ENV_COLLABORATIVE": "collaborative",
+                "COLLABORATIVE": "collaborative",
+            }
+            return env_map.get(val)
+
+        def _pick_v2_team() -> Optional[str]:
+            val = _raw_v2("COG_V2_10", "teamwork_intensity")
+            team_map = {
+                "A": "balanced",
+                "TEAM_BALANCED": "balanced",
+                "BALANCED": "balanced",
+                "B": "highly_collaborative",
+                "TEAM_HIGHLY_COLLABORATIVE": "highly_collaborative",
+                "HIGHLY_COLLABORATIVE": "highly_collaborative",
+            }
+            return team_map.get(val)
+
+        q1 = _pick_v2_score("COG_V2_1", "analytical_1")
+        q2 = _pick_v2_score("COG_V2_2", "abstract_1")
+        q3 = _pick_v2_score("COG_V2_3", "spatial_1")
+        q4 = _pick_v2_score("COG_V2_4", "linguistic_1")
+        q5 = _pick_v2_score("COG_V2_5", "analytical_2")
+        q6 = _pick_v2_score("COG_V2_6", "abstract_2")
+        q7 = _pick_v2_score("COG_V2_7", "spatial_2")
+        q8 = _pick_v2_score("COG_V2_8", "linguistic_2")
+        learn_env = _pick_v2_env()
+        team_int = _pick_v2_team()
+
+        if any(v is None for v in (q1, q2, q3, q4, q5, q6, q7, q8, learn_env, team_int)):
+            return {
+                key: value
+                for key, value in raw_traits.items()
+                if key in canonical_keys and not (
+                    key in ("learning_environment", "teamwork_intensity")
+                    and str(value).upper().strip() in ("A", "B", "C", "D")
+                )
+            }
+
+        def _v2_level(total: int) -> str:
+            if total >= 7:
+                return "high"
+            if total >= 4:
+                return "medium"
+            return "low"
+
+        anl_total = q1 + q5  # type: ignore[operator]
+        abs_total = q2 + q6  # type: ignore[operator]
+        spa_total = q3 + q7  # type: ignore[operator]
+        lng_total = q4 + q8  # type: ignore[operator]
+
+        derived = dict(raw_traits)
+        derived["analytical_reasoning"] = _v2_level(anl_total)
+        derived["abstract_thinking"] = _v2_level(abs_total)
+        derived["spatial_perception"] = _v2_level(spa_total)
+        derived["linguistic_ability"] = _v2_level(lng_total)
+        derived["learning_environment"] = learn_env
+        derived["teamwork_intensity"] = team_int
+        derived["_cognitive_v2_scores"] = {
+            "analytical_reasoning": round((anl_total - 2) / 6.0, 4),
+            "abstract_thinking": round((abs_total - 2) / 6.0, 4),
+            "spatial_perception": round((spa_total - 2) / 6.0, 4),
+            "linguistic_ability": round((lng_total - 2) / 6.0, 4),
+        }
+        derived["assessment_version"] = "v2_10q"
+        return derived
+
+    # --- Legacy v1 8-question branch (backward compatibility) ---
     cog_keys = {
         "COG_1", "COG_2", "COG_3", "COG_4", "COG_5", "COG_6", "COG_7", "COG_8",
         "learning_style", "work_environment", "problem_solving", "interaction_target",
@@ -1401,27 +1502,81 @@ def calculate_asymmetric_cognitive_fit(
     student_traits: Dict[str, Any],
     major_attributes: Dict[str, Any]
 ) -> float:
-    """Heuristic preference match using observed pairs only, never a capability test."""
+    """
+    Heuristic preference match using observed pairs only, never a capability test.
+    Calibrated for PA3-10:
+    - Overqualification (`own > expected`) receives 0.86 instead of 1.0 to eliminate
+      ceiling saturation across 435 majors.
+    - Flat-profile damping prevents uniform max selection (`all-D`) from inflating fit.
+    - IDF weighting gives rarer work-context traits (e.g. `structured`) stronger signal,
+      while legacy `independent` profiles map softly to `exploratory`/`balanced`.
+    """
     student_traits = normalize_student_cognitive_traits(student_traits)
     if not student_traits or not major_attributes:
         return 0.0
+
     levels = {"low": 1, "medium": 2, "high": 3}
-    scores = []
-    for key in ("abstract_thinking", "analytical_reasoning", "spatial_perception", "linguistic_ability"):
+    ability_keys = ("abstract_thinking", "analytical_reasoning", "spatial_perception", "linguistic_ability")
+
+    v2_scores = student_traits.get("_cognitive_v2_scores")
+    is_flat_max_profile = False
+    if isinstance(v2_scores, dict) and all(k in v2_scores for k in ability_keys):
+        vals = [float(v2_scores[k]) for k in ability_keys]
+        if max(vals) - min(vals) < 0.08 and min(vals) >= 0.83:
+            is_flat_max_profile = True
+
+    weighted_sum = 0.0
+    total_weight = 0.0
+
+    for key in ability_keys:
         own, expected = student_traits.get(key), major_attributes.get(key)
         if own in levels and expected in levels:
             diff = levels[expected] - levels[own]
-            scores.append(1.0 if diff <= 0 else 0.55 if diff == 1 else 0.1)
+            if diff == 0:
+                s = 1.0
+            elif diff < 0:
+                s = 0.86
+            elif diff == 1:
+                s = 0.55
+            else:
+                s = 0.1
+            if is_flat_max_profile:
+                s = 0.70 * s + 0.30 * 0.78
+            weighted_sum += s
+            total_weight += 1.0
+
     envs = {"structured", "exploratory", "collaborative", "independent"}
     own, expected = student_traits.get("learning_environment"), major_attributes.get("learning_environment")
     if own in envs and expected in envs:
-        scores.append(1.0 if own == expected else 0.6 if "exploratory" in (own, expected) else 0.25)
+        env_weights = {"structured": 1.25, "collaborative": 1.10, "exploratory": 1.0, "independent": 1.0}
+        w = env_weights.get(str(expected), 1.0)
+        if own == expected:
+            s = 1.0
+        elif own == "independent":
+            s = 0.65 if expected == "exploratory" else 0.55 if expected == "structured" else 0.30
+        elif "exploratory" in (own, expected):
+            s = 0.60
+        else:
+            s = 0.25
+        weighted_sum += w * s
+        total_weight += w
+
     teams = {"independent": 1, "balanced": 2, "highly_collaborative": 3}
     own, expected = student_traits.get("teamwork_intensity"), major_attributes.get("teamwork_intensity")
     if own in teams and expected in teams:
-        diff = abs(teams[own] - teams[expected])
-        scores.append(1.0 if diff == 0 else 0.6 if diff == 1 else 0.2)
-    return round(sum(scores) / len(scores), 4) if scores else 0.0
+        team_weights = {"highly_collaborative": 1.10, "balanced": 1.0, "independent": 1.0}
+        w = team_weights.get(str(expected), 1.0)
+        if own == expected:
+            s = 1.0
+        elif own == "independent":
+            s = 0.70 if expected == "balanced" else 0.30
+        else:
+            diff = abs(teams[own] - teams[expected])
+            s = 0.60 if diff == 1 else 0.20
+        weighted_sum += w * s
+        total_weight += w
+
+    return round(weighted_sum / total_weight, 4) if total_weight > 0 else 0.0
 
 
 def extract_6digit_code(major_code: str) -> str:

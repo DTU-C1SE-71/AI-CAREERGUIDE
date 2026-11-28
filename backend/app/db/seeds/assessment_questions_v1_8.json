@@ -1,5 +1,5 @@
 {
-  "version": "1.8",
+  "version": "2.0",
   "circular_ref": "74/2026/TT-BGDĐT",
   "project": "AI CareerGuide - CMU-SE 450 (C1SE.71)",
   "config": {
@@ -8,7 +8,7 @@
     "estimated_minutes": 6,
     "questions_per_riasec_page": 5,
     "total_riasec_questions": 30,
-    "total_cognitive_questions": 8,
+    "total_cognitive_questions": 10,
     "weights": {
       "riasec": 0.45,
       "academic": 0.35,
@@ -417,501 +417,351 @@
   ],
   "cognitive_questions": [
     {
-      "code": "COG_1",
+      "code": "COG_V2_1",
       "order": 1,
-      "dimension_key": "learning_style",
-      "title": "1. Cách học bài mới",
-      "subtitle": "Khi học một bài mới khá khó ở trường, cách nào giúp bạn hiểu nhanh và nhớ lâu nhất?",
+      "dimension_key": "analytical_1",
+      "title": "Câu 1",
+      "subtitle": "Khi gặp một bài tập mới có nhiều số liệu và điều kiện ràng buộc, bạn thường làm cách nào?",
       "options": [
         {
           "option_key": "A",
-          "trait_code": "LEARN_VISUAL_SPATIAL",
-          "title": "Nhìn hình ảnh, sơ đồ & mô phỏng",
-          "description": "Xem sơ đồ tư duy, hình vẽ minh họa, bản đồ hoặc video mô phỏng trực quan.",
-          "related_moet_field_codes": [
-            "21",
-            "58",
-            "32",
-            "44"
-          ]
+          "trait_code": "ANL_1_L1",
+          "title": "Xem bài mẫu trước rồi làm theo",
+          "description": "Đọc lời giải mẫu hoặc nhờ gợi ý từng bước để biết hướng giải bài tập này.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "B",
-          "trait_code": "LEARN_THEORETICAL_ANALYTICAL",
-          "title": "Đọc kỹ lý thuyết & tự suy luận gốc rễ",
-          "description": "Tự đọc sách, phân tích từng bước công thức, định lý để hiểu tận gốc \"vì sao lại thế\".",
-          "related_moet_field_codes": [
-            "46",
-            "48",
-            "44",
-            "31",
-            "38"
-          ]
+          "trait_code": "ANL_1_L2",
+          "title": "Tìm dạng quen để lắp công thức",
+          "description": "Nhận diện bài tập thuộc dạng đã học nào rồi áp dụng đúng công thức sẵn có.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "C",
-          "trait_code": "LEARN_HANDS_ON_PRACTICAL",
-          "title": "Bắt tay làm thử & thực hành trực tiếp",
-          "description": "Phải tự tay làm thí nghiệm, lắp thử mô hình hoặc thao tác thật trên thiết bị mới nhớ chắc.",
-          "related_moet_field_codes": [
-            "51",
-            "52",
-            "54",
-            "62",
-            "64",
-            "72"
-          ]
+          "trait_code": "ANL_1_L3",
+          "title": "Tự tách dữ kiện và gỡ từng bước",
+          "description": "Gạch chân các số liệu quan trọng, bỏ thông tin thừa rồi tự giải dần từng ý.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "D",
-          "trait_code": "LEARN_INTERACTIVE_CASE",
-          "title": "Thảo luận nhóm & liên hệ ví dụ đời thực",
-          "description": "Cùng bạn bè trao đổi, đặt câu hỏi phản biện và gắn bài học vào các câu chuyện thực tế.",
-          "related_moet_field_codes": [
-            "14",
-            "22",
-            "34",
-            "38",
-            "76",
-            "81"
-          ]
+          "trait_code": "ANL_1_L4",
+          "title": "Tự tìm quy luật và kiểm tra ngược",
+          "description": "Xâu chuỗi mối liên hệ giữa các điều kiện để tìm cách giải gọn và tự soát lại đáp số.",
+          "related_moet_field_codes": []
         }
       ]
     },
     {
-      "code": "COG_2",
+      "code": "COG_V2_2",
       "order": 2,
-      "dimension_key": "work_environment",
-      "title": "2. Không gian học tập ưa thích",
-      "subtitle": "Không gian học tập hoặc sinh hoạt nào giúp bạn thấy tập trung và có hứng nhất?",
+      "dimension_key": "abstract_1",
+      "title": "Câu 2",
+      "subtitle": "Khi thầy cô giảng một định lý mới khá khó hiểu trên lớp, bạn thường học theo cách nào?",
       "options": [
         {
           "option_key": "A",
-          "trait_code": "ENV_LAB_DIGITAL_QUIET",
-          "title": "Góc riêng yên tĩnh cùng máy tính, sách vở",
-          "description": "Không gian tĩnh lặng, ít bị làm phiền để một mình tập trung sâu vào màn hình, bản vẽ hoặc bài vở.",
-          "related_moet_field_codes": [
-            "42",
-            "44",
-            "46",
-            "48",
-            "21"
-          ]
+          "trait_code": "ABS_1_L1",
+          "title": "Hiểu qua ví dụ đời thường trước",
+          "description": "Cần xem vài ví dụ cụ thể, dễ thấy thì mới hiểu định lý đó đang nói về điều gì.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "B",
-          "trait_code": "ENV_DYNAMIC_CORPORATE",
-          "title": "Không gian sôi nổi, đông người trao đổi",
-          "description": "Nơi nhộn nhịp như buổi họp câu lạc bộ, sự kiện trường lớp, được gặp gỡ và bàn bạc liên tục cùng mọi người.",
-          "related_moet_field_codes": [
-            "32",
-            "34",
-            "81"
-          ]
+          "trait_code": "ABS_1_L2",
+          "title": "Học thuộc ý chính để làm bài tập",
+          "description": "Ghi nhớ phần phát biểu trọng tâm rồi luyện vài bài tập cơ bản cho quen tay.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "C",
-          "trait_code": "ENV_FIELD_INDUSTRIAL",
-          "title": "Phòng thực hành, sân bãi hoặc ngoài trời",
-          "description": "Không thích ngồi lì một chỗ; thích di chuyển ngoài trời, vườn cây hoặc góc thực hành có đồ nghề, dụng cụ.",
-          "related_moet_field_codes": [
-            "51",
-            "52",
-            "58",
-            "62",
-            "84",
-            "85",
-            "86"
-          ]
+          "trait_code": "ABS_1_L3",
+          "title": "Hỏi kỹ \"vì sao định lý lại đúng\"",
+          "description": "Thích hiểu rõ cách chứng minh gốc rễ để gặp đề biến tấu vẫn tự suy luận được.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "D",
-          "trait_code": "ENV_INSTITUTIONAL_SERVICE",
-          "title": "Lớp học, phòng bộ môn có giờ giấc và nề nếp rõ ràng",
-          "description": "Môi trường nghiêm túc, ngăn nắp, có thời khóa biểu ổn định và nội quy trật tự rõ ràng.",
-          "related_moet_field_codes": [
-            "14",
-            "38",
-            "72",
-            "76"
-          ]
+          "trait_code": "ABS_1_L4",
+          "title": "Nối với các bài trước thành hệ thống",
+          "description": "Thường liên hệ định lý mới với các kiến thức đã học để thấy bức tranh tổng thể.",
+          "related_moet_field_codes": []
         }
       ]
     },
     {
-      "code": "COG_3",
+      "code": "COG_V2_3",
       "order": 3,
-      "dimension_key": "problem_solving",
-      "title": "3. Cách gỡ rối vấn đề",
-      "subtitle": "Khi nhóm bạn gặp một vấn đề rắc rối trong bài tập lớn hoặc hoạt động lớp, phản xạ đầu tiên của bạn là gì?",
+      "dimension_key": "spatial_1",
+      "title": "Câu 3",
+      "subtitle": "Khi làm một bài hình học không gian có nhiều mặt cắt và đường nét chồng chéo, bạn thường hình dung hình vẽ đó thế nào?",
       "options": [
         {
           "option_key": "A",
-          "trait_code": "SOLVE_QUANTITATIVE_LOGIC",
-          "title": "Xét dữ kiện & suy luận nguyên nhân theo logic",
-          "description": "Kiểm tra lại thông tin, con số và suy luận từng bước nguyên nhân - kết quả để tìm đúng chỗ sai.",
-          "related_moet_field_codes": [
-            "44",
-            "46",
-            "48",
-            "52"
-          ]
+          "trait_code": "SPA_1_L1",
+          "title": "Cần người chỉ từng cạnh mới nhìn ra",
+          "description": "Dễ bị rối mắt trước hình vẽ 3D nên thường cần mô hình thật hoặc người chỉ rõ từng mặt.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "B",
-          "trait_code": "SOLVE_CREATIVE_DIVERGENT",
-          "title": "Nghĩ hướng đi mới lạ, khác hẳn cách cũ",
-          "description": "Phác thảo ngay một ý tưởng sáng tạo, độc đáo chưa ai thử để thiết kế lại cách làm ấn tượng hơn.",
-          "related_moet_field_codes": [
-            "21",
-            "22",
-            "32",
-            "58"
-          ]
+          "trait_code": "SPA_1_L2",
+          "title": "Nhìn rõ từng mặt phẳng tách riêng",
+          "description": "Đọc tốt các hình phẳng 2D nhưng cần tách từng mặt ra nháp mới hình dung được khối 3D.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "C",
-          "trait_code": "SOLVE_HUMAN_EMPATHY",
-          "title": "Lắng nghe cảm nhận & gắn kết mọi người trước",
-          "description": "Hỏi thăm xem ai đang gặp khó khăn gì, giải tỏa căng thẳng để cả nhóm đồng lòng rồi mới làm tiếp.",
-          "related_moet_field_codes": [
-            "14",
-            "31",
-            "72",
-            "76",
-            "81"
-          ]
+          "trait_code": "SPA_1_L3",
+          "title": "Tưởng tượng khá rõ hình khối trên giấy",
+          "description": "Chỉ cần nhìn hình vẽ phẳng là mường tượng được vị trí các cạnh, các góc ngoài không gian.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "D",
-          "trait_code": "SOLVE_PROCEDURAL_STRATEGIC",
-          "title": "Đối chiếu yêu cầu chung & chọn phương án tối ưu",
-          "description": "Xem lại yêu cầu của thầy cô, thời gian hiện có để thống nhất cách làm chắc chắn, tiết kiệm công sức nhất.",
-          "related_moet_field_codes": [
-            "34",
-            "38",
-            "51",
-            "84",
-            "85"
-          ]
+          "trait_code": "SPA_1_L4",
+          "title": "Dễ xoay hình khối ngay trong đầu",
+          "description": "Nhanh chóng xoay góc nhìn hình 3D trong đầu và tự vẽ lại hình phụ chính xác, dễ nhìn.",
+          "related_moet_field_codes": []
         }
       ]
     },
     {
-      "code": "COG_4",
+      "code": "COG_V2_4",
       "order": 4,
-      "dimension_key": "interaction_target",
-      "title": "4. Đối tượng thích tiếp xúc",
-      "subtitle": "Khi tự tìm tòi hoặc tham gia hoạt động ở trường lớp, bạn thích làm việc trực tiếp với nhóm nào nhất?",
+      "dimension_key": "linguistic_1",
+      "title": "Câu 4",
+      "subtitle": "Khi phải tự viết một bài văn nghị luận dài ở trường, bạn thường triển khai bài viết đó ra sao?",
       "options": [
         {
           "option_key": "A",
-          "trait_code": "TARGET_SYSTEMS_MACHINES",
-          "title": "Máy tính, công nghệ, đồ kỹ thuật & mô hình",
-          "description": "Mày mò phần mềm, công cụ số, mạch điện hoặc tìm hiểu cấu tạo máy móc, mô hình quanh mình.",
-          "related_moet_field_codes": [
-            "48",
-            "51",
-            "52",
-            "58"
-          ]
+          "trait_code": "LNG_1_L1",
+          "title": "Viết ngắn gọn đủ ý bắt buộc",
+          "description": "Thường bí từ khi viết dài nên chỉ trình bày các ý chính cơ bản cho đủ yêu cầu đề bài.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "B",
-          "trait_code": "TARGET_DATA_FINANCE_LAW",
-          "title": "Con số thu chi, bảng kế hoạch & quy tắc, lý lẽ",
-          "description": "Tính toán ngân sách nhóm, lập bảng thống kê, đọc tin tức kinh tế - xã hội hoặc bàn luận đúng sai.",
-          "related_moet_field_codes": [
-            "31",
-            "34",
-            "38",
-            "46"
-          ]
+          "trait_code": "LNG_1_L2",
+          "title": "Triển khai ổn khi có sẵn dàn ý",
+          "description": "Chỉ cần có dàn ý chi tiết là viết khá trôi chảy và giữ được mạch bài đúng trọng tâm.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "C",
-          "trait_code": "TARGET_PEOPLE_COMMUNITY",
-          "title": "Bạn bè, thầy cô & mọi người xung quanh",
-          "description": "Trò chuyện, hướng dẫn bài vở, lắng nghe chia sẻ hoặc cùng mọi người làm hoạt động tập thể.",
-          "related_moet_field_codes": [
-            "14",
-            "22",
-            "32",
-            "72",
-            "76",
-            "81"
-          ]
+          "trait_code": "LNG_1_L3",
+          "title": "Tự lập dàn ý và diễn đạt mạch lạc",
+          "description": "Tự sắp xếp luận điểm rõ ràng, chọn câu chữ gọn gàng để người đọc hiểu ý ngay.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "D",
-          "trait_code": "TARGET_NATURE_BIO_ART",
-          "title": "Cây cối, sinh vật tự nhiên hoặc hội họa, nhiếp ảnh",
-          "description": "Chăm sóc cây trồng, vật nuôi, khám phá thiên nhiên hoặc say mê vẽ tranh, chụp ảnh, làm đồ thủ công mỹ thuật.",
-          "related_moet_field_codes": [
-            "21",
-            "42",
-            "44",
-            "54",
-            "62",
-            "64",
-            "85"
-          ]
+          "trait_code": "LNG_1_L4",
+          "title": "Dẫn dắt cuốn hút và lập luận sắc bén",
+          "description": "Thích chăm chút cách dùng từ, biết cách mở – kết ấn tượng và thuyết phục người đọc.",
+          "related_moet_field_codes": []
         }
       ]
     },
     {
-      "code": "COG_5",
+      "code": "COG_V2_5",
       "order": 5,
-      "dimension_key": "gardner_intelligence",
-      "title": "5. Điểm mạnh tự nhiên",
-      "subtitle": "Bạn bè thường nhận xét bạn nhạy bén và làm tốt nhất ở khía cạnh nào?",
+      "dimension_key": "analytical_2",
+      "title": "Câu 5",
+      "subtitle": "Khi lớp lên kế hoạch cho chuyến đi dã ngoại và cần tính bảng chi phí, bạn thường tham gia phần này như thế nào?",
       "options": [
         {
           "option_key": "A",
-          "trait_code": "GARDNER_LOGICAL_MATH",
-          "title": "Tính toán nhanh & suy luận chặt chẽ",
-          "description": "Nhạy với con số, bài toán mẹo, tìm quy luật nhanh và nói chuyện có đầu có đuôi rất logic.",
-          "related_moet_field_codes": [
-            "34",
-            "44",
-            "46",
-            "48",
-            "52"
-          ]
+          "trait_code": "ANL_2_L1",
+          "title": "Để các bạn khác tính rồi nghe chốt",
+          "description": "Không quen xử lý bảng nhiều khoản thu chi nên thường để bạn phụ trách tính giúp.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "B",
-          "trait_code": "GARDNER_LINGUISTIC_INTERPERSONAL",
-          "title": "Diễn đạt tốt, nhạy ngôn ngữ hoặc tinh ý hiểu lòng người",
-          "description": "Viết lách mạch lạc, nói chuyện cuốn hút, học nhanh ngoại ngữ hoặc dễ nhận ra cảm xúc của bạn bè.",
-          "related_moet_field_codes": [
-            "14",
-            "22",
-            "31",
-            "32",
-            "38",
-            "76",
-            "81"
-          ]
+          "trait_code": "ANL_2_L2",
+          "title": "Cộng trừ được các khoản cố định",
+          "description": "Tính nhanh được tiền xe, tiền ăn cơ bản nhưng ít khi đặt nhiều phương án lên so sánh.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "C",
-          "trait_code": "GARDNER_SPATIAL_MUSICAL",
-          "title": "Mắt thẩm mỹ, tưởng tượng hình khối & cảm nhịp điệu",
-          "description": "Nhớ đường giỏi, dễ hình dung vật thể 3D trong đầu, nhạy với màu sắc đẹp hoặc bắt giai điệu rất nhanh.",
-          "related_moet_field_codes": [
-            "21",
-            "58"
-          ]
+          "trait_code": "ANL_2_L3",
+          "title": "Lập bảng so sánh giá từng phương án",
+          "description": "Chia rõ từng mục chi phí để so sánh xem lựa chọn nào hợp lý và tiết kiệm hơn.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "D",
-          "trait_code": "GARDNER_NATURALIST_KINESTHETIC",
-          "title": "Khéo tay, vận động tốt hoặc tinh ý với tự nhiên",
-          "description": "Phản xạ tay chân linh hoạt khi chơi thể thao, làm đồ thủ công khéo léo hoặc hay quan sát cây cối, sinh vật.",
-          "related_moet_field_codes": [
-            "42",
-            "51",
-            "54",
-            "62",
-            "64",
-            "72",
-            "85",
-            "86"
-          ]
+          "trait_code": "ANL_2_L4",
+          "title": "Tính trước cả chi phí phát sinh và dự phòng",
+          "description": "Lường trước trường hợp đổi số người tham gia hoặc phát sinh thêm khoản phụ để cân đối quỹ chắc chắn.",
+          "related_moet_field_codes": []
         }
       ]
     },
     {
-      "code": "COG_6",
+      "code": "COG_V2_6",
       "order": 6,
-      "dimension_key": "pressure_tolerance",
-      "title": "6. Kiểu áp lực xử lý tốt nhất",
-      "subtitle": "Khi gặp tình huống căng thẳng trong học tập hoặc hoạt động trường lớp, bạn xử lý tốt nhất ở kiểu áp lực nào?",
+      "dimension_key": "abstract_2",
+      "title": "Câu 6",
+      "subtitle": "Khi nhóm tìm được rất nhiều bài viết và ghi chú rời rạc trên mạng cho bài thuyết trình, bạn thường sắp xếp chúng thế nào?",
       "options": [
         {
           "option_key": "A",
-          "trait_code": "PRESSURE_HIGH_STAKES_VITAL",
-          "title": "Tình huống khẩn cấp cần ứng phó nhanh tại chỗ",
-          "description": "Khi có sự cố đột xuất ở lớp, buổi tập hay sân trường cần người lập tức xử lý để giữ an toàn chung.",
-          "related_moet_field_codes": [
-            "72",
-            "84",
-            "86"
-          ]
+          "trait_code": "ABS_2_L1",
+          "title": "Bám theo dàn ý của 1 bài mẫu rõ nhất",
+          "description": "Chọn sẵn một bài viết đầy đủ nhất để làm theo khung đó cho đỡ bị rối thông tin.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "B",
-          "trait_code": "PRESSURE_MARKET_DEADLINE",
-          "title": "Không khí thi đua sôi nổi, chạy đua với thời gian",
-          "description": "Khi thi đấu đối kháng, tranh tài học thuật hoặc chạy sự kiện gấp rút ở trường, bạn càng hào hứng bứt tốc.",
-          "related_moet_field_codes": [
-            "32",
-            "34",
-            "38",
-            "81"
-          ]
+          "trait_code": "ABS_2_L2",
+          "title": "Tóm tắt gọn từng nguồn rồi ghép nối tiếp",
+          "description": "Rút vài ý chính từ mỗi bài viết rồi xếp lần lượt từng phần vào bài thuyết trình.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "C",
-          "trait_code": "PRESSURE_DEEP_RND_COMPLEXITY",
-          "title": "Bài toán hay sản phẩm khó phải kiên trì gỡ nhiều ngày",
-          "description": "Sẵn sàng ngồi hàng giờ liền tìm một lỗi sai, giải một câu cực khó hoặc trau chuốt sản phẩm đến cùng.",
-          "related_moet_field_codes": [
-            "21",
-            "42",
-            "44",
-            "46",
-            "48",
-            "52",
-            "58"
-          ]
+          "trait_code": "ABS_2_L3",
+          "title": "Lọc trùng và gom thành các nhóm chủ đề",
+          "description": "Loại bỏ ý lặp lại, nhóm các thông tin cùng nội dung vào từng mục lớn rõ ràng.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "D",
-          "trait_code": "PRESSURE_STABLE_SUSTAINABLE",
-          "title": "Nhịp độ đều đặn, chuẩn bị kỹ từ sớm theo kế hoạch",
-          "description": "Không thích nước đến chân mới nhảy; bạn làm tốt nhất khi chia nhỏ việc mỗi ngày một ít, chắc chắn và ổn định.",
-          "related_moet_field_codes": [
-            "14",
-            "22",
-            "31",
-            "51",
-            "54",
-            "62",
-            "64",
-            "76",
-            "85"
-          ]
+          "trait_code": "ABS_2_L4",
+          "title": "Tự dựng khung logic và kết luận riêng",
+          "description": "Sắp xếp lại toàn bộ tài liệu theo mạch lập luận mới của nhóm để làm nổi bật thông điệp chính.",
+          "related_moet_field_codes": []
         }
       ]
     },
     {
-      "code": "COG_7",
+      "code": "COG_V2_7",
       "order": 7,
-      "dimension_key": "output_preference",
-      "title": "7. Kết quả mang lại niềm vui lớn nhất",
-      "subtitle": "Sau khi hoàn thành một bài tập lớn hay hoạt động ở trường, kết quả nào làm bạn thấy tự hào nhất?",
+      "dimension_key": "spatial_2",
+      "title": "Câu 7",
+      "subtitle": "Khi phụ trách làm bộ slide thuyết trình cho bài tập nhóm, bạn thường trình bày các trang slide như thế nào?",
       "options": [
         {
           "option_key": "A",
-          "trait_code": "OUTPUT_TANGIBLE_TECH_SYSTEM",
-          "title": "Một sản phẩm hay mô hình chạy được thật sự",
-          "description": "Nhìn thấy trang web/công cụ mình làm chạy mượt, hoặc mô hình, thiết bị cả nhóm lắp ráp hoạt động trơn tru.",
-          "related_moet_field_codes": [
-            "48",
-            "51",
-            "52",
-            "54",
-            "58"
-          ]
+          "trait_code": "SPA_2_L1",
+          "title": "Đưa đủ chữ lên slide, ít chỉnh hình thức",
+          "description": "Tập trung gõ đủ nội dung chữ cho kịp tiến độ, còn bố cục và hình ảnh nhờ bạn khác sửa.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "B",
-          "trait_code": "OUTPUT_ECONOMIC_LEGAL_VALUE",
-          "title": "Đạt thứ hạng cao, thuyết phục thành công hoặc gây quỹ có lãi",
-          "description": "Nhóm giành giải, bảo vệ ý tưởng thuyết phục cả lớp hoặc gian hàng hội chợ thu về khoản lãi ấn tượng.",
-          "related_moet_field_codes": [
-            "31",
-            "34",
-            "38",
-            "84"
-          ]
+          "trait_code": "SPA_2_L2",
+          "title": "Chọn mẫu có sẵn rồi thay chữ và ảnh",
+          "description": "Dùng template sẵn trên Canva hoặc PowerPoint rồi điền nội dung vào đúng khung mẫu.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "C",
-          "trait_code": "OUTPUT_HUMAN_WELLBEING",
-          "title": "Giúp bạn bè tiến bộ hoặc mang lại niềm vui cho mọi người",
-          "description": "Nhìn thấy một người bạn hiểu bài hơn, vui khỏe trở lại hoặc hoạt động của mình giúp ích thiết thực cho tập thể.",
-          "related_moet_field_codes": [
-            "14",
-            "62",
-            "64",
-            "72",
-            "76",
-            "81",
-            "85",
-            "86"
-          ]
+          "trait_code": "SPA_2_L3",
+          "title": "Tự căn chỉnh bố cục và màu sắc cho dễ nhìn",
+          "description": "Tự sắp xếp vị trí tiêu đề, hình ảnh và bảng biểu sao cho cả lớp nhìn vào nắm ý nhanh.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "D",
-          "trait_code": "OUTPUT_CREATIVE_SCIENTIFIC_WORK",
-          "title": "Một tác phẩm đẹp mắt hoặc lời giải, phát hiện mới tâm đắc",
-          "description": "Một bộ ảnh/video ấn tượng, bản thiết kế sáng tạo hoặc tìm ra cách giải hay mà ít ai nghĩ tới.",
-          "related_moet_field_codes": [
-            "21",
-            "22",
-            "32",
-            "42",
-            "44",
-            "46"
-          ]
+          "trait_code": "SPA_2_L4",
+          "title": "Chuyển ý dài thành sơ đồ và hình minh họa",
+          "description": "Thích tự thiết kế sơ đồ trực quan, phối màu đồng bộ để mỗi slide gọn chữ mà vẫn nổi bật.",
+          "related_moet_field_codes": []
         }
       ]
     },
     {
-      "code": "COG_8",
+      "code": "COG_V2_8",
       "order": 8,
-      "dimension_key": "team_role",
-      "title": "8. Vai trò quen thuộc khi làm nhóm",
-      "subtitle": "Khi làm bài tập nhóm ở lớp, bạn thường tự nhiên nhận phần việc nào?",
+      "dimension_key": "linguistic_2",
+      "title": "Câu 8",
+      "subtitle": "Khi một bạn trong nhóm chưa hiểu phần bài bạn phụ trách và nhờ giảng lại, bạn thường giải thích thế nào?",
       "options": [
         {
           "option_key": "A",
-          "trait_code": "ROLE_TECHNICAL_SPECIALIST",
-          "title": "Người đào sâu phần chuyên môn hoặc kỹ thuật riêng",
-          "description": "Nhận phần tính toán sâu, xử lý công cụ/máy tính hoặc nghiên cứu nội dung cốt lõi cần tập trung độc lập.",
-          "related_moet_field_codes": [
-            "42",
-            "44",
-            "46",
-            "48",
-            "51",
-            "52"
-          ]
+          "trait_code": "LNG_2_L1",
+          "title": "Đưa vở ghi để bạn tự đọc cho dễ",
+          "description": "Hơi lúng túng khi diễn đạt bằng lời nên thường gửi phần ghi chép sẵn để bạn xem trực tiếp.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "B",
-          "trait_code": "ROLE_STRATEGIC_LEADER",
-          "title": "Nhóm trưởng điều phối chung hoặc đại diện thuyết trình",
-          "description": "Lên khung kế hoạch, phân công nhiệm vụ, giữ tiến độ nhóm hoặc đại diện trình bày, phản biện trước lớp.",
-          "related_moet_field_codes": [
-            "31",
-            "34",
-            "38",
-            "86"
-          ]
+          "trait_code": "LNG_2_L2",
+          "title": "Trình bày lại từng ý chính đã ghi chú",
+          "description": "Nếu nhìn theo dàn ý chuẩn bị trước, có thể nói lại đầy đủ các bước cơ bản cho bạn hiểu.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "C",
-          "trait_code": "ROLE_CREATIVE_COMMUNICATOR",
-          "title": "Người nghĩ ý tưởng mới, làm slide đẹp hoặc gắn kết nhóm",
-          "description": "Đề xuất cách thể hiện sáng tạo, chăm chút hình ảnh/lời văn trình bày hoặc khuấy động không khí vui vẻ của nhóm.",
-          "related_moet_field_codes": [
-            "14",
-            "21",
-            "22",
-            "32",
-            "58",
-            "76",
-            "81"
-          ]
+          "trait_code": "LNG_2_L3",
+          "title": "Lấy ví dụ gần gũi để nói cho dễ hiểu",
+          "description": "Tự diễn giải lại bằng ngôn ngữ đời thường và ví dụ quen thuộc để bạn nắm ý nhanh hơn.",
+          "related_moet_field_codes": []
         },
         {
           "option_key": "D",
-          "trait_code": "ROLE_QUALITY_CONTROLLER",
-          "title": "Người canh thời hạn, chuẩn bị hậu cần & rà lỗi lần cuối",
-          "description": "Nhắc lịch tiến độ, quản lý quỹ/đồ đạc của nhóm và kiểm tra tỉ mỉ từng chi tiết trước khi nộp bài.",
-          "related_moet_field_codes": [
-            "34",
-            "54",
-            "62",
-            "64",
-            "72",
-            "84",
-            "85"
-          ]
+          "trait_code": "LNG_2_L4",
+          "title": "Giải thích linh hoạt theo đúng chỗ bạn vướng",
+          "description": "Hỏi lại để biết bạn đang tắc ở đâu, đổi cách diễn đạt và trả lời trôi chảy mọi câu hỏi thêm.",
+          "related_moet_field_codes": []
+        }
+      ]
+    },
+    {
+      "code": "COG_V2_9",
+      "order": 9,
+      "dimension_key": "learning_environment",
+      "title": "Câu 9",
+      "subtitle": "Khi thầy cô giao một dự án tìm hiểu kéo dài 2 tuần, bạn thấy học hiệu quả nhất trong môi trường nào?",
+      "options": [
+        {
+          "option_key": "A",
+          "trait_code": "ENV_STRUCTURED",
+          "title": "Có lộ trình và tiêu chí rõ từng bước",
+          "description": "Thầy cô đưa sẵn đề cương, mốc nộp bài từng tuần và tiêu chuẩn chấm điểm cụ thể để bám sát.",
+          "related_moet_field_codes": []
+        },
+        {
+          "option_key": "B",
+          "trait_code": "ENV_EXPLORATORY",
+          "title": "Tự do tìm tòi và thử hướng mới",
+          "description": "Thầy cô chỉ nêu chủ đề mở để tự tra cứu nguồn ngoài sách và thử cách làm riêng.",
+          "related_moet_field_codes": []
+        },
+        {
+          "option_key": "C",
+          "trait_code": "ENV_COLLABORATIVE",
+          "title": "Học qua trao đổi và góp ý trực tiếp",
+          "description": "Được thảo luận thường xuyên với thầy cô và bạn bè, nghe nhiều góc nhìn để hoàn thiện dự án.",
+          "related_moet_field_codes": []
+        }
+      ]
+    },
+    {
+      "code": "COG_V2_10",
+      "order": 10,
+      "dimension_key": "teamwork_intensity",
+      "title": "Câu 10",
+      "subtitle": "Trong dự án nhóm kéo dài 2 tuần đó, kiểu phối hợp nào giúp bạn làm việc thoải mái và hiệu quả nhất?",
+      "options": [
+        {
+          "option_key": "A",
+          "trait_code": "TEAM_BALANCED",
+          "title": "Cân bằng giữa tự làm và họp theo mốc",
+          "description": "Cả nhóm chia rõ từng mảng để mỗi người tự tập trung xử lý phần việc riêng, rồi họp ngắn theo mốc để ghép bài.",
+          "related_moet_field_codes": []
+        },
+        {
+          "option_key": "B",
+          "trait_code": "TEAM_HIGHLY_COLLABORATIVE",
+          "title": "Đồng hành và trao đổi liên tục",
+          "description": "Cả nhóm cùng ngồi lên ý tưởng, góp ý sửa bài trực tiếp cho nhau và bám sát nhau từ đầu đến cuối.",
+          "related_moet_field_codes": []
         }
       ]
     }
@@ -973,14 +823,16 @@
         "C5": 4
       },
       "cognitive_answers": {
-        "learning_style": "B",
-        "work_environment": "A",
-        "problem_solving": "A",
-        "interaction_target": "A",
-        "gardner_intelligence": "A",
-        "pressure_tolerance": "C",
-        "output_preference": "A",
-        "team_role": "A"
+        "COG_V2_1": "D",
+        "COG_V2_2": "D",
+        "COG_V2_3": "C",
+        "COG_V2_4": "B",
+        "COG_V2_5": "D",
+        "COG_V2_6": "D",
+        "COG_V2_7": "C",
+        "COG_V2_8": "B",
+        "COG_V2_9": "B",
+        "COG_V2_10": "A"
       }
     },
     {
@@ -1039,14 +891,16 @@
         "C5": 5
       },
       "cognitive_answers": {
-        "learning_style": "C",
-        "work_environment": "D",
-        "problem_solving": "C",
-        "interaction_target": "C",
-        "gardner_intelligence": "D",
-        "pressure_tolerance": "A",
-        "output_preference": "C",
-        "team_role": "D"
+        "COG_V2_1": "D",
+        "COG_V2_2": "C",
+        "COG_V2_3": "C",
+        "COG_V2_4": "C",
+        "COG_V2_5": "C",
+        "COG_V2_6": "C",
+        "COG_V2_7": "B",
+        "COG_V2_8": "D",
+        "COG_V2_9": "A",
+        "COG_V2_10": "B"
       }
     },
     {
@@ -1105,14 +959,16 @@
         "C5": 2
       },
       "cognitive_answers": {
-        "learning_style": "A",
-        "work_environment": "A",
-        "problem_solving": "B",
-        "interaction_target": "D",
-        "gardner_intelligence": "C",
-        "pressure_tolerance": "C",
-        "output_preference": "D",
-        "team_role": "C"
+        "COG_V2_1": "B",
+        "COG_V2_2": "C",
+        "COG_V2_3": "D",
+        "COG_V2_4": "C",
+        "COG_V2_5": "B",
+        "COG_V2_6": "D",
+        "COG_V2_7": "D",
+        "COG_V2_8": "C",
+        "COG_V2_9": "B",
+        "COG_V2_10": "A"
       }
     },
     {
@@ -1171,14 +1027,16 @@
         "C5": 4
       },
       "cognitive_answers": {
-        "learning_style": "D",
-        "work_environment": "B",
-        "problem_solving": "D",
-        "interaction_target": "B",
-        "gardner_intelligence": "B",
-        "pressure_tolerance": "B",
-        "output_preference": "B",
-        "team_role": "B"
+        "COG_V2_1": "C",
+        "COG_V2_2": "C",
+        "COG_V2_3": "B",
+        "COG_V2_4": "D",
+        "COG_V2_5": "D",
+        "COG_V2_6": "C",
+        "COG_V2_7": "C",
+        "COG_V2_8": "D",
+        "COG_V2_9": "C",
+        "COG_V2_10": "B"
       }
     },
     {
@@ -1237,14 +1095,16 @@
         "C5": 3
       },
       "cognitive_answers": {
-        "learning_style": "D",
-        "work_environment": "D",
-        "problem_solving": "C",
-        "interaction_target": "C",
-        "gardner_intelligence": "B",
-        "pressure_tolerance": "D",
-        "output_preference": "C",
-        "team_role": "C"
+        "COG_V2_1": "B",
+        "COG_V2_2": "C",
+        "COG_V2_3": "B",
+        "COG_V2_4": "D",
+        "COG_V2_5": "B",
+        "COG_V2_6": "D",
+        "COG_V2_7": "C",
+        "COG_V2_8": "D",
+        "COG_V2_9": "C",
+        "COG_V2_10": "B"
       }
     },
     {
@@ -1303,14 +1163,16 @@
         "C5": 4
       },
       "cognitive_answers": {
-        "learning_style": "C",
-        "work_environment": "C",
-        "problem_solving": "A",
-        "interaction_target": "A",
-        "gardner_intelligence": "D",
-        "pressure_tolerance": "C",
-        "output_preference": "A",
-        "team_role": "A"
+        "COG_V2_1": "D",
+        "COG_V2_2": "C",
+        "COG_V2_3": "D",
+        "COG_V2_4": "B",
+        "COG_V2_5": "C",
+        "COG_V2_6": "C",
+        "COG_V2_7": "C",
+        "COG_V2_8": "C",
+        "COG_V2_9": "B",
+        "COG_V2_10": "A"
       }
     }
   ]

@@ -226,11 +226,18 @@ export function TwoTierFunnelRecommendation({
 
             <div className="space-y-3.5">
               {(fieldSection.majors || []).map((major: Major, mIdx: number) => {
-                const globalRank = `${fIdx + 1}.${mIdx + 1}`
+                const offsetBefore = displayedFields
+                  .slice(0, fIdx)
+                  .reduce((sum, section) => sum + (section.majors?.length || 0), 0)
+                const globalRank = offsetBefore + mIdx + 1
                 const majorKey = String(major.id || major.code)
                 const isExpanded = !!expandedMajorIds[majorKey]
 
                 const hasExtraDetails =
+                  !!major.code ||
+                  !!major.feasibility_label ||
+                  !!major.trend_tier ||
+                  !!major.is_trending ||
                   !!major.admission_tactic ||
                   !!major.nudge_badge ||
                   (major.constraint_violations && major.constraint_violations.length > 0) ||
@@ -249,7 +256,7 @@ export function TwoTierFunnelRecommendation({
                         {/* Header: Rank + Title + Score */}
                         <div className="flex items-start gap-3 sm:gap-4">
                           <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-sky-600 text-xs font-bold text-white shadow-xs sm:size-11 sm:rounded-2xl sm:text-sm">
-                            #{globalRank}
+                            {globalRank}
                           </span>
 
                           <div className="flex min-w-0 flex-1 items-start justify-between gap-2.5 sm:gap-3">
@@ -269,73 +276,9 @@ export function TwoTierFunnelRecommendation({
                         </div>
 
                         <div className="min-w-0 sm:pl-[3.75rem]">
-                          {/* Primary Essential Badges */}
-                          <div className="flex max-w-full flex-wrap items-center gap-1.5 sm:gap-2">
-                            <FeasibilityBadge
-                              readiness={major.readiness}
-                              value={major.feasibility}
-                              label={major.feasibility_label}
-                            />
-                            {major.best_matching_block &&
-                              major.best_block_score != null && (
-                                <span className="inline-flex items-center gap-1 rounded-full border border-sky-200/90 bg-sky-50/90 px-2.5 py-1 text-xs font-semibold text-sky-800">
-                                  <GraduationCap
-                                    size={13}
-                                    className="text-sky-600"
-                                  />
-                                  {formatBlockWithSubjects(
-                                    major.best_matching_block,
-                                    {
-                                      short: true,
-                                      includePrefix: false,
-                                    },
-                                  )}
-                                  : {major.best_block_score}đ
-                                  {major.benchmark_cutoff
-                                    ? ` (Chuẩn ~${major.benchmark_cutoff}đ)`
-                                    : ""}
-                                </span>
-                              )}
-                            {major.admission_tactic &&
-                              major.admission_tactic !==
-                                "Đối chiếu phương thức tuyển sinh" && (
-                                <span
-                                  className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                    major.admission_tactic.includes("NV1-2")
-                                      ? "border border-amber-200 bg-amber-50 text-amber-800"
-                                      : major.admission_tactic.includes(
-                                            "NV6+",
-                                          )
-                                        ? "border border-emerald-200 bg-emerald-50 text-emerald-800"
-                                        : "border border-sky-200 bg-sky-50/80 text-sky-800"
-                                  }`}
-                                >
-                                  <Target size={12} />
-                                  {major.admission_tactic}
-                                </span>
-                              )}
-                            {major.nudge_badge && (
-                              <span className="inline-flex items-center gap-1 rounded-full border border-cyan-200 bg-cyan-50/90 px-2.5 py-1 text-xs font-semibold text-cyan-800">
-                                <Sparkles
-                                  size={12}
-                                  className="text-cyan-600"
-                                />
-                                {major.nudge_badge}
-                              </span>
-                            )}
-                            <TrendBadge
-                              tier={major.trend_tier}
-                              isTrending={major.is_trending}
-                              reason={major.trend_reason}
-                            />
-                            <span className="rounded-full border border-slate-200/90 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                              Mã {major.code}
-                            </span>
-                          </div>
-
                           {/* 3 Pillars Score Breakdown */}
                           {major.fit && (
-                            <div className="mt-4 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200/80 bg-white/70 p-3.5 sm:grid-cols-3 sm:gap-4 sm:p-4">
+                            <div className="mt-1 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200/80 bg-white/70 p-3.5 sm:grid-cols-3 sm:gap-4 sm:p-4">
                               <div>
                                 <div className="mb-1.5 flex justify-between text-xs font-semibold text-slate-600">
                                   <span>Sở thích</span>
@@ -410,6 +353,11 @@ export function TwoTierFunnelRecommendation({
                                   >
                                     <div className="space-y-2 rounded-2xl border border-sky-100 bg-sky-50/60 p-3.5 text-xs text-slate-700 sm:p-4">
                                       <div className="flex flex-wrap items-center gap-2">
+                                        <FeasibilityBadge
+                                          readiness={major.readiness}
+                                          value={major.feasibility}
+                                          label={major.feasibility_label}
+                                        />
                                         {major.best_matching_block && major.best_block_score != null && (
                                           <span className="inline-flex items-center gap-1 rounded-lg border border-sky-200 bg-white px-2.5 py-1 font-semibold text-sky-800">
                                             <GraduationCap size={14} className="text-sky-600" />
@@ -445,6 +393,16 @@ export function TwoTierFunnelRecommendation({
                                             {major.nudge_badge}
                                           </span>
                                         )}
+
+                                        <TrendBadge
+                                          tier={major.trend_tier}
+                                          isTrending={major.is_trending}
+                                          reason={major.trend_reason}
+                                        />
+
+                                        <span className="rounded-lg border border-slate-200/90 bg-white px-2.5 py-1 font-semibold text-slate-600">
+                                          Mã {major.code}
+                                        </span>
                                       </div>
 
                                       {major.constraint_violations &&

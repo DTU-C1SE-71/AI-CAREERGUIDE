@@ -25,6 +25,9 @@ class ProbeState:
     starts: deque = field(default_factory=deque)
 
 
+ONLINE_CACHE_TTL_SECONDS = 300
+OFFLINE_CACHE_TTL_SECONDS = 30
+
 _STATES: weakref.WeakKeyDictionary = weakref.WeakKeyDictionary()
 
 
@@ -62,7 +65,7 @@ async def _probe(snapshot) -> dict:
     start = time.perf_counter()
     try:
         reply = await adapter.chat(snapshot, [{"role": "user", "content": "Reply with exactly OK."}],
-                                   max_tokens=32, timeout=min(settings.LLM_TIMEOUT_SECONDS, 60))
+                                   max_tokens=512, timeout=min(settings.LLM_TIMEOUT_SECONDS, 60))
         if reply.strip().rstrip(".! ").upper() != "OK":
             raise AIConfigError("PROBE_INVALID_RESPONSE", "Phản hồi kiểm tra chưa hợp lệ.", 502)
         return _result(True, "OK", (time.perf_counter() - start) * 1000)
@@ -72,7 +75,7 @@ async def _probe(snapshot) -> dict:
         return _result(False, "PROVIDER_ERROR", (time.perf_counter() - start) * 1000)
 
 
-async def check_connection(db) -> dict:
+async def check_connection(db, force: bool = False) -> dict:
     """Coalesce simultaneous opens, but never turn a DB health check into AI health."""
     try:
         snapshot = await config_service.resolve_snapshot(db)
@@ -80,7 +83,7 @@ async def check_connection(db) -> dict:
         return _result(False, exc.code)
     state = _state()
     now = time.monotonic()
-    if state.revision == snapshot.revision_token and state.result and now < state.cached_until:
+    if not force and state.revision == snapshot.revision_token and state.result and now < state.cached_until:
         return dict(state.result)
     if state.task and not state.task.done() and state.revision != snapshot.revision_token:
         # A new configuration never inherits an old in-flight check.
@@ -111,7 +114,8 @@ async def check_connection(db) -> dict:
             if result["available"]:
                 result["revision_token"] = _issue_receipt(snapshot.revision_token)
             state.result = result
-            state.cached_until = time.monotonic() + 2
+            ttl = ONLINE_CACHE_TTL_SECONDS if result["available"] else OFFLINE_CACHE_TTL_SECONDS
+            state.cached_until = time.monotonic() + ttl
         return dict(state.result)
     return _result(False, "CONFIGURATION_CHANGED")
 

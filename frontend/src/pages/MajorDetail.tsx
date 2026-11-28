@@ -17,6 +17,7 @@ import { MajorInfoCards } from "../components/xai/MajorInfoCards"
 import { SkillAnalysisCard } from "../components/xai/SkillAnalysisCard"
 import { TrendBadge } from "../components/xai/TrendBadge"
 import { useAuth } from "../context/AuthContext"
+import { useAssessment } from "../context/AssessmentContext"
 import { MOET_435_MAJORS } from "../data/moetMajors435"
 import { useSelectedAssessment } from "../hooks/useSelectedAssessment"
 import { apiRequest } from "../services/api"
@@ -33,6 +34,7 @@ interface TaxonomyMajorDetail {
   name?: string
   category?: string
   description?: string
+  blocks?: string[]
   subject_blocks?: string[]
   careers?: Array<{ title_vi: string; description?: string } | string>
   is_trending?: boolean
@@ -76,6 +78,7 @@ export function MajorDetail() {
   const location = useLocation()
   const fromCatalog = location.state?.from === "/majors"
   const assessment = useSelectedAssessment()
+  const { profileRevision } = useAssessment()
   const { user } = useAuth()
   const assessmentCompleteness = useMemo(
     () => evaluateAssessmentCompleteness(assessment),
@@ -164,7 +167,7 @@ export function MajorDetail() {
             trend_sources: taxonomyInfo.is_trending ? taxonomyInfo.trend_sources ?? [] : [],
             university:
               prev.university ||
-              `${taxonomyInfo.category || "Khối ngành chuẩn Bộ GD&ĐT"} · Khối ${(taxonomyInfo.subject_blocks || []).join(", ")}`,
+              `${taxonomyInfo.category || "Khối ngành chuẩn Bộ GD&ĐT"} · Khối ${(taxonomyInfo.blocks || taxonomyInfo.subject_blocks || []).join(", ")}`,
           }))
         }
       })
@@ -226,7 +229,7 @@ export function MajorDetail() {
     if (!hasCompleteAssessment) {
       setAiExplaining(false)
     } else {
-      const explanationCacheKey = `careerguide:ai_explanation:${codeToLookup}:${user?.id || "guest"}:${JSON.stringify(evalPayload.riasec_answers || {})}:${JSON.stringify(evalPayload.grades_by_subject || {})}`
+      const explanationCacheKey = `careerguide:ai_explanation:${codeToLookup}:${user?.id || "guest"}:rev${profileRevision}:${JSON.stringify(evalPayload.riasec_answers || {})}:${JSON.stringify(evalPayload.cognitive_answers || {})}:${JSON.stringify(evalPayload.grades_by_subject || {})}:${user?.grade_level || ""}:${JSON.stringify(evalPayload.aspiration || {})}`
       const cachedExplanation = sessionStorage.getItem(explanationCacheKey)
       if (cachedExplanation) {
         setAiExplanationText(cachedExplanation)
@@ -315,6 +318,7 @@ export function MajorDetail() {
     assessment.scores,
     assessment.cognitive,
     hasCompleteAssessment,
+    profileRevision,
     user?.gender,
     user?.grade_level,
   ])
@@ -337,12 +341,17 @@ export function MajorDetail() {
     window.dispatchEvent(new Event("saved-roadmaps-updated"))
   }
 
-  const rawBlocks =
-    majorInsight?.subject_blocks && majorInsight.subject_blocks.length > 0
-      ? majorInsight.subject_blocks
+  const taxonomyBlocks =
+    taxDetail?.blocks && taxDetail.blocks.length > 0
+      ? taxDetail.blocks
       : taxDetail?.subject_blocks && taxDetail.subject_blocks.length > 0
         ? taxDetail.subject_blocks
         : []
+
+  const rawBlocks =
+    majorInsight?.subject_blocks && majorInsight.subject_blocks.length > 0
+      ? majorInsight.subject_blocks
+      : taxonomyBlocks
 
   const blockText = rawBlocks
     .map((b) => formatBlockWithSubjects(b, { short: true }))

@@ -1,6 +1,6 @@
 import logging
 from typing import List, Optional
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -25,6 +25,13 @@ from app.services.taxonomy.tt74_reference import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/taxonomy", tags=["Taxonomy & Pure Guidance Catalog"])
+
+
+@router.get("/catalog-stats")
+async def get_catalog_stats(response: Response, db: AsyncSession = Depends(get_db)):
+    """Returns live active major and category counts from PostgreSQL."""
+    response.headers["Cache-Control"] = "no-store"
+    return await service.get_catalog_stats(db)
 
 
 @router.get("/majors", response_model=List[MajorItemResponse])

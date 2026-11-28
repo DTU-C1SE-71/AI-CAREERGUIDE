@@ -1,14 +1,15 @@
 """
 Consolidated SQLAlchemy 2.0 Async Models for AI CareerGuide.
-Includes all entities across the 6 modular services:
-- identity: User, UserConsent, UserRole
+Includes all entities across the modular services:
+- identity: User, UserConsent, UserRole, EmailVerificationCode
 - taxonomy: Major, SubjectBlock, MajorSubjectBlock, Career, Skill, SkillPrerequisite, MajorSkill, SkillType
-- assessment: StudentAssessment, StudentGrade, StudentDiagnosticTest
-- recommender: RecommendationHistory
+- assessment: StudentDiagnosticTest, AssessmentQuestionSet, AssessmentQuestion, CognitiveQuestionOption, StudentAssessmentSubmission, StudentAssessmentResponse
+- recommender: RecommendationSnapshot
 - roadmap: MajorRoadmap, StudentRoadmapProgress
-- insight: MajorInsight, StudentSkillInsight
+- insight: MajorInsight, StudentSkillInsight, MajorExplanationInsight
 - staging: StagingRecord, StagingStreamType, StagingStatus
 - vector: KnowledgeEmbedding
+- chat: ChatSession, ChatMessage
 """
 
 from app.core.database import Base
@@ -24,8 +25,6 @@ from app.models.taxonomy import (
     MajorSkill,
 )
 from app.models.assessment import (
-    StudentAssessment,
-    StudentGrade,
     StudentDiagnosticTest,
     AssessmentQuestionSet,
     AssessmentQuestion,
@@ -33,7 +32,7 @@ from app.models.assessment import (
     StudentAssessmentSubmission,
     StudentAssessmentResponse,
 )
-from app.models.recommender import RecommendationHistory
+from app.models.recommender import RecommendationSnapshot
 from app.models.roadmap import MajorRoadmap, StudentRoadmapProgress
 from app.models.insight import MajorInsight, StudentSkillInsight, MajorExplanationInsight
 from app.models.staging import StagingRecord, StagingStreamType, StagingStatus
@@ -54,15 +53,13 @@ __all__ = [
     "SkillType",
     "SkillPrerequisite",
     "MajorSkill",
-    "StudentAssessment",
-    "StudentGrade",
     "StudentDiagnosticTest",
     "AssessmentQuestionSet",
     "AssessmentQuestion",
     "CognitiveQuestionOption",
     "StudentAssessmentSubmission",
     "StudentAssessmentResponse",
-    "RecommendationHistory",
+    "RecommendationSnapshot",
     "MajorRoadmap",
     "StudentRoadmapProgress",
     "MajorInsight",
@@ -75,5 +72,3 @@ __all__ = [
     "ChatSession",
     "ChatMessage",
 ]
-
-from app.models.ai_config import AIRuntimeConfig, AIConfigAudit

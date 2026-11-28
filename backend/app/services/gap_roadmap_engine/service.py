@@ -11,7 +11,7 @@ from sqlalchemy.orm import selectinload
 
 from app.models.roadmap import MajorRoadmap, StudentRoadmapProgress
 from app.models.taxonomy import Major, MajorSkill, Skill, SkillPrerequisite
-from app.models.assessment import StudentGrade, StudentDiagnosticTest
+from app.models.assessment import StudentDiagnosticTest
 from app.schemas.roadmap import (
     MajorRoadmapResponse,
     RoadmapDataSchema,

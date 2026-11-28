@@ -1,16 +1,18 @@
 import uuid
-from typing import Optional
-from fastapi import APIRouter, Depends, Response, status
+from typing import List, Optional
+from fastapi import APIRouter, Depends, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.dependencies import get_optional_current_user, require_admin
+from app.core.dependencies import get_current_user, get_optional_current_user, require_admin
 from app.models.identity import User
 from app.modules.assessment import service
 from app.modules.assessment.schemas import (
     AssessmentQuestionSetResponse,
+    AssessmentSubmissionDetail,
     AssessmentSubmissionRequest,
     AssessmentSubmissionResponse,
+    AssessmentSubmissionSummary,
 )
 
 router = APIRouter(prefix="/assessments", tags=["Assessment & Questionnaire Engine (FR02, FR04)"])
@@ -56,6 +58,63 @@ async def submit_assessment(
         payload,
         persist_to_db=(current_user is not None),
     )
+
+
+@router.get(
+    "/submissions",
+    response_model=List[AssessmentSubmissionSummary],
+    status_code=status.HTTP_200_OK,
+    summary="Lịch sử nộp bài khảo sát của người dùng hiện tại",
+)
+async def list_my_submissions(
+    limit: int = Query(default=20, ge=1, le=100),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.list_student_submissions(db, current_user.id, limit=limit)
+
+
+@router.get(
+    "/submissions/{submission_id}",
+    response_model=AssessmentSubmissionDetail,
+    status_code=status.HTTP_200_OK,
+    summary="Chi tiết một lần làm bài khảo sát kèm từng câu trả lời",
+)
+async def get_my_submission_detail(
+    submission_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.get_student_submission_detail(db, current_user.id, submission_id)
+
+
+@router.put(
+    "/submissions/{submission_id}",
+    response_model=AssessmentSubmissionResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Cập nhật hồ sơ đánh giá đã lưu, xóa cache AI cũ và chạy lại thuật toán đề xuất",
+)
+async def update_my_submission(
+    submission_id: uuid.UUID,
+    payload: AssessmentSubmissionRequest,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    return await service.update_student_submission(db, current_user.id, submission_id, payload)
+
+
+@router.delete(
+    "/submissions/{submission_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Xóa một lần làm bài khảo sát đã lưu khỏi CSDL",
+)
+async def delete_my_submission(
+    submission_id: uuid.UUID,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    await service.delete_student_submission(db, current_user.id, submission_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post(

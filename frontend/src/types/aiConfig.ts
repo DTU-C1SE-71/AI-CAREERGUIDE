@@ -6,11 +6,6 @@ export interface AIProfile {
   auth_mode: "BEARER" | "NONE"
   credential_binding?: { protocol: string; scheme: string; host: string; port: number; base_path: string }
 }
-export interface AIConfigDraft extends Omit<AIProfile, "credential_binding"> {
-  credential_action: "KEEP" | "REPLACE" | "CLEAR"
-  api_key: string
-  base_revision_token: string
-}
 export interface AIProbeResult {
   success: boolean; code: string; message: string; status_code: number; latency_ms: number
   model_used: string; base_url: string; tested_at: string

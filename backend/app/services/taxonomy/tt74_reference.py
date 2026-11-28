@@ -294,6 +294,27 @@ def auto_enrich_major_record(raw: Dict[str, Any]) -> Dict[str, Any]:
     degree_levels = str(raw.get("degree_levels") or "789").strip()
     note = str(raw.get("circular_note") or raw.get("note") or "").strip()
 
+    from app.services.recommender.engine import classify_major_academic_benchmark
+    parsed_bm: Optional[float] = None
+    raw_bm = raw.get("benchmark_score")
+    if raw_bm is None or str(raw_bm).strip() == "":
+        raw_bm = raw.get("cutoff_score")
+    if raw_bm is not None and str(raw_bm).strip() != "" and not isinstance(raw_bm, bool):
+        try:
+            bm_val = float(str(raw_bm).strip().replace(",", "."))
+            if 0 < bm_val <= 30.0:
+                parsed_bm = round(bm_val, 2)
+                cognitive["_benchmark_score"] = parsed_bm
+        except (ValueError, TypeError):
+            parsed_bm = None
+
+    bm = classify_major_academic_benchmark(
+        full_7,
+        m_name,
+        f_name,
+        benchmark_override=parsed_bm,
+    )
+
     return {
         "major_code": full_7,
         "raw_code": raw_6,
@@ -318,6 +339,10 @@ def auto_enrich_major_record(raw: Dict[str, Any]) -> Dict[str, Any]:
         "outlook": f"Ngành đào tạo chính thức (Mã {raw_6} - CIP {cip_code} - Holland {holland_code}) theo Thông tư 74/2026/TT-BGDĐT.",
         "industry_outlook": f"Ngành đào tạo chính thức (Mã {raw_6} - CIP {cip_code} - Holland {holland_code}) theo Thông tư 74/2026/TT-BGDĐT.",
         "description": f"Chương trình đào tạo ngành {m_name} thuộc nhóm ngành {g_name} ({f_name}).",
+        "benchmark_score": bm["benchmark_cutoff"],
+        "cutoff_score": bm["benchmark_cutoff"],
+        "benchmark_label": bm["tier_label"],
+        "benchmark_source": "IMPORTED" if parsed_bm is not None else "MOET_FLOOR",
         "is_active": is_active,
         "profile_source": "DETERMINISTIC_REFERENCE",
     }
@@ -457,6 +482,10 @@ def _extract_majors_from_rows(raw_rows: List[List[str]]) -> List[Dict[str, Any]]
         "riasec_s": "riasec_s", "riasec_e": "riasec_e", "riasec_c": "riasec_c",
         "subject_blocks": "subject_blocks", "to_hop_xet_tuyen": "subject_blocks",
         "career_paths": "career_paths", "nghe_nghiep_tieu_bieu": "career_paths",
+        "benchmark_score": "benchmark_score", "cutoff_score": "benchmark_score",
+        "diem_tham_chieu": "benchmark_score", "điểm tham chiếu": "benchmark_score",
+        "diem_chuan": "benchmark_score", "điểm chuẩn": "benchmark_score",
+        "diem_san": "benchmark_score", "điểm sàn": "benchmark_score",
         "is_active": "is_active", "hoat_dong": "is_active",
     }
 

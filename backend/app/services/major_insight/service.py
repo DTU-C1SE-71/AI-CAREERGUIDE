@@ -32,13 +32,13 @@ from app.schemas.insight import (
 
 logger = logging.getLogger(__name__)
 
-# In-flight lock theo (profile_hash, major_code) để chống bấm đúp / gọi trùng LLM song song.
-_IN_FLIGHT_SKILL_LOCKS: "weakref.WeakValueDictionary[Tuple[str, str], asyncio.Lock]" = (
+# In-flight lock theo (profile_hash, insight_scope, major_code) để chống bấm đúp / gọi trùng LLM song song.
+_IN_FLIGHT_SKILL_LOCKS: "weakref.WeakValueDictionary[Tuple[str, str, str], asyncio.Lock]" = (
     weakref.WeakValueDictionary()
 )
 
 
-def _get_skill_lock(cache_key: Tuple[str, str]) -> asyncio.Lock:
+def _get_skill_lock(cache_key: Tuple[str, str, str]) -> asyncio.Lock:
     lock = _IN_FLIGHT_SKILL_LOCKS.get(cache_key)
     if lock is None:
         lock = asyncio.Lock()
@@ -327,7 +327,9 @@ _ASPIRATION_FIT_LABELS = {
     "UNKNOWN": "Cần cân nhắc thêm",
 }
 _SKILL_POLICY_VERSION = "evidence-skills-v5"
-_ASPIRATION_AI_MAJOR_CODE = "ASPIRATION_AI"
+_SCOPE_MAJOR = "MAJOR"
+_SCOPE_GENERAL = "GENERAL"
+_SCOPE_ASPIRATION_AI = "ASPIRATION_AI"
 _ASPIRATION_POLICY_VERSION = "aspiration-ai-v1"
 
 
@@ -392,15 +394,23 @@ async def _resolve_enriched_payload(
 async def _upsert_student_insight(
     db: AsyncSession,
     profile_hash: str,
-    major_code: str,
+    insight_scope: str,
+    major_code: Optional[str],
     payload_data: Dict[str, Any],
 ) -> Optional[StudentSkillInsight]:
-    """Persist or update cached StudentSkillInsight row without failing caller on DB error."""
+    """Persist or update cached StudentSkillInsight row keyed by (profile_hash, insight_scope, major_code)."""
+    normalized_code = (major_code or "").strip() or None
+    if insight_scope != _SCOPE_MAJOR:
+        normalized_code = None
     try:
         stmt = select(StudentSkillInsight).where(
             StudentSkillInsight.profile_hash == profile_hash,
-            StudentSkillInsight.major_code == major_code,
+            StudentSkillInsight.insight_scope == insight_scope,
         )
+        if normalized_code is None:
+            stmt = stmt.where(StudentSkillInsight.major_code.is_(None))
+        else:
+            stmt = stmt.where(StudentSkillInsight.major_code == normalized_code)
         entry = (await db.execute(stmt)).scalar_one_or_none()
         if entry:
             for key, value in payload_data.items():
@@ -411,7 +421,8 @@ async def _upsert_student_insight(
             entry = StudentSkillInsight(
                 id=uuid.uuid4(),
                 profile_hash=profile_hash,
-                major_code=major_code,
+                insight_scope=insight_scope,
+                major_code=normalized_code,
                 **payload_data,
             )
             db.add(entry)
@@ -419,7 +430,7 @@ async def _upsert_student_insight(
         await db.refresh(entry)
         return entry
     except Exception as exc:
-        logger.warning("[InsightAgent] Persist failed (%s): %s", major_code, exc)
+        logger.warning("[InsightAgent] Persist failed (%s/%s): %s", insight_scope, normalized_code, exc)
         try:
             await db.rollback()
         except Exception:
@@ -480,6 +491,8 @@ async def analyze_student_skills(
     """Phân tích ưu/nhược điểm kỹ năng theo hồ sơ với Smart DB Cache (evidence-skills-v5)."""
     user_id, payload, eff_grade, _ = await _resolve_enriched_payload(db, payload, user_id)
     major_code = (payload.major_code or "").strip()
+    insight_scope = _SCOPE_MAJOR if major_code else _SCOPE_GENERAL
+    db_major_code: Optional[str] = major_code or None
     major_name = None
     ctx = {}
     if major_code:
@@ -498,13 +511,17 @@ async def analyze_student_skills(
         "policy": _SKILL_POLICY_VERSION,
     }, ensure_ascii=False, sort_keys=True, default=str).encode()).hexdigest()
 
-    async with _get_skill_lock((profile_hash, major_code)):
+    async with _get_skill_lock((profile_hash, insight_scope, major_code)):
         if db is not None:
             try:
                 stmt = select(StudentSkillInsight).where(
                     StudentSkillInsight.profile_hash == profile_hash,
-                    StudentSkillInsight.major_code == major_code,
+                    StudentSkillInsight.insight_scope == insight_scope,
                 )
+                if db_major_code is None:
+                    stmt = stmt.where(StudentSkillInsight.major_code.is_(None))
+                else:
+                    stmt = stmt.where(StudentSkillInsight.major_code == db_major_code)
                 cached_entry = (await db.execute(stmt)).scalar_one_or_none()
                 if cached_entry and cached_entry.model_name == _SKILL_POLICY_VERSION:
                     return _to_skill_response(cached_entry, cached=True)
@@ -651,7 +668,7 @@ async def analyze_student_skills(
             "is_ai_generated": is_ai,
             "model_name": _SKILL_POLICY_VERSION,
         }
-        entry = await _upsert_student_insight(db, profile_hash, major_code, payload_data)
+        entry = await _upsert_student_insight(db, profile_hash, insight_scope, db_major_code, payload_data)
         if entry is not None:
             return _to_skill_response(entry, cached=False)
         return StudentSkillAnalysisResponse(
@@ -892,12 +909,13 @@ async def analyze_aspiration_with_ai(
             cached=False,
         )
 
-    async with _get_skill_lock((profile_hash, _ASPIRATION_AI_MAJOR_CODE)):
+    async with _get_skill_lock((profile_hash, _SCOPE_ASPIRATION_AI, "")):
         if db is not None:
             try:
                 stmt = select(StudentSkillInsight).where(
                     StudentSkillInsight.profile_hash == profile_hash,
-                    StudentSkillInsight.major_code == _ASPIRATION_AI_MAJOR_CODE,
+                    StudentSkillInsight.insight_scope == _SCOPE_ASPIRATION_AI,
+                    StudentSkillInsight.major_code.is_(None),
                 )
                 cached_entry = (await db.execute(stmt)).scalar_one_or_none()
                 if cached_entry and (cached_entry.model_name or "").startswith(f"{_ASPIRATION_POLICY_VERSION}:"):
@@ -1066,7 +1084,7 @@ async def analyze_aspiration_with_ai(
             "is_ai_generated": is_ai,
             "model_name": f"{_ASPIRATION_POLICY_VERSION}:{fit_level}",
         }
-        entry = await _upsert_student_insight(db, profile_hash, _ASPIRATION_AI_MAJOR_CODE, payload_data)
+        entry = await _upsert_student_insight(db, profile_hash, _SCOPE_ASPIRATION_AI, None, payload_data)
         if entry is not None:
             return _to_aspiration_ai_response(entry, dream_job, cached=False)
         return AspirationAIAnalysisResponse(

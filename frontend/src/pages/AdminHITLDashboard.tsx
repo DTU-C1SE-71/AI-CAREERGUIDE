@@ -84,6 +84,5 @@ export function AdminTrendsPage() {
   return <section><div className="admin-page-heading"><div><h1>Xu hướng nghề nghiệp</h1><p>Rà soát các nguồn tham khảo và duyệt bản nháp trước khi cập nhật danh mục.</p></div></div><TrendAgentPanel onNotify={notify} /></section>
 }
 export function AdminAISettingsPage() {
-  const { notify } = useAdmin()
-  return <section><div className="admin-page-heading"><div><h1>Cấu hình AI & API</h1><p>Kiểm tra bản nháp, áp dụng cấu hình và quản lý credential của dịch vụ AI.</p></div></div><LLMConnectionPanel onNotify={notify} /></section>
+  return <section><div className="admin-page-heading"><div><h1>Thông tin AI & API</h1><p>Hiển thị Base URL và Model đang hoạt động từ cấu hình môi trường (ENV).</p></div></div><LLMConnectionPanel /></section>
 }

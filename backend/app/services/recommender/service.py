@@ -1,3 +1,6 @@
+import copy
+import hashlib
+import json
 import logging
 import math
 import time
@@ -6,15 +9,16 @@ import uuid
 logger = logging.getLogger(__name__)
 from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime, timezone
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, delete, func, case
 from sqlalchemy.orm import selectinload
 
 from fastapi import HTTPException, status
 from app.models.identity import User
 from app.models.taxonomy import Major, MajorSubjectBlock, MajorSkill, Skill, SkillPrerequisite
-from app.models.assessment import StudentAssessment, StudentGrade, StudentDiagnosticTest
-from app.models.recommender import RecommendationHistory
+from app.models.assessment import StudentAssessmentSubmission, StudentDiagnosticTest
+from app.models.recommender import RecommendationSnapshot
 from app.core.config import settings
 from app.schemas.recommender import (
     RecommendationRequest,
@@ -64,68 +68,84 @@ async def resolve_assessment_evidence(
     user_id: uuid.UUID,
     inline_profile: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
-    """Resolve once; an explicitly empty field must never revive older DB data."""
+    """Resolve once from canonical student_assessment_submissions; explicit empty fields never revive older DB data."""
     inline = dict(inline_profile or {})
-    snapshot_id = inline.get("assessment_id")
-    assessment = None
-    grade = None
-    needs_assessment = (
+    raw_snapshot_id = inline.get("assessment_id")
+    snapshot_uuid: Optional[uuid.UUID] = None
+    if raw_snapshot_id:
+        if isinstance(raw_snapshot_id, uuid.UUID):
+            snapshot_uuid = raw_snapshot_id
+        else:
+            try:
+                snapshot_uuid = uuid.UUID(str(raw_snapshot_id))
+            except (ValueError, TypeError):
+                raise HTTPException(status_code=404, detail="Không tìm thấy bản đánh giá đã chọn.") from None
+
+    submission = None
+    needs_submission = (
         not any(key in inline for key in ("riasec_answers", "riasec_scores"))
         or not any(key in inline for key in ("cognitive_answers", "cognitive_preferences"))
         or "aspiration" not in inline
         or "grades_by_subject" not in inline
     )
     if db is not None and user_id is not None:
-        if snapshot_id or needs_assessment:
-            query = select(StudentAssessment).where(StudentAssessment.user_id == user_id)
-            if snapshot_id:
-                query = query.where(StudentAssessment.id == snapshot_id)
-            else:
-                query = query.order_by(StudentAssessment.assessed_at.desc(), StudentAssessment.id.desc()).limit(1)
-            result = await db.execute(query)
-            assessment = result.scalars().first()
-            if snapshot_id and assessment is None:
-                raise HTTPException(status_code=404, detail="Không tìm thấy bản đánh giá đã chọn.")
-        snapshot_raw = assessment.raw_responses if assessment and isinstance(assessment.raw_responses, dict) else {}
-        if "grades_by_subject" not in inline and not snapshot_id and "grades_by_subject" not in snapshot_raw:
-            result = await db.execute(
-                select(StudentGrade).where(StudentGrade.user_id == user_id)
-                .order_by(StudentGrade.created_at.desc())
+        if snapshot_uuid is not None or needs_submission:
+            query = select(StudentAssessmentSubmission).where(
+                StudentAssessmentSubmission.user_id == user_id
             )
-            grade = result.scalars().first()
+            if snapshot_uuid is not None:
+                query = query.where(StudentAssessmentSubmission.id == snapshot_uuid)
+            else:
+                query = query.order_by(
+                    StudentAssessmentSubmission.completed_at.desc(),
+                    StudentAssessmentSubmission.id.desc(),
+                ).limit(1)
+            result = await db.execute(query)
+            submission = result.scalars().first()
+            if snapshot_uuid is not None and submission is None:
+                raise HTTPException(status_code=404, detail="Không tìm thấy bản đánh giá đã chọn.")
 
-    raw = assessment.raw_responses if assessment and isinstance(assessment.raw_responses, dict) else {}
-    stored_answers = raw.get("riasec", raw.get("riasec_answers", raw))
+    raw = submission.raw_answers if submission and isinstance(submission.raw_answers, dict) else {}
+    if "riasec_answers" in raw:
+        stored_answers = raw.get("riasec_answers") or {}
+    elif "riasec" in raw:
+        stored_answers = raw.get("riasec") or {}
+    else:
+        stored_answers = {}
+
     # Explicit answers, even {}, take precedence over a stored vector.
     answers = inline["riasec_answers"] if "riasec_answers" in inline else (
         {} if "riasec_scores" in inline else stored_answers
     )
     vector = inline.get("riasec_scores") if "riasec_scores" in inline else (
-        None if "riasec_answers" in inline else getattr(assessment, "riasec_scores", None)
+        None if "riasec_answers" in inline else getattr(submission, "riasec_vector", None)
     )
     if "cognitive_answers" in inline:
         cognitive = inline["cognitive_answers"] or {}
     elif "cognitive_preferences" in inline:
         cognitive = inline["cognitive_preferences"] or {}
+    elif "cognitive_answers" in raw:
+        cognitive = raw.get("cognitive_answers") or {}
+    elif "cognitive" in raw:
+        cognitive = raw.get("cognitive") or {}
     else:
-        # Raw answers are authoritative even when explicitly empty; legacy derived
-        # preferences may have been filled with defaults during submission.
-        cognitive = (raw["cognitive"] or {}) if "cognitive" in raw else (getattr(assessment, "cognitive_preferences", None) or {})
+        cognitive = getattr(submission, "cognitive_traits", None) or {}
+
     if "grades_by_subject" in inline:
         grades = inline["grades_by_subject"] or {}
-    elif snapshot_id or "grades_by_subject" in raw:
-        grades = raw.get("grades_by_subject") or {}
     else:
-        grades = getattr(grade, "grades_by_subject", None) or {}
+        grades = raw.get("grades_by_subject") or {}
+
     # Score context must describe the same source as the selected grades.
     if "score_context" in inline:
         score_context = inline["score_context"] if isinstance(inline["score_context"], dict) else {}
-    elif "grades_by_subject" not in inline and (snapshot_id or "grades_by_subject" in raw):
+    elif "grades_by_subject" not in inline and (snapshot_uuid is not None or "grades_by_subject" in raw):
         score_context = raw.get("score_context", {"kind": "TRANSCRIPT", "scale": 10})
         if not isinstance(score_context, dict):
             score_context = {}
     else:
         score_context = {"kind": "TRANSCRIPT", "scale": 10}
+
     aspiration = inline["aspiration"] if "aspiration" in inline else raw.get("aspiration", {})
     return {
         **inline,
@@ -135,8 +155,8 @@ async def resolve_assessment_evidence(
         "grades_by_subject": grades,
         "aspiration": aspiration or {},
         "score_context": score_context,
-        "evidence_source": "SELECTED_ASSESSMENT" if snapshot_id else ("INLINE" if inline_profile is not None else "CURRENT_PROFILE"),
-        "assessment_id": str(snapshot_id or getattr(assessment, "id", "")) or None,
+        "evidence_source": "SELECTED_ASSESSMENT" if snapshot_uuid is not None else ("INLINE" if inline_profile is not None else "CURRENT_PROFILE"),
+        "assessment_id": str(snapshot_uuid or getattr(submission, "id", "")) or None,
     }
 
 
@@ -449,7 +469,7 @@ async def calculate_3pillar_recommendations(
     payload: RecommendationRequest,
     inline_profile: Optional[Dict[str, Any]] = None,
     raise_if_unassessed: bool = False,
-    persist_history: bool = True,
+    persist_history: bool = False,
     *,
     resolved_profile: Optional[Dict[str, Any]] = None,
     include_all_candidates: bool = False,
@@ -1034,21 +1054,9 @@ async def calculate_3pillar_recommendations(
          "w_academic": bool(student_zscores), "w_preference": cognitive["status"] == "COMPLETE"},
         {"w_riasec": w_riasec, "w_academic": w_academic, "w_preference": w_pref}, strategy)
 
-    # Lưu lịch sử đề xuất cho người dùng đã đăng nhập
+    # persist_history giữ nguyên làm tham số no-op tương thích chữ ký (snapshot được lưu ở recommendation_snapshots)
+    del persist_history
     generated_now = datetime.now(timezone.utc)
-    if persist_history and db is not None:
-        try:
-            history = RecommendationHistory(
-                user_id=user_id,
-                weights_applied=summary_weights,
-                ranked_results=[it.model_dump(mode="json") for it in top_results[:15]],
-                generated_at=generated_now
-            )
-            db.add(history)
-            await db.commit()
-        except Exception as exc:
-            await db.rollback()
-            raise HTTPException(503,"Không lưu được lịch sử đề xuất; hãy thử lại.") from exc
 
     elapsed_ms = (time.perf_counter() - start_time) * 1000.0
     print(f"3-Pillar Recommendation Engine evaluated {len(majors)} majors in {elapsed_ms:.2f}ms.")
@@ -1257,6 +1265,279 @@ def build_two_tier_funnel_payload(
     }
 
 
+_RECOMMENDATION_CACHE_VERSION = "rec-bundle-v1"
+_MAX_SNAPSHOTS_PER_USER = 5
+
+
+async def _compute_catalog_and_diagnostic_fingerprint(
+    db: Optional[AsyncSession],
+    user_id: Optional[uuid.UUID],
+) -> Dict[str, Any]:
+    if db is None:
+        return {"catalog": "seed", "diagnostics": []}
+    catalog_key = "seed"
+    diagnostics: List[Tuple[str, bool, Optional[float]]] = []
+    try:
+        agg_stmt = select(
+            func.count(Major.id),
+            func.sum(case((Major.is_active.is_(True), 1), else_=0)),
+            func.max(Major.updated_at),
+        )
+        agg_row = (await db.execute(agg_stmt)).first()
+        if agg_row is not None and len(agg_row) >= 3:
+            total_count, active_count, max_updated = agg_row[0], agg_row[1], agg_row[2]
+            updated_str = (
+                max_updated.isoformat()
+                if hasattr(max_updated, "isoformat")
+                else (str(max_updated) if max_updated else "")
+            )
+            catalog_key = f"{int(total_count or 0)}:{int(active_count or 0)}:{updated_str}"
+    except Exception:
+        catalog_key = "seed"
+
+    if user_id is not None:
+        try:
+            diag_stmt = select(
+                StudentDiagnosticTest.skill_code,
+                StudentDiagnosticTest.is_passed,
+                StudentDiagnosticTest.score,
+            ).where(StudentDiagnosticTest.user_id == user_id)
+            diag_rows = (await db.execute(diag_stmt)).all()
+            diagnostics = sorted(
+                (
+                    str(row[0] or ""),
+                    bool(row[1]),
+                    float(row[2]) if row[2] is not None else None,
+                )
+                for row in diag_rows
+            )
+        except Exception:
+            diagnostics = []
+
+    return {"catalog": catalog_key, "diagnostics": diagnostics}
+
+
+def _compute_recommendation_input_hash(
+    *,
+    inline: Dict[str, Any],
+    grade_level: Optional[str],
+    top_k: int,
+    custom_weights: Optional[Dict[str, float]],
+    fingerprint: Dict[str, Any],
+) -> str:
+    riasec_answers = {
+        str(k).upper(): int(v)
+        for k, v in sorted((inline.get("riasec_answers") or {}).items())
+        if isinstance(v, (int, float)) and not isinstance(v, bool)
+    }
+    riasec_scores = (
+        {}
+        if riasec_answers
+        else {
+            str(k).upper(): round(float(v), 6)
+            for k, v in sorted((inline.get("riasec_scores") or {}).items())
+            if isinstance(v, (int, float)) and not isinstance(v, bool)
+        }
+    )
+    from .evidence import cognitive_evidence
+
+    cog_raw = inline.get("cognitive_preferences") or {}
+    cog_ev = cognitive_evidence(cog_raw)
+    if cog_ev.get("status") == "COMPLETE" and cog_ev.get("traits"):
+        cognitive_preferences = {
+            str(k): str(v).strip()
+            for k, v in sorted(cog_ev["traits"].items())
+        }
+    else:
+        cognitive_preferences = {
+            str(k): str(v).strip()
+            for k, v in sorted(cog_raw.items())
+            if v is not None
+            and str(v).strip() != ""
+            and not (isinstance(k, str) and k.startswith("2-") and k[2:].isdigit())
+        }
+    grades_by_subject: Dict[str, Any] = {}
+    for k, v in sorted((inline.get("grades_by_subject") or {}).items()):
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            grades_by_subject[str(k)] = float(v)
+        elif v is not None and str(v).strip() != "":
+            grades_by_subject[str(k)] = str(v).strip()
+
+    raw_asp = inline.get("aspiration") or {}
+    norm_asp = {
+        "dream_job": str(raw_asp.get("dream_job") or raw_asp.get("dreamJob") or "").strip(),
+        "desired_field": str(raw_asp.get("desired_field") or raw_asp.get("desiredField") or "").strip(),
+        "work_values": sorted(
+            str(v).strip()
+            for v in (raw_asp.get("work_values") or raw_asp.get("workValues") or [])
+            if str(v).strip()
+        ),
+        "preferred_environment": str(
+            raw_asp.get("preferred_environment") or raw_asp.get("preferredEnvironment") or ""
+        ).strip(),
+        "score_strategy": (
+            str(raw_asp.get("score_strategy") or raw_asp.get("scoreStrategy") or "FLEXIBLE_PATHWAY").strip()
+            or "FLEXIBLE_PATHWAY"
+        ),
+    }
+
+    canonical = {
+        "algorithm_version": _RECOMMENDATION_CACHE_VERSION,
+        "top_k": int(top_k),
+        "riasec_answers": riasec_answers,
+        "riasec_scores": riasec_scores,
+        "cognitive_preferences": cognitive_preferences,
+        "grades_by_subject": grades_by_subject,
+        "score_context": inline.get("score_context") or {},
+        "aspiration": norm_asp,
+        "grade_level": (grade_level or "").strip(),
+        "custom_weights": (
+            {str(k): round(float(v), 6) for k, v in sorted(custom_weights.items())}
+            if custom_weights
+            else {}
+        ),
+        "catalog": fingerprint.get("catalog", "seed"),
+        "diagnostics": fingerprint.get("diagnostics", []),
+    }
+    serialized = json.dumps(canonical, sort_keys=True, ensure_ascii=False, default=str)
+    return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+
+async def _load_recommendation_snapshot(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    input_hash: str,
+) -> Optional[RecommendationSnapshot]:
+    try:
+        result = await db.execute(
+            select(RecommendationSnapshot)
+            .where(
+                RecommendationSnapshot.user_id == user_id,
+                RecommendationSnapshot.input_hash == input_hash,
+                RecommendationSnapshot.algorithm_version == _RECOMMENDATION_CACHE_VERSION,
+            )
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+    except Exception:
+        return None
+
+
+async def _save_recommendation_snapshot(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    input_hash: str,
+    top_k: int,
+    bundle: Dict[str, Any],
+    submission_id: Optional[Any] = None,
+) -> Optional[datetime]:
+    try:
+        payload_to_store = {
+            k: v for k, v in bundle.items() if k not in {"from_cache", "cached_at"}
+        }
+        encoded_payload = jsonable_encoder(payload_to_store)
+        now = datetime.now(timezone.utc)
+
+        resolved_submission_id: Optional[uuid.UUID] = None
+        if submission_id:
+            try:
+                candidate_uuid = (
+                    submission_id
+                    if isinstance(submission_id, uuid.UUID)
+                    else uuid.UUID(str(submission_id))
+                )
+                exists_id = (
+                    await db.execute(
+                        select(StudentAssessmentSubmission.id).where(
+                            StudentAssessmentSubmission.id == candidate_uuid
+                        )
+                    )
+                ).scalar_one_or_none()
+                if exists_id is not None:
+                    resolved_submission_id = exists_id
+            except (ValueError, TypeError):
+                resolved_submission_id = None
+
+        existing = (
+            await db.execute(
+                select(RecommendationSnapshot)
+                .where(
+                    RecommendationSnapshot.user_id == user_id,
+                    RecommendationSnapshot.input_hash == input_hash,
+                )
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+
+        if existing is not None:
+            existing.payload = encoded_payload
+            existing.top_k = int(top_k)
+            existing.algorithm_version = _RECOMMENDATION_CACHE_VERSION
+            if resolved_submission_id is not None:
+                existing.submission_id = resolved_submission_id
+            existing.updated_at = now
+        else:
+            db.add(
+                RecommendationSnapshot(
+                    id=uuid.uuid4(),
+                    user_id=user_id,
+                    submission_id=resolved_submission_id,
+                    input_hash=input_hash,
+                    algorithm_version=_RECOMMENDATION_CACHE_VERSION,
+                    top_k=int(top_k),
+                    payload=encoded_payload,
+                    created_at=now,
+                    updated_at=now,
+                )
+            )
+
+        await db.flush()
+
+        all_ids = list(
+            (
+                await db.execute(
+                    select(RecommendationSnapshot.id)
+                    .where(RecommendationSnapshot.user_id == user_id)
+                    .order_by(
+                        RecommendationSnapshot.updated_at.desc(),
+                        RecommendationSnapshot.created_at.desc(),
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+        stale_ids = all_ids[_MAX_SNAPSHOTS_PER_USER:]
+        if stale_ids:
+            await db.execute(
+                delete(RecommendationSnapshot).where(RecommendationSnapshot.id.in_(stale_ids))
+            )
+
+        await db.commit()
+        return now
+    except Exception as exc:
+        try:
+            await db.rollback()
+        except Exception:
+            pass
+        logger.warning("Failed to save recommendation snapshot (%s)", type(exc).__name__)
+        return None
+
+
+async def invalidate_user_recommendation_snapshots(
+    db: Optional[AsyncSession],
+    user_id: uuid.UUID,
+) -> None:
+    if db is None or user_id is None:
+        return
+    try:
+        await db.execute(
+            delete(RecommendationSnapshot).where(RecommendationSnapshot.user_id == user_id)
+        )
+    except Exception as exc:
+        logger.warning("Failed to invalidate recommendation snapshots (%s)", type(exc).__name__)
+
+
 async def evaluate_dashboard_profile_bundle(
     db: AsyncSession,
     user_id: uuid.UUID,
@@ -1268,11 +1549,12 @@ async def evaluate_dashboard_profile_bundle(
     user_name: Optional[str] = None,
     gender: Optional[str] = None,
     grade_level: Optional[str] = None,
+    use_cache: bool = True,
 ) -> Dict[str, Any]:
     """
     Tính toán trọn bộ dữ liệu Dashboard & Ràng buộc Điểm trên toàn bộ 435 ngành TT74:
-    - Trả về 2-Tier Funnel, danh sách ngành kèm trạng thái TARGET/REACH/SAFETY, biểu đồ Radar và Khối mạnh nhất.
-    - Tự động thích ứng theo chân trời thời gian khối lớp và công thái học giới tính (HA-GAE v3.1).
+    - Lưu & tải nhanh từ RecommendationSnapshot theo hash các dữ liệu đầu vào thuật toán.
+    - Chỉ tính lại khi có bài test mới, đổi grade_level/nguyện vọng/điểm/tư duy/sở thích hoặc đổi danh mục ngành.
     """
     inline = await resolve_assessment_evidence(db, user_id, inline_profile)
     effective_gender = gender or inline.get("gender")
@@ -1287,6 +1569,29 @@ async def evaluate_dashboard_profile_bundle(
                 effective_grade_level = effective_grade_level or u_row.grade_level
         except Exception:
             pass
+
+    input_hash: Optional[str] = None
+    if use_cache and db is not None and user_id is not None:
+        fingerprint = await _compute_catalog_and_diagnostic_fingerprint(db, user_id)
+        input_hash = _compute_recommendation_input_hash(
+            inline=inline,
+            grade_level=effective_grade_level,
+            top_k=top_k,
+            custom_weights=custom_weights,
+            fingerprint=fingerprint,
+        )
+        cached_row = await _load_recommendation_snapshot(db, user_id, input_hash)
+        if cached_row is not None and isinstance(cached_row.payload, dict):
+            cached_bundle = copy.deepcopy(cached_row.payload)
+            cached_bundle["user_name"] = user_name or cached_bundle.get("user_name") or "Học sinh"
+            cached_bundle["gender"] = effective_gender
+            cached_bundle["evidence_source"] = inline.get("evidence_source")
+            cached_bundle["assessment_id"] = inline.get("assessment_id")
+            cached_bundle["from_cache"] = True
+            cached_bundle["cached_at"] = (
+                cached_row.updated_at.isoformat() if cached_row.updated_at else None
+            )
+            return cached_bundle
 
     req = RecommendationRequest(
         top_k=top_k,
@@ -1341,7 +1646,7 @@ async def evaluate_dashboard_profile_bundle(
     )
 
     visible_majors = [item for item in rec_resp.recommendations if item.feasibility_tier != "REACH"]
-    return {
+    result_bundle: Dict[str, Any] = {
         "has_assessment": True,
         "has_academic_data": has_academic_data,
         "user_name": user_name or "Học sinh",
@@ -1360,4 +1665,17 @@ async def evaluate_dashboard_profile_bundle(
         "interest_evidence": interest_evidence,
         "evidence_source": inline.get("evidence_source"),
         "assessment_id": inline.get("assessment_id"),
+        "from_cache": False,
+        "cached_at": None,
     }
+    if use_cache and db is not None and user_id is not None and input_hash:
+        saved_at = await _save_recommendation_snapshot(
+            db,
+            user_id,
+            input_hash,
+            top_k,
+            result_bundle,
+            submission_id=inline.get("assessment_id"),
+        )
+        result_bundle["cached_at"] = saved_at.isoformat() if saved_at else None
+    return result_bundle

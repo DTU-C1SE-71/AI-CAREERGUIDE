@@ -40,15 +40,22 @@ def load_raw_seed_data() -> dict:
 
 async def seed_assessment_questions(session: AsyncSession) -> AssessmentQuestionSet:
     """
-    Seeds the official Circular 74/2026/TT-BGDĐT v1.8 vocational assessment question set:
+    Seeds the official Circular 74/2026/TT-BGDĐT v2.0 vocational assessment question set:
     - 30 RIASEC items across 6 vocational domains (5 items/domain)
-    - 8 Cognitive Preference questions with 32 structured options (A, B, C, D)
+    - 10 Cognitive & Learning Environment questions (PA3-10)
     - Complete metadata, XP rewards, and MOET 2-digit field codes.
     """
     raw_data = load_raw_seed_data()
-    set_code = "RIASEC_COG_V1_8"
-    version = raw_data.get("version", "1.8")
+    set_code = "RIASEC_COG_V2_10"
+    version = raw_data.get("version", "2.0")
     circular_ref = raw_data.get("circular_ref", "74/2026/TT-BGDĐT")
+
+    # Deactivate older questionnaire sets without deleting them so historical submissions stay valid
+    other_sets_res = await session.execute(
+        select(AssessmentQuestionSet).where(AssessmentQuestionSet.set_code != set_code)
+    )
+    for old_set in other_sets_res.scalars().all():
+        old_set.is_active = False
 
     # Check if this set already exists
     stmt = select(AssessmentQuestionSet).where(AssessmentQuestionSet.set_code == set_code)
@@ -58,6 +65,8 @@ async def seed_assessment_questions(session: AsyncSession) -> AssessmentQuestion
     if existing_set:
         logger.info(f"Questionnaire set '{set_code}' already exists (ID: {existing_set.id}). Synchronizing latest question texts...")
         existing_set.is_active = True
+        existing_set.version = version
+        existing_set.config = raw_data.get("config", existing_set.config)
         existing_set.updated_at = datetime.now(timezone.utc)
 
         # Load existing questions for this set
@@ -74,21 +83,43 @@ async def seed_assessment_questions(session: AsyncSession) -> AssessmentQuestion
                 q_obj.dimension_badge = item.get("dimension_badge", q_obj.dimension_badge)
                 q_obj.domain_tag = item.get("domain_tag", q_obj.domain_tag)
 
-        # Sync 8 Cognitive questions & 32 options in-place
+        # Sync 10 Cognitive questions & their options cleanly
         for cog_item in raw_data.get("cognitive_questions", []):
             q_obj = existing_q_map.get(cog_item["code"])
             if q_obj:
+                q_obj.dimension = cog_item["dimension_key"]
                 q_obj.dimension_badge = cog_item.get("title", q_obj.dimension_badge)
-                q_obj.question_text = f"{cog_item['title']}: {cog_item.get('subtitle', '')}"
+                q_obj.question_text = cog_item.get("subtitle", "")
+                q_obj.order_index = cog_item.get("order", q_obj.order_index)
                 opt_res = await session.execute(
                     select(CognitiveQuestionOption).where(CognitiveQuestionOption.question_id == q_obj.id)
                 )
                 existing_opt_map = {o.option_key: o for o in opt_res.scalars().all()}
-                for opt in cog_item.get("options", []):
+                new_keys = set()
+                for opt_idx, opt in enumerate(cog_item.get("options", []), start=1):
+                    new_keys.add(opt["option_key"])
                     opt_obj = existing_opt_map.get(opt["option_key"])
                     if opt_obj:
+                        opt_obj.trait_code = opt["trait_code"]
                         opt_obj.title = opt["title"]
                         opt_obj.description = opt["description"]
+                        opt_obj.order_index = opt_idx
+                    else:
+                        session.add(
+                            CognitiveQuestionOption(
+                                id=uuid.uuid4(),
+                                question_id=q_obj.id,
+                                option_key=opt["option_key"],
+                                trait_code=opt["trait_code"],
+                                title=opt["title"],
+                                description=opt["description"],
+                                related_moet_field_codes=opt.get("related_moet_field_codes", []),
+                                order_index=opt_idx,
+                            )
+                        )
+                for key, old_opt in existing_opt_map.items():
+                    if key not in new_keys:
+                        await session.delete(old_opt)
 
         await session.commit()
         return existing_set
@@ -100,8 +131,8 @@ async def seed_assessment_questions(session: AsyncSession) -> AssessmentQuestion
         id=uuid.uuid4(),
         set_code=set_code,
         version=version,
-        title="Bộ câu hỏi Đánh giá Sở thích & Thiên hướng Nhận thức chuẩn v1.8",
-        description="Khung đánh giá trắc nghiệm sở thích nghề nghiệp Holland RIASEC (30 câu) kết hợp 8 chiều thiên hướng nhận thức và môi trường học tập theo Thông tư 74/2026/TT-BGDĐT.",
+        title="Bộ câu hỏi Đánh giá Sở thích & Phong cách Tư duy chuẩn v2.0",
+        description="Khung đánh giá trắc nghiệm sở thích nghề nghiệp Holland RIASEC (30 câu) kết hợp 10 câu phong cách tư duy và môi trường học tập theo Thông tư 74/2026/TT-BGDĐT.",
         circular_ref=circular_ref,
         config=raw_data.get("config", {
             "xp_per_question": 25,
@@ -109,7 +140,7 @@ async def seed_assessment_questions(session: AsyncSession) -> AssessmentQuestion
             "estimated_minutes": 6,
             "questions_per_riasec_page": 5,
             "total_riasec_questions": 30,
-            "total_cognitive_questions": 8,
+            "total_cognitive_questions": 10,
             "weights": {"riasec": 0.45, "academic": 0.35, "cognitive_preference": 0.20}
         }),
         is_active=True,
@@ -138,7 +169,7 @@ async def seed_assessment_questions(session: AsyncSession) -> AssessmentQuestion
         )
         session.add(q_obj)
 
-    # 3. Seed 8 Cognitive Questions & 32 Options
+    # 3. Seed 10 Cognitive Questions & Options
     cognitive_items = raw_data.get("cognitive_questions", [])
     for cog_item in cognitive_items:
         q_obj = AssessmentQuestion(
@@ -147,10 +178,10 @@ async def seed_assessment_questions(session: AsyncSession) -> AssessmentQuestion
             code=cog_item["code"],
             category="COGNITIVE",
             dimension=cog_item["dimension_key"],
-            dimension_badge=cog_item.get("title", f"Thiên hướng {cog_item['code']}"),
-            domain_tag="Thiên hướng Nhận thức & Phong cách Học tập",
+            dimension_badge=cog_item.get("title", f"Câu {cog_item.get('order', 1)}"),
+            domain_tag="Phong cách Tư duy & Môi trường Học tập",
             icon_name="BrainCircuit",
-            question_text=f"{cog_item['title']}: {cog_item.get('subtitle', '')}",
+            question_text=cog_item.get("subtitle", ""),
             order_index=cog_item.get("order", 1),
             xp_reward=25,
             is_active=True
@@ -158,7 +189,6 @@ async def seed_assessment_questions(session: AsyncSession) -> AssessmentQuestion
         session.add(q_obj)
         await session.flush()
 
-        # Seed 4 options per cognitive item
         options = cog_item.get("options", [])
         for opt_idx, opt in enumerate(options, start=1):
             option_obj = CognitiveQuestionOption(
@@ -175,7 +205,7 @@ async def seed_assessment_questions(session: AsyncSession) -> AssessmentQuestion
 
     await session.commit()
     logger.info(
-        f"Successfully seeded '{set_code}' with {len(riasec_items)} RIASEC questions and {len(cognitive_items)} Cognitive questions (32 options)."
+        f"Successfully seeded '{set_code}' with {len(riasec_items)} RIASEC questions and {len(cognitive_items)} Cognitive questions."
     )
     return question_set
 

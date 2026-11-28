@@ -51,10 +51,410 @@ export interface CognitiveQuestionItem {
 
 export const defaultCognitiveQuestions: CognitiveQuestionItem[] = [
   {
+    code: "COG_V2_1",
+    dimension: "analytical_1",
+    dimension_badge: "Câu 1",
+    title: "Câu 1",
+    subtitle:
+      "Khi gặp một bài tập mới có nhiều số liệu và điều kiện ràng buộc, bạn thường làm cách nào?",
+    options: [
+      {
+        option_key: "A",
+        trait_code: "ANL_1_L1",
+        label: "Xem bài mẫu trước rồi làm theo",
+        description:
+          "Đọc lời giải mẫu hoặc nhờ gợi ý từng bước để biết hướng giải bài tập này.",
+        icon: "BookOpen",
+      },
+      {
+        option_key: "B",
+        trait_code: "ANL_1_L2",
+        label: "Tìm dạng quen để lắp công thức",
+        description:
+          "Nhận diện bài tập thuộc dạng đã học nào rồi áp dụng đúng công thức sẵn có.",
+        icon: "Calculator",
+      },
+      {
+        option_key: "C",
+        trait_code: "ANL_1_L3",
+        label: "Tự tách dữ kiện và gỡ từng bước",
+        description:
+          "Gạch chân các số liệu quan trọng, bỏ thông tin thừa rồi tự giải dần từng ý.",
+        icon: "ListChecks",
+      },
+      {
+        option_key: "D",
+        trait_code: "ANL_1_L4",
+        label: "Tự tìm quy luật và kiểm tra ngược",
+        description:
+          "Xâu chuỗi mối liên hệ giữa các điều kiện để tìm cách giải gọn và tự soát lại đáp số.",
+        icon: "Binary",
+      },
+    ],
+  },
+  {
+    code: "COG_V2_2",
+    dimension: "abstract_1",
+    dimension_badge: "Câu 2",
+    title: "Câu 2",
+    subtitle:
+      "Khi thầy cô giảng một định lý mới khá khó hiểu trên lớp, bạn thường học theo cách nào?",
+    options: [
+      {
+        option_key: "A",
+        trait_code: "ABS_1_L1",
+        label: "Hiểu qua ví dụ đời thường trước",
+        description:
+          "Cần xem vài ví dụ cụ thể, dễ thấy thì mới hiểu định lý đó đang nói về điều gì.",
+        icon: "Lightbulb",
+      },
+      {
+        option_key: "B",
+        trait_code: "ABS_1_L2",
+        label: "Học thuộc ý chính để làm bài tập",
+        description:
+          "Ghi nhớ phần phát biểu trọng tâm rồi luyện vài bài tập cơ bản cho quen tay.",
+        icon: "BookOpen",
+      },
+      {
+        option_key: "C",
+        trait_code: "ABS_1_L3",
+        label: 'Hỏi kỹ "vì sao định lý lại đúng"',
+        description:
+          "Thích hiểu rõ cách chứng minh gốc rễ để gặp đề biến tấu vẫn tự suy luận được.",
+        icon: "Brain",
+      },
+      {
+        option_key: "D",
+        trait_code: "ABS_1_L4",
+        label: "Nối với các bài trước thành hệ thống",
+        description:
+          "Thường liên hệ định lý mới với các kiến thức đã học để thấy bức tranh tổng thể.",
+        icon: "Sparkles",
+      },
+    ],
+  },
+  {
+    code: "COG_V2_3",
+    dimension: "spatial_1",
+    dimension_badge: "Câu 3",
+    title: "Câu 3",
+    subtitle:
+      "Khi làm một bài hình học không gian có nhiều mặt cắt và đường nét chồng chéo, bạn thường hình dung hình vẽ đó thế nào?",
+    options: [
+      {
+        option_key: "A",
+        trait_code: "SPA_1_L1",
+        label: "Cần người chỉ từng cạnh mới nhìn ra",
+        description:
+          "Dễ bị rối mắt trước hình vẽ 3D nên thường cần mô hình thật hoặc người chỉ rõ từng mặt.",
+        icon: "Hand",
+      },
+      {
+        option_key: "B",
+        trait_code: "SPA_1_L2",
+        label: "Nhìn rõ từng mặt phẳng tách riêng",
+        description:
+          "Đọc tốt các hình phẳng 2D nhưng cần tách từng mặt ra nháp mới hình dung được khối 3D.",
+        icon: "FileSpreadsheet",
+      },
+      {
+        option_key: "C",
+        trait_code: "SPA_1_L3",
+        label: "Tưởng tượng khá rõ hình khối trên giấy",
+        description:
+          "Chỉ cần nhìn hình vẽ phẳng là mường tượng được vị trí các cạnh, các góc ngoài không gian.",
+        icon: "Compass",
+      },
+      {
+        option_key: "D",
+        trait_code: "SPA_1_L4",
+        label: "Dễ xoay hình khối ngay trong đầu",
+        description:
+          "Nhanh chóng xoay góc nhìn hình 3D trong đầu và tự vẽ lại hình phụ chính xác, dễ nhìn.",
+        icon: "Palette",
+      },
+    ],
+  },
+  {
+    code: "COG_V2_4",
+    dimension: "linguistic_1",
+    dimension_badge: "Câu 4",
+    title: "Câu 4",
+    subtitle:
+      "Khi phải tự viết một bài văn nghị luận dài ở trường, bạn thường triển khai bài viết đó ra sao?",
+    options: [
+      {
+        option_key: "A",
+        trait_code: "LNG_1_L1",
+        label: "Viết ngắn gọn đủ ý bắt buộc",
+        description:
+          "Thường bí từ khi viết dài nên chỉ trình bày các ý chính cơ bản cho đủ yêu cầu đề bài.",
+        icon: "ListChecks",
+      },
+      {
+        option_key: "B",
+        trait_code: "LNG_1_L2",
+        label: "Triển khai ổn khi có sẵn dàn ý",
+        description:
+          "Chỉ cần có dàn ý chi tiết là viết khá trôi chảy và giữ được mạch bài đúng trọng tâm.",
+        icon: "BookOpen",
+      },
+      {
+        option_key: "C",
+        trait_code: "LNG_1_L3",
+        label: "Tự lập dàn ý và diễn đạt mạch lạc",
+        description:
+          "Tự sắp xếp luận điểm rõ ràng, chọn câu chữ gọn gàng để người đọc hiểu ý ngay.",
+        icon: "PenTool",
+      },
+      {
+        option_key: "D",
+        trait_code: "LNG_1_L4",
+        label: "Dẫn dắt cuốn hút và lập luận sắc bén",
+        description:
+          "Thích chăm chút cách dùng từ, biết cách mở – kết ấn tượng và thuyết phục người đọc.",
+        icon: "Sparkles",
+      },
+    ],
+  },
+  {
+    code: "COG_V2_5",
+    dimension: "analytical_2",
+    dimension_badge: "Câu 5",
+    title: "Câu 5",
+    subtitle:
+      "Khi lớp lên kế hoạch cho chuyến đi dã ngoại và cần tính bảng chi phí, bạn thường tham gia phần này như thế nào?",
+    options: [
+      {
+        option_key: "A",
+        trait_code: "ANL_2_L1",
+        label: "Để các bạn khác tính rồi nghe chốt",
+        description:
+          "Không quen xử lý bảng nhiều khoản thu chi nên thường để bạn phụ trách tính giúp.",
+        icon: "Users",
+      },
+      {
+        option_key: "B",
+        trait_code: "ANL_2_L2",
+        label: "Cộng trừ được các khoản cố định",
+        description:
+          "Tính nhanh được tiền xe, tiền ăn cơ bản nhưng ít khi đặt nhiều phương án lên so sánh.",
+        icon: "Calculator",
+      },
+      {
+        option_key: "C",
+        trait_code: "ANL_2_L3",
+        label: "Lập bảng so sánh giá từng phương án",
+        description:
+          "Chia rõ từng mục chi phí để so sánh xem lựa chọn nào hợp lý và tiết kiệm hơn.",
+        icon: "FileSpreadsheet",
+      },
+      {
+        option_key: "D",
+        trait_code: "ANL_2_L4",
+        label: "Tính trước cả chi phí phát sinh và dự phòng",
+        description:
+          "Lường trước trường hợp đổi số người tham gia hoặc phát sinh thêm khoản phụ để cân đối quỹ chắc chắn.",
+        icon: "Scale",
+      },
+    ],
+  },
+  {
+    code: "COG_V2_6",
+    dimension: "abstract_2",
+    dimension_badge: "Câu 6",
+    title: "Câu 6",
+    subtitle:
+      "Khi nhóm tìm được rất nhiều bài viết và ghi chú rời rạc trên mạng cho bài thuyết trình, bạn thường sắp xếp chúng thế nào?",
+    options: [
+      {
+        option_key: "A",
+        trait_code: "ABS_2_L1",
+        label: "Bám theo dàn ý của 1 bài mẫu rõ nhất",
+        description:
+          "Chọn sẵn một bài viết đầy đủ nhất để làm theo khung đó cho đỡ bị rối thông tin.",
+        icon: "BookOpen",
+      },
+      {
+        option_key: "B",
+        trait_code: "ABS_2_L2",
+        label: "Tóm tắt gọn từng nguồn rồi ghép nối tiếp",
+        description:
+          "Rút vài ý chính từ mỗi bài viết rồi xếp lần lượt từng phần vào bài thuyết trình.",
+        icon: "ListChecks",
+      },
+      {
+        option_key: "C",
+        trait_code: "ABS_2_L3",
+        label: "Lọc trùng và gom thành các nhóm chủ đề",
+        description:
+          "Loại bỏ ý lặp lại, nhóm các thông tin cùng nội dung vào từng mục lớn rõ ràng.",
+        icon: "Brain",
+      },
+      {
+        option_key: "D",
+        trait_code: "ABS_2_L4",
+        label: "Tự dựng khung logic và kết luận riêng",
+        description:
+          "Sắp xếp lại toàn bộ tài liệu theo mạch lập luận mới của nhóm để làm nổi bật thông điệp chính.",
+        icon: "Rocket",
+      },
+    ],
+  },
+  {
+    code: "COG_V2_7",
+    dimension: "spatial_2",
+    dimension_badge: "Câu 7",
+    title: "Câu 7",
+    subtitle:
+      "Khi phụ trách làm bộ slide thuyết trình cho bài tập nhóm, bạn thường trình bày các trang slide như thế nào?",
+    options: [
+      {
+        option_key: "A",
+        trait_code: "SPA_2_L1",
+        label: "Đưa đủ chữ lên slide, ít chỉnh hình thức",
+        description:
+          "Tập trung gõ đủ nội dung chữ cho kịp tiến độ, còn bố cục và hình ảnh nhờ bạn khác sửa.",
+        icon: "FileSpreadsheet",
+      },
+      {
+        option_key: "B",
+        trait_code: "SPA_2_L2",
+        label: "Chọn mẫu có sẵn rồi thay chữ và ảnh",
+        description:
+          "Dùng template sẵn trên Canva hoặc PowerPoint rồi điền nội dung vào đúng khung mẫu.",
+        icon: "Clapperboard",
+      },
+      {
+        option_key: "C",
+        trait_code: "SPA_2_L3",
+        label: "Tự căn chỉnh bố cục và màu sắc cho dễ nhìn",
+        description:
+          "Tự sắp xếp vị trí tiêu đề, hình ảnh và bảng biểu sao cho cả lớp nhìn vào nắm ý nhanh.",
+        icon: "Palette",
+      },
+      {
+        option_key: "D",
+        trait_code: "SPA_2_L4",
+        label: "Chuyển ý dài thành sơ đồ và hình minh họa",
+        description:
+          "Thích tự thiết kế sơ đồ trực quan, phối màu đồng bộ để mỗi slide gọn chữ mà vẫn nổi bật.",
+        icon: "Sparkles",
+      },
+    ],
+  },
+  {
+    code: "COG_V2_8",
+    dimension: "linguistic_2",
+    dimension_badge: "Câu 8",
+    title: "Câu 8",
+    subtitle:
+      "Khi một bạn trong nhóm chưa hiểu phần bài bạn phụ trách và nhờ giảng lại, bạn thường giải thích thế nào?",
+    options: [
+      {
+        option_key: "A",
+        trait_code: "LNG_2_L1",
+        label: "Đưa vở ghi để bạn tự đọc cho dễ",
+        description:
+          "Hơi lúng túng khi diễn đạt bằng lời nên thường gửi phần ghi chép sẵn để bạn xem trực tiếp.",
+        icon: "BookOpen",
+      },
+      {
+        option_key: "B",
+        trait_code: "LNG_2_L2",
+        label: "Trình bày lại từng ý chính đã ghi chú",
+        description:
+          "Nếu nhìn theo dàn ý chuẩn bị trước, có thể nói lại đầy đủ các bước cơ bản cho bạn hiểu.",
+        icon: "ListChecks",
+      },
+      {
+        option_key: "C",
+        trait_code: "LNG_2_L3",
+        label: "Lấy ví dụ gần gũi để nói cho dễ hiểu",
+        description:
+          "Tự diễn giải lại bằng ngôn ngữ đời thường và ví dụ quen thuộc để bạn nắm ý nhanh hơn.",
+        icon: "MessageCircle",
+      },
+      {
+        option_key: "D",
+        trait_code: "LNG_2_L4",
+        label: "Giải thích linh hoạt theo đúng chỗ bạn vướng",
+        description:
+          "Hỏi lại để biết bạn đang tắc ở đâu, đổi cách diễn đạt và trả lời trôi chảy mọi câu hỏi thêm.",
+        icon: "MessagesSquare",
+      },
+    ],
+  },
+  {
+    code: "COG_V2_9",
+    dimension: "learning_environment",
+    dimension_badge: "Câu 9",
+    title: "Câu 9",
+    subtitle:
+      "Khi thầy cô giao một dự án tìm hiểu kéo dài 2 tuần, bạn thấy học hiệu quả nhất trong môi trường nào?",
+    options: [
+      {
+        option_key: "A",
+        trait_code: "ENV_STRUCTURED",
+        label: "Có lộ trình và tiêu chí rõ từng bước",
+        description:
+          "Thầy cô đưa sẵn đề cương, mốc nộp bài từng tuần và tiêu chuẩn chấm điểm cụ thể để bám sát.",
+        icon: "CalendarCheck",
+      },
+      {
+        option_key: "B",
+        trait_code: "ENV_EXPLORATORY",
+        label: "Tự do tìm tòi và thử hướng mới",
+        description:
+          "Thầy cô chỉ nêu chủ đề mở để tự tra cứu nguồn ngoài sách và thử cách làm riêng.",
+        icon: "Compass",
+      },
+      {
+        option_key: "C",
+        trait_code: "ENV_COLLABORATIVE",
+        label: "Học qua trao đổi và góp ý trực tiếp",
+        description:
+          "Được thảo luận thường xuyên với thầy cô và bạn bè, nghe nhiều góc nhìn để hoàn thiện dự án.",
+        icon: "MessagesSquare",
+      },
+    ],
+  },
+  {
+    code: "COG_V2_10",
+    dimension: "teamwork_intensity",
+    dimension_badge: "Câu 10",
+    title: "Câu 10",
+    subtitle:
+      "Trong dự án nhóm kéo dài 2 tuần đó, kiểu phối hợp nào giúp bạn làm việc thoải mái và hiệu quả nhất?",
+    options: [
+      {
+        option_key: "A",
+        trait_code: "TEAM_BALANCED",
+        label: "Cân bằng giữa tự làm và họp theo mốc",
+        description:
+          "Cả nhóm chia rõ từng mảng để mỗi người tự tập trung xử lý phần việc riêng, rồi họp ngắn theo mốc để ghép bài.",
+        icon: "Scale",
+      },
+      {
+        option_key: "B",
+        trait_code: "TEAM_HIGHLY_COLLABORATIVE",
+        label: "Đồng hành và trao đổi liên tục",
+        description:
+          "Cả nhóm cùng ngồi lên ý tưởng, góp ý sửa bài trực tiếp cho nhau và bám sát nhau từ đầu đến cuối.",
+        icon: "HeartHandshake",
+      },
+    ],
+  },
+]
+
+/** Bộ 8 câu cũ (v1.8) dùng để hiển thị chính xác khi học sinh xem lại lịch sử bài làm trước đây. */
+export const legacyCognitiveQuestions: CognitiveQuestionItem[] = [
+  {
     code: "COG_1",
     dimension: "learning_style",
-    dimension_badge: "Cách học bài mới",
-    title: "1. Cách học bài mới",
+    dimension_badge: "Câu 1",
+    title: "Câu 1",
     subtitle:
       "Khi học một bài mới khá khó ở trường, cách nào giúp bạn hiểu nhanh và nhớ lâu nhất?",
     options: [
@@ -95,8 +495,8 @@ export const defaultCognitiveQuestions: CognitiveQuestionItem[] = [
   {
     code: "COG_2",
     dimension: "work_environment",
-    dimension_badge: "Không gian học tập",
-    title: "2. Không gian học tập ưa thích",
+    dimension_badge: "Câu 2",
+    title: "Câu 2",
     subtitle:
       "Không gian học tập hoặc sinh hoạt nào giúp bạn thấy tập trung và có hứng nhất?",
     options: [
@@ -137,8 +537,8 @@ export const defaultCognitiveQuestions: CognitiveQuestionItem[] = [
   {
     code: "COG_3",
     dimension: "problem_solving",
-    dimension_badge: "Cách gỡ rối",
-    title: "3. Cách gỡ rối vấn đề",
+    dimension_badge: "Câu 3",
+    title: "Câu 3",
     subtitle:
       "Khi nhóm bạn gặp một vấn đề rắc rối trong bài tập lớn hoặc hoạt động lớp, phản xạ đầu tiên của bạn là gì?",
     options: [
@@ -179,8 +579,8 @@ export const defaultCognitiveQuestions: CognitiveQuestionItem[] = [
   {
     code: "COG_4",
     dimension: "interaction_target",
-    dimension_badge: "Đối tượng ưa thích",
-    title: "4. Đối tượng thích tiếp xúc",
+    dimension_badge: "Câu 4",
+    title: "Câu 4",
     subtitle:
       "Khi tự tìm tòi hoặc tham gia hoạt động ở trường lớp, bạn thích làm việc trực tiếp với nhóm nào nhất?",
     options: [
@@ -221,8 +621,8 @@ export const defaultCognitiveQuestions: CognitiveQuestionItem[] = [
   {
     code: "COG_5",
     dimension: "gardner_intelligence",
-    dimension_badge: "Điểm mạnh tự nhiên",
-    title: "5. Điểm mạnh tự nhiên",
+    dimension_badge: "Câu 5",
+    title: "Câu 5",
     subtitle:
       "Bạn bè thường nhận xét bạn nhạy bén và làm tốt nhất ở khía cạnh nào?",
     options: [
@@ -263,8 +663,8 @@ export const defaultCognitiveQuestions: CognitiveQuestionItem[] = [
   {
     code: "COG_6",
     dimension: "pressure_tolerance",
-    dimension_badge: "Đối mặt áp lực",
-    title: "6. Kiểu áp lực xử lý tốt nhất",
+    dimension_badge: "Câu 6",
+    title: "Câu 6",
     subtitle:
       "Khi gặp tình huống căng thẳng trong học tập hoặc hoạt động trường lớp, bạn xử lý tốt nhất ở kiểu áp lực nào?",
     options: [
@@ -305,8 +705,8 @@ export const defaultCognitiveQuestions: CognitiveQuestionItem[] = [
   {
     code: "COG_7",
     dimension: "output_preference",
-    dimension_badge: "Niềm vui thành quả",
-    title: "7. Kết quả mang lại niềm vui lớn nhất",
+    dimension_badge: "Câu 7",
+    title: "Câu 7",
     subtitle:
       "Sau khi hoàn thành một bài tập lớn hay hoạt động ở trường, kết quả nào làm bạn thấy tự hào nhất?",
     options: [
@@ -347,8 +747,8 @@ export const defaultCognitiveQuestions: CognitiveQuestionItem[] = [
   {
     code: "COG_8",
     dimension: "team_role",
-    dimension_badge: "Vai trò trong nhóm",
-    title: "8. Vai trò quen thuộc khi làm nhóm",
+    dimension_badge: "Câu 8",
+    title: "Câu 8",
     subtitle:
       "Khi làm bài tập nhóm ở lớp, bạn thường tự nhiên nhận phần việc nào?",
     options: [

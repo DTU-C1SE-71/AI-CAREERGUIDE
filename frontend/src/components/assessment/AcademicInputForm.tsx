@@ -40,6 +40,11 @@ export function AcademicInputForm({
         typeof item.score === "number" && Number.isFinite(item.score) && item.score >= 0 && item.score <= 10,
     )
   const completeBlocks = completeTranscriptBlocks(validScoreItems)
+  const hasInvalid = HIGH_SCHOOL_SUBJECTS.some((s) => {
+    const v = scores[s.name]
+    return v !== undefined && (!Number.isFinite(v) || v < 0 || v > 10)
+  })
+  const topBlock = completeBlocks[0]
   const values = validScoreItems.map((item) => item.score)
   const average = values.length
     ? values.reduce((a, b) => a + b, 0) / values.length
@@ -135,7 +140,7 @@ export function AcademicInputForm({
         })}
       </div>
 
-      {/* Sticky Bottom Summary & Z-Score Bar */}
+      {/* Sticky Bottom Summary Bar */}
       <div className="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50 px-5 py-3.5 text-sky-900">
         <div className="flex items-center gap-3">
           <span className="grid size-11 place-items-center rounded-xl bg-white/20 backdrop-blur-md">
@@ -150,13 +155,17 @@ export function AcademicInputForm({
             </p>
           </div>
         </div>
-        {completeBlocks.length > 0 ? (
-          <span className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2 text-xs font-bold tabular-nums text-emerald-800 sm:text-sm">
-            Đủ {completeBlocks.length} tổ hợp ({completeBlocks.slice(0, 3).map((b) => b.code).join(", ")}{completeBlocks.length > 3 ? "…" : ""}) · Chưa quy đổi Z-Score
+        {hasInvalid ? (
+          <span className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-2 text-xs font-bold text-rose-700 sm:text-sm">
+            Vui lòng kiểm tra lại điểm trong khoảng 0 – 10
+          </span>
+        ) : topBlock ? (
+          <span className="rounded-xl border border-sky-200/90 bg-white/90 px-4 py-2 text-xs font-bold tabular-nums text-sky-900 shadow-2xs sm:text-sm">
+            Tổ hợp cao nhất: {topBlock.code} ({topBlock.sum.toFixed(1)}đ) · Đủ {completeBlocks.length} tổ hợp
           </span>
         ) : (
           <span className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-xs font-bold tabular-nums text-amber-800 sm:text-sm">
-            Chưa đủ tổ hợp 3 môn (cần ít nhất 1 khối như A00, A01, D01, C00)
+            Cần nhập đủ ít nhất 1 tổ hợp 3 môn (VD: A00, A01, D01, C00)
           </span>
         )}
       </div>

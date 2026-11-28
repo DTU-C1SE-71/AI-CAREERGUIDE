@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, timezone
 from typing import List, Optional, Dict, Any
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, Integer
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Text, Integer, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,7 +20,11 @@ class MajorRoadmap(Base):
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
     )
     major_code: Mapped[str] = mapped_column(
-        String(20), unique=True, index=True, nullable=False,
+        String(20),
+        ForeignKey("majors.major_code", ondelete="CASCADE", name="fk_major_roadmaps_major_code"),
+        unique=True,
+        index=True,
+        nullable=False,
         comment="Direct indexed lookup key matching Level-IV MOET major code"
     )
     title: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -56,6 +60,9 @@ class MajorRoadmap(Base):
 class StudentRoadmapProgress(Base):
     """Tracks a student's self-directed execution of a cached major roadmap."""
     __tablename__ = "student_roadmap_progress"
+    __table_args__ = (
+        UniqueConstraint("user_id", "major_code", name="uq_student_roadmap_progress_user_major"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -63,7 +70,12 @@ class StudentRoadmapProgress(Base):
     user_id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    major_code: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    major_code: Mapped[str] = mapped_column(
+        String(20),
+        ForeignKey("majors.major_code", ondelete="CASCADE", name="fk_student_roadmap_progress_major_code"),
+        nullable=False,
+        index=True,
+    )
     current_step: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     completed_milestones: Mapped[List[int]] = mapped_column(
         JSONB, default=list, nullable=False, comment="List of completed step numbers"

@@ -6,7 +6,7 @@ import {
   Check,
   ChevronDown,
   Clock,
-  Download,
+  Compass,
   GraduationCap,
   History,
   Info,
@@ -15,21 +15,28 @@ import {
   MessageSquare,
   Minimize2,
   Paperclip,
+  Search,
   Sparkles,
+  Square,
   SquarePen,
   Trash2,
   User,
   X,
 } from "lucide-react"
-import { type FormEvent, useCallback, useEffect, useRef, useState } from "react"
+import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import Markdown from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { useSelectedAssessment } from "../hooks/useSelectedAssessment"
+import { useAIConnection } from "../context/AIConnectionContext"
 import { useAuth } from "../context/AuthContext"
 import { buildEvaluateProfilePayload } from "../utils/assessmentPayload"
+import {
+  activeChatStorageKey,
+  parsePersistedActiveChat,
+  serializePersistedActiveChat,
+} from "../utils/chatSessionState"
 import { MOET_435_MAJORS } from "../data/moetMajors435"
 import { ApiError, requestJSON } from "../services/api"
-import { exportChatReportPdf } from "../utils/pdfReport"
 
 interface AIChatAdvisorProps {
   open: boolean
@@ -74,24 +81,7 @@ interface ChatSessionDetailResponse {
   }>
 }
 
-interface ChatConnectionStatus {
-  available: boolean
-  code: string
-  message: string
-  checked_at: string
-  latency_ms: number
-  revision_token: string
-}
-
-type ConnectionState =
-  | { state: "checking" }
-  | { state: "online"; revisionToken: string; checkedAt: string }
-  | { state: "offline"; message: string }
-
 const CHAT_TIMEOUT_MS = 330_000
-const CONNECTION_TIMEOUT_MS = 90_000
-const CONNECTION_CHECK_FAILED =
-  "Không xác minh được kết nối AI. Thử kiểm tra lại trước khi gửi câu hỏi."
 const GUEST_CHAT_HISTORY_KEY = "career-guide:chat-history:guest"
 const MAX_GUEST_SESSIONS = 20
 const MAX_GUEST_MESSAGES = 40
@@ -114,13 +104,23 @@ const LENGTH_MODE_LABELS: Record<ResponseLengthMode, string> = {
   extra_high: "Rất cao",
 }
 
+function normalizeSearchText(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/đ/g, "d")
+    .replace(/Đ/g, "d")
+    .toLowerCase()
+    .trim()
+}
+
 const initialMessages: AdvisorMessage[] = [
   {
     id: "welcome",
     role: "assistant",
-    content: `### Chào bạn, mình là Cố vấn AI
+    content: `### Chào em, thầy/cô là Giáo viên Cố vấn AI
 
-Hỏi mình về ngành học, điểm số, sở thích hoặc lộ trình học tập nhé.`,
+Em cần tư vấn về ngành học, điểm số, sở thích, bài học THPT hay lộ trình học tập cứ hỏi thầy/cô nhé.`,
   },
 ]
 
@@ -132,7 +132,7 @@ const quickPrompts = [
 ]
 
 const unavailableReply =
-  "Chưa nhận được phản hồi tư vấn. Hãy kiểm tra lại kết nối rồi gửi lại câu hỏi."
+  "Thầy/cô chưa nhận được phản hồi tư vấn lúc này. Em kiểm tra lại kết nối rồi gửi lại câu hỏi cho thầy/cô nhé."
 
 function makePreview(text: string): string {
   const clean = text.replace(/[#*`>_]/g, "").replace(/\s+/g, " ").trim()
@@ -194,39 +194,59 @@ function mapResponseSource(
 }
 
 export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
-  const [messages, setMessages] = useState<AdvisorMessage[]>(initialMessages)
-  const [input, setInput] = useState("")
-  const [typing, setTyping] = useState(false)
-  const [fullscreen, setFullscreen] = useState(false)
-  const [context, setContext] = useState("")
-  const [effort, setEffort] = useState<ReasoningEffort>("auto")
-  const [effortMenuOpen, setEffortMenuOpen] = useState(false)
-  const [effortInfoOpen, setEffortInfoOpen] = useState(false)
-
-  const [historyOpen, setHistoryOpen] = useState(false)
-  const [sessions, setSessions] = useState<ChatSessionItem[]>([])
-  const [sessionsLoading, setSessionsLoading] = useState(false)
-  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
-  const [confirmClearAll, setConfirmClearAll] = useState(false)
-  const [exportingPdf, setExportingPdf] = useState(false)
-  const [pdfError, setPdfError] = useState<string | null>(null)
-
   const assessment = useSelectedAssessment()
   const { user, token } = useAuth()
   const isAuthenticated = Boolean(user && token)
   const accountKey = isAuthenticated ? `u:${user?.id || user?.email}` : "guest"
+  const prevAccountKeyRef = useRef(accountKey)
+
+  const initialPersisted = useMemo(() => {
+    try {
+      return parsePersistedActiveChat(
+        window.sessionStorage.getItem(activeChatStorageKey(accountKey)),
+      )
+    } catch {
+      return null
+    }
+    // Hydrate once at mount for the mounted login session
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  const [messages, setMessages] = useState<AdvisorMessage[]>(
+    () => initialPersisted?.messages || initialMessages,
+  )
+  const [input, setInput] = useState("")
+  const [typing, setTyping] = useState(false)
+  const [fullscreen, setFullscreen] = useState(false)
+  const [context, setContext] = useState(() => initialPersisted?.context || "")
+  const [effort, setEffort] = useState<ReasoningEffort>(
+    () => initialPersisted?.effort || "auto",
+  )
+  const [effortMenuOpen, setEffortMenuOpen] = useState(false)
+  const [effortInfoOpen, setEffortInfoOpen] = useState(false)
+
+  const [historyOpen, setHistoryOpen] = useState(false)
+  const [sessions, setSessions] = useState<ChatSessionItem[]>(() =>
+    isAuthenticated ? [] : readGuestSessions(),
+  )
+  const [sessionsLoading, setSessionsLoading] = useState(false)
+  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null)
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(
+    () => initialPersisted?.sessionId || null,
+  )
+  const [confirmClearAll, setConfirmClearAll] = useState(false)
+  const [majorMenuOpen, setMajorMenuOpen] = useState(false)
+  const [majorSearch, setMajorSearch] = useState("")
 
   const requestVersion = useRef(0)
-  const connectionRequest = useRef<AbortController | null>(null)
   const activeRequest = useRef<AbortController | null>(null)
-  const connectionVersion = useRef(0)
   const chatBusy = useRef(false)
-  const probeBusy = useRef(false)
   const messageSequence = useRef(1)
   const endRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const effortMenuRef = useRef<HTMLDivElement | null>(null)
+  const majorMenuRef = useRef<HTMLDivElement | null>(null)
+  const majorSearchInputRef = useRef<HTMLInputElement | null>(null)
 
   const focusInput = useCallback(() => {
     window.requestAnimationFrame(() => {
@@ -234,10 +254,10 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
     })
   }, [])
 
-  const [activePrompts, setActivePrompts] = useState<string[]>(quickPrompts)
-  const [connection, setConnection] = useState<ConnectionState>({
-    state: "checking",
-  })
+  const [activePrompts, setActivePrompts] = useState<string[]>(
+    () => initialPersisted?.activePrompts || quickPrompts,
+  )
+  const { connection, checkConnection, markOffline } = useAIConnection()
 
   const loadSessions = useCallback(async () => {
     if (!isAuthenticated) {
@@ -259,77 +279,111 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
     }
   }, [isAuthenticated])
 
-  const checkConnection = async () => {
-    if (probeBusy.current) return
-    connectionRequest.current?.abort()
-    const controller = new AbortController()
-    connectionRequest.current = controller
-    const version = ++connectionVersion.current
-    probeBusy.current = true
-    setConnection({ state: "checking" })
-    try {
-      const result = await requestJSON<ChatConnectionStatus>(
-        "/rag-governance/chat/connection",
-        { method: "POST", signal: controller.signal },
-        CONNECTION_TIMEOUT_MS,
-      )
-      if (version !== connectionVersion.current || controller.signal.aborted) {
-        return
-      }
-      if (!result.available || !result.revision_token) {
-        setConnection({
-          state: "offline",
-          message: result.message || CONNECTION_CHECK_FAILED,
-        })
-        return
-      }
-      setConnection({
-        state: "online",
-        revisionToken: result.revision_token,
-        checkedAt: result.checked_at,
-      })
-    } catch {
-      if (version !== connectionVersion.current || controller.signal.aborted) {
-        return
-      }
-      setConnection({ state: "offline", message: CONNECTION_CHECK_FAILED })
-    } finally {
-      if (version === connectionVersion.current) probeBusy.current = false
-    }
-  }
-
-  // Only reset conversation state when switching account (login / logout),
-  // never when the student simply navigates between pages.
+  // Clear and switch active thread only when changing account (login / logout / switch user),
+  // preserving conversation across closing/reopening chat, page transitions, and reloads.
   useEffect(() => {
+    if (prevAccountKeyRef.current === accountKey) {
+      return
+    }
+    const previousKey = prevAccountKeyRef.current
+    prevAccountKeyRef.current = accountKey
+    try {
+      window.sessionStorage.removeItem(activeChatStorageKey(previousKey))
+    } catch {
+      // Ignore storage errors
+    }
+
     requestVersion.current += 1
     activeRequest.current?.abort()
     chatBusy.current = false
     setInput("")
-    setContext("")
-    setActiveSessionId(null)
-    setMessages(initialMessages)
-    setActivePrompts(quickPrompts)
     setTyping(false)
     setConfirmClearAll(false)
+
+    let restored = null
+    try {
+      restored = parsePersistedActiveChat(
+        window.sessionStorage.getItem(activeChatStorageKey(accountKey)),
+      )
+    } catch {
+      restored = null
+    }
+    setActiveSessionId(restored?.sessionId || null)
+    setMessages(restored?.messages || initialMessages)
+    setContext(restored?.context || "")
+    setEffort(restored?.effort || "auto")
+    setActivePrompts(restored?.activePrompts || quickPrompts)
     setSessions(isAuthenticated ? [] : readGuestSessions())
   }, [accountKey, isAuthenticated])
 
   useEffect(() => {
+    const handleLogout = () => {
+      try {
+        window.sessionStorage.removeItem(activeChatStorageKey(accountKey))
+      } catch {
+        // Ignore storage errors
+      }
+      requestVersion.current += 1
+      activeRequest.current?.abort()
+      chatBusy.current = false
+      setActiveSessionId(null)
+      setMessages(initialMessages)
+      setContext("")
+      setEffort("auto")
+      setActivePrompts(quickPrompts)
+      setInput("")
+      setTyping(false)
+      setConfirmClearAll(false)
+    }
+    window.addEventListener("career-guide:logout", handleLogout)
+    return () => {
+      window.removeEventListener("career-guide:logout", handleLogout)
+    }
+  }, [accountKey])
+
+  useEffect(() => {
+    const isDefaultEmpty =
+      activeSessionId === null &&
+      context === "" &&
+      effort === "auto" &&
+      messages.length === 1 &&
+      messages[0]?.id === "welcome"
+    try {
+      const storageKey = activeChatStorageKey(accountKey)
+      if (isDefaultEmpty) {
+        window.sessionStorage.removeItem(storageKey)
+      } else {
+        window.sessionStorage.setItem(
+          storageKey,
+          serializePersistedActiveChat({
+            sessionId: activeSessionId,
+            messages,
+            context,
+            effort,
+            activePrompts,
+          }),
+        )
+      }
+    } catch {
+      // Ignore storage quota errors
+    }
+  }, [accountKey, activeSessionId, messages, context, effort, activePrompts])
+
+  useEffect(() => {
+    return () => {
+      requestVersion.current += 1
+      activeRequest.current?.abort()
+      chatBusy.current = false
+    }
+  }, [])
+
+  useEffect(() => {
     if (!open) return
-    setTyping(false)
-    setConnection({ state: "checking" })
     const timer = window.setTimeout(() => {
-      void checkConnection()
       void loadSessions()
     }, 0)
     return () => {
       window.clearTimeout(timer)
-      connectionVersion.current += 1
-      requestVersion.current += 1
-      connectionRequest.current?.abort()
-      activeRequest.current?.abort()
-      chatBusy.current = false
-      probeBusy.current = false
     }
   }, [open, loadSessions])
 
@@ -371,7 +425,64 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
     }
   }, [effortMenuOpen])
 
+  const selectedMajor = useMemo(
+    () => MOET_435_MAJORS.find((m) => m.major_code === context) || null,
+    [context],
+  )
+
+  const filteredMajors = useMemo(() => {
+    const query = normalizeSearchText(majorSearch)
+    if (!query) return MOET_435_MAJORS
+    return MOET_435_MAJORS.filter((major) => {
+      const name = normalizeSearchText(major.name_vi)
+      const category = normalizeSearchText(major.category)
+      const code = major.major_code.toLowerCase()
+      return name.includes(query) || category.includes(query) || code.includes(query)
+    })
+  }, [majorSearch])
+
+  useEffect(() => {
+    if (!open) {
+      setMajorMenuOpen(false)
+      setMajorSearch("")
+    }
+  }, [open])
+
+  useEffect(() => {
+    if (!majorMenuOpen) return
+    const frameId = window.requestAnimationFrame(() => {
+      majorSearchInputRef.current?.focus({ preventScroll: true })
+    })
+    const handlePointerDown = (event: MouseEvent) => {
+      if (
+        majorMenuRef.current &&
+        !majorMenuRef.current.contains(event.target as Node)
+      ) {
+        setMajorMenuOpen(false)
+        setMajorSearch("")
+      }
+    }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        setMajorMenuOpen(false)
+        setMajorSearch("")
+      }
+    }
+    document.addEventListener("mousedown", handlePointerDown)
+    document.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      document.removeEventListener("mousedown", handlePointerDown)
+      document.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [majorMenuOpen])
+
   const startNewChat = () => {
+    try {
+      window.sessionStorage.removeItem(activeChatStorageKey(accountKey))
+    } catch {
+      // Ignore storage errors
+    }
     requestVersion.current += 1
     activeRequest.current?.abort()
     chatBusy.current = false
@@ -387,6 +498,12 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
 
   const changeTopic = (code: string) => {
     setContext(code)
+  }
+
+  const handleSelectMajor = (code: string) => {
+    changeTopic(code)
+    setMajorMenuOpen(false)
+    setMajorSearch("")
   }
 
   const selectSession = async (session: ChatSessionItem) => {
@@ -562,10 +679,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
         !response.connection_available &&
         (response.is_ai_generated || response.is_fallback)
       ) {
-        setConnection({
-          state: "offline",
-          message: "Chưa nhận được phản hồi AI. Bạn có thể kiểm tra lại kết nối.",
-        })
+        markOffline("Thầy/cô chưa nhận được phản hồi AI. Em kiểm tra lại kết nối nhé.")
       }
 
       if (
@@ -637,13 +751,11 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
         return
       }
       if (error instanceof ApiError && error.status === 409) {
-        setConnection({
-          state: "offline",
-          message:
-            "Kết nối AI đã thay đổi. Hãy kiểm tra lại trước khi gửi câu hỏi khác.",
-        })
+        markOffline(
+          "Kết nối AI đã thay đổi. Em kiểm tra lại trước khi gửi câu hỏi tiếp theo nhé.",
+        )
       } else {
-        setConnection({ state: "offline", message: unavailableReply })
+        markOffline(unavailableReply)
       }
       setMessages((prev) => [
         ...prev,
@@ -661,53 +773,31 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
     }
   }
 
+  const stopGeneration = () => {
+    if (!typing && !chatBusy.current) return
+    requestVersion.current += 1
+    activeRequest.current?.abort()
+    activeRequest.current = null
+    chatBusy.current = false
+    setTyping(false)
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: `local-stop-${++messageSequence.current}-${Date.now()}`,
+        role: "assistant",
+        content:
+          "Đã dừng trả lời câu hỏi này. Em có thể gửi câu hỏi mới bất cứ lúc nào nhé.",
+      },
+    ])
+    focusInput()
+  }
+
   const connectionLabel =
     connection.state === "checking"
       ? "Đang kiểm tra"
       : connection.state === "online"
         ? "Đang hoạt động"
         : "Chưa kết nối"
-
-  const exportableMessages = messages.filter((m) => m.id !== "welcome")
-
-  const handleExportChatPdf = async () => {
-    if (exportingPdf || exportableMessages.length === 0) return
-    setPdfError(null)
-    setExportingPdf(true)
-    try {
-      const currentSession = sessions.find((s) => s.id === activeSessionId)
-      const firstQuestion = exportableMessages.find((m) => m.role === "user")?.content
-      const selectedMajor = MOET_435_MAJORS.find((m) => m.major_code === context)
-      const title =
-        currentSession?.title ||
-        (firstQuestion ? makeTitle(firstQuestion) : "Cuộc trò chuyện hướng nghiệp")
-
-      await exportChatReportPdf({
-        title,
-        studentName: user?.name,
-        studentEmail: user?.email,
-        majorLabel: selectedMajor
-          ? `${selectedMajor.name_vi} (${selectedMajor.major_code})`
-          : undefined,
-        messages: exportableMessages.map((m) => ({
-          role: m.role,
-          content: m.content,
-          lengthLabel: m.lengthMode ? LENGTH_MODE_LABELS[m.lengthMode] : undefined,
-          sourceLabel:
-            m.source === "offline_guidance"
-              ? "Hướng dẫn có sẵn"
-              : m.source === "verified_guidance"
-                ? "Dữ liệu hệ thống"
-                : undefined,
-          createdAt: m.createdAt,
-        })),
-      })
-    } catch {
-      setPdfError("Không thể xuất báo cáo PDF lúc này. Vui lòng thử lại.")
-    } finally {
-      setExportingPdf(false)
-    }
-  }
 
   const attachStudentProfile = () => {
     const scores = assessment.scores || []
@@ -716,7 +806,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
       .join(", ")
     setInput(
       (prev) =>
-        `${prev ? `${prev} ` : ""}Điểm số của mình: ${summary || "chưa có điểm được nhập"}`,
+        `${prev ? `${prev} ` : ""}Điểm số của em: ${summary || "chưa có điểm được nhập"}`,
     )
     focusInput()
   }
@@ -765,7 +855,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
             </p>
             <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
               {isAuthenticated
-                ? "Các cuộc trò chuyện của bạn sẽ tự động được lưu vào tài khoản."
+                ? "Các cuộc trò chuyện của em sẽ tự động được lưu vào tài khoản."
                 : "Các cuộc trò chuyện tạm được lưu trên trình duyệt này."}
             </p>
           </div>
@@ -893,29 +983,34 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
             transition={{ duration: 0.26, ease: [0.22, 1, 0.36, 1] }}
           >
             {/* Header */}
-            <header className="border-b border-slate-200/80 bg-white/85 px-4 py-3 backdrop-blur-md sm:px-5">
+            <header className="relative z-20 border-b border-slate-200/80 bg-white/85 px-4 py-3 backdrop-blur-md sm:px-5">
               <div className="flex items-center justify-between gap-2">
                 <div className="flex min-w-0 items-center gap-2.5">
                   <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-gradient-to-br from-sky-500 to-cyan-600 text-white shadow-sm sm:size-10 sm:rounded-2xl">
                     <Bot size={20} />
                   </span>
-                  <div className="flex min-w-0 flex-wrap items-center gap-2">
-                    <h2 className="truncate text-sm font-bold text-slate-900 sm:text-base">
-                      Cố vấn AI
-                    </h2>
-                    <span
-                      role="status"
-                      aria-live="polite"
-                      aria-label={connectionLabel}
-                      title={connectionLabel}
-                      className={`inline-block size-2.5 shrink-0 rounded-full ${
-                        connection.state === "online"
-                          ? "bg-emerald-500 ring-4 ring-emerald-500/20"
-                          : connection.state === "checking"
-                            ? "animate-pulse bg-slate-400 ring-4 ring-slate-400/20"
-                            : "bg-rose-500 ring-4 ring-rose-500/20"
-                      }`}
-                    />
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <h2 className="truncate text-sm font-bold text-slate-900 sm:text-base">
+                        Giáo viên Cố vấn AI
+                      </h2>
+                      <span
+                        role="status"
+                        aria-live="polite"
+                        aria-label={connectionLabel}
+                        title={connectionLabel}
+                        className={`inline-block size-2.5 shrink-0 rounded-full ${
+                          connection.state === "online"
+                            ? "bg-emerald-500 ring-4 ring-emerald-500/20"
+                            : connection.state === "checking"
+                              ? "animate-pulse bg-slate-400 ring-4 ring-slate-400/20"
+                              : "bg-rose-500 ring-4 ring-rose-500/20"
+                        }`}
+                      />
+                    </div>
+                    <p className="truncate text-[11px] font-medium text-slate-500">
+                      Đồng hành cùng em về ngành học, bài học THPT &amp; lộ trình tương lai
+                    </p>
                   </div>
                 </div>
 
@@ -923,34 +1018,26 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                   <button
                     type="button"
                     onClick={() => setHistoryOpen((v) => !v)}
-                    title="Lịch sử trò chuyện"
-                    aria-label="Lịch sử trò chuyện"
-                    className={`inline-flex h-9 items-center gap-1.5 rounded-xl border px-2.5 text-xs font-semibold transition ${
-                      historyOpen
-                        ? "border-sky-300 bg-sky-50 text-sky-700"
-                        : "border-slate-200/90 bg-white text-slate-600 hover:border-sky-200 hover:bg-sky-50/60 hover:text-sky-700"
+                    title={
+                      sessions.length > 0
+                        ? `Lịch sử trò chuyện (${sessions.length})`
+                        : "Lịch sử trò chuyện"
+                    }
+                    aria-label={
+                      sessions.length > 0
+                        ? `Lịch sử trò chuyện (${sessions.length})`
+                        : "Lịch sử trò chuyện"
+                    }
+                    aria-pressed={historyOpen}
+                    className={`sidebar-icon-button relative ${
+                      historyOpen ? "!border-sky-300 !bg-sky-50 !text-sky-700" : ""
                     }`}
                   >
-                    <History size={15} />
-                    <span className="hidden sm:inline">Lịch sử</span>
+                    <History size={17} />
                     {sessions.length > 0 && (
-                      <span className="rounded-full bg-sky-100 px-1.5 py-0.2 text-[10px] font-bold text-sky-700">
-                        {sessions.length}
+                      <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-sky-600 px-1 text-[9px] font-bold leading-none text-white ring-2 ring-white">
+                        {sessions.length > 99 ? "99+" : sessions.length}
                       </span>
-                    )}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleExportChatPdf()}
-                    disabled={exportingPdf || exportableMessages.length === 0}
-                    title="Xuất báo cáo PDF"
-                    aria-label="Xuất báo cáo PDF"
-                    className="sidebar-icon-button disabled:cursor-not-allowed disabled:opacity-40"
-                  >
-                    {exportingPdf ? (
-                      <LoaderCircle size={16} className="animate-spin" />
-                    ) : (
-                      <Download size={16} />
                     )}
                   </button>
                   <button
@@ -993,7 +1080,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                   <span>{connection.message}</span>
                   <button
                     type="button"
-                    onClick={() => void checkConnection()}
+                    onClick={() => void checkConnection({ force: true })}
                     className="inline-flex shrink-0 items-center gap-1.5 font-semibold underline underline-offset-2"
                     aria-label="Kiểm tra lại kết nối AI"
                   >
@@ -1002,47 +1089,202 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                 </div>
               )}
 
-              {pdfError && (
+              <div ref={majorMenuRef} className="relative mt-2.5">
                 <div
-                  role="alert"
-                  className="mt-2.5 flex items-center justify-between gap-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800"
+                  className={`flex items-center rounded-2xl border transition-[border-color,background-color,box-shadow] duration-200 ${
+                    majorMenuOpen
+                      ? "border-sky-400 bg-white ring-4 ring-sky-500/10"
+                      : "border-slate-200/90 bg-slate-50/75 hover:border-sky-300/80 hover:bg-white"
+                  }`}
                 >
-                  <span>{pdfError}</span>
                   <button
                     type="button"
-                    onClick={() => setPdfError(null)}
-                    className="shrink-0 font-semibold underline underline-offset-2"
+                    onClick={() => setMajorMenuOpen((v) => !v)}
+                    aria-expanded={majorMenuOpen}
+                    aria-haspopup="listbox"
+                    aria-label="Chọn ngành tư vấn"
+                    className="group flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 px-2.5 py-1.5 text-left"
                   >
-                    Đóng
+                    <span
+                      className={`grid size-7 shrink-0 place-items-center rounded-xl transition-colors ${
+                        selectedMajor
+                          ? "bg-sky-100/90 text-sky-600"
+                          : "bg-white text-slate-500 shadow-xs ring-1 ring-slate-200/70 group-hover:text-sky-600"
+                      }`}
+                    >
+                      {selectedMajor ? (
+                        <GraduationCap size={15} />
+                      ) : (
+                        <Compass size={15} />
+                      )}
+                    </span>
+                    <span className="flex min-w-0 flex-1 items-center gap-1.5 text-xs">
+                      <span className="shrink-0 font-medium text-slate-500">
+                        Ngành:
+                      </span>
+                      <span className="truncate font-bold text-slate-800">
+                        {selectedMajor ? selectedMajor.name_vi : "Hướng nghiệp chung"}
+                      </span>
+                      {selectedMajor && (
+                        <span className="hidden shrink-0 rounded-md bg-sky-50 px-1.5 py-0.5 font-mono text-[10px] font-semibold text-sky-700 ring-1 ring-sky-200/80 sm:inline">
+                          {selectedMajor.major_code}
+                        </span>
+                      )}
+                    </span>
+                    <ChevronDown
+                      size={15}
+                      className={`shrink-0 text-slate-400 transition-transform duration-200 ${
+                        majorMenuOpen ? "rotate-180 text-sky-600" : "group-hover:text-slate-600"
+                      }`}
+                    />
                   </button>
+                  {selectedMajor && (
+                    <button
+                      type="button"
+                      onClick={() => handleSelectMajor("")}
+                      title="Quay về Hướng nghiệp chung"
+                      aria-label="Bỏ chọn ngành"
+                      className="mr-1.5 grid size-6 shrink-0 cursor-pointer place-items-center rounded-lg text-slate-400 transition hover:bg-slate-200/70 hover:text-slate-700"
+                    >
+                      <X size={13} />
+                    </button>
+                  )}
                 </div>
-              )}
 
-              <div className="relative mt-2.5 flex items-center gap-2 rounded-xl border border-slate-200/80 bg-white/90 px-3 py-1.5 text-xs">
-                <GraduationCap
-                  size={15}
-                  className="shrink-0 text-sky-600"
-                />
-                <span className="shrink-0 font-semibold text-slate-500">
-                  Ngành:
-                </span>
-                <select
-                  value={context}
-                  onChange={(e) => changeTopic(e.target.value)}
-                  aria-label="Ngành quan tâm"
-                  className="w-full min-w-0 appearance-none bg-transparent pr-5 font-bold text-slate-800 outline-none"
-                >
-                  <option value="">Hướng nghiệp chung</option>
-                  {MOET_435_MAJORS.map((major) => (
-                    <option key={major.major_code} value={major.major_code}>
-                      {major.name_vi} · {major.major_code}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown
-                  size={14}
-                  className="pointer-events-none shrink-0 text-slate-400"
-                />
+                <AnimatePresence>
+                  {majorMenuOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -6, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -6, scale: 0.98 }}
+                      transition={{ duration: 0.18, ease: [0.22, 1, 0.36, 1] }}
+                      className="absolute left-0 right-0 top-[calc(100%+8px)] z-30 overflow-hidden rounded-2xl border border-slate-200/90 bg-white/98 shadow-xl shadow-slate-900/12 backdrop-blur-md"
+                    >
+                      <div className="border-b border-slate-100 bg-slate-50/70 p-2">
+                        <div className="flex items-center gap-2 rounded-xl border border-slate-200/90 bg-white px-2.5 py-1.5 focus-within:border-sky-400 focus-within:ring-2 focus-within:ring-sky-500/15">
+                          <Search size={14} className="shrink-0 text-slate-400" />
+                          <input
+                            ref={majorSearchInputRef}
+                            type="text"
+                            value={majorSearch}
+                            onChange={(e) => setMajorSearch(e.target.value)}
+                            placeholder="Tìm tên ngành, mã 7 số hoặc lĩnh vực..."
+                            aria-label="Tìm kiếm ngành đào tạo"
+                            className="w-full min-w-0 bg-transparent text-xs text-slate-800 placeholder:text-slate-400 outline-none"
+                          />
+                          {majorSearch && (
+                            <button
+                              type="button"
+                              onClick={() => setMajorSearch("")}
+                              aria-label="Xóa từ khóa tìm kiếm"
+                              className="grid size-5 shrink-0 cursor-pointer place-items-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-600"
+                            >
+                              <X size={12} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      <div role="listbox" aria-label="Danh sách ngành đào tạo" className="max-h-72 overflow-y-auto p-1.5">
+                        {!majorSearch.trim() && (
+                          <>
+                            <button
+                              type="button"
+                              role="option"
+                              aria-selected={context === ""}
+                              onClick={() => handleSelectMajor("")}
+                              className={`flex w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${
+                                context === ""
+                                  ? "bg-sky-50 text-sky-900"
+                                  : "text-slate-700 hover:bg-slate-50"
+                              }`}
+                            >
+                              <span className="flex min-w-0 items-center gap-2.5">
+                                <span
+                                  className={`grid size-7 shrink-0 place-items-center rounded-lg ${
+                                    context === ""
+                                      ? "bg-sky-100 text-sky-600"
+                                      : "bg-slate-100 text-slate-500"
+                                  }`}
+                                >
+                                  <Compass size={14} />
+                                </span>
+                                <span className="min-w-0">
+                                  <span className="block truncate text-xs font-bold">
+                                    Hướng nghiệp chung
+                                  </span>
+                                  <span className="block truncate text-[11px] text-slate-500">
+                                    Tư vấn tổng quát theo hồ sơ &amp; sở thích
+                                  </span>
+                                </span>
+                              </span>
+                              {context === "" && (
+                                <Check size={15} className="shrink-0 text-sky-600" />
+                              )}
+                            </button>
+                            <div className="my-1 border-t border-slate-100" />
+                          </>
+                        )}
+
+                        {filteredMajors.length === 0 ? (
+                          <div className="px-3 py-6 text-center text-xs text-slate-500">
+                            Không tìm thấy ngành phù hợp với &ldquo;{majorSearch.trim()}&rdquo;.
+                          </div>
+                        ) : (
+                          filteredMajors.map((major) => {
+                            const active = context === major.major_code
+                            return (
+                              <button
+                                key={major.major_code}
+                                type="button"
+                                role="option"
+                                aria-selected={active}
+                                onClick={() => handleSelectMajor(major.major_code)}
+                                className={`flex w-full cursor-pointer items-center justify-between gap-2.5 rounded-xl px-2.5 py-2 text-left transition ${
+                                  active
+                                    ? "bg-sky-50 text-sky-900"
+                                    : "text-slate-700 hover:bg-slate-50"
+                                }`}
+                              >
+                                <span className="min-w-0 flex-1">
+                                  <span className="block truncate text-xs font-semibold">
+                                    {major.name_vi}
+                                  </span>
+                                  <span className="block truncate text-[11px] text-slate-400">
+                                    {major.category}
+                                  </span>
+                                </span>
+                                <span className="flex shrink-0 items-center gap-1.5">
+                                  <span
+                                    className={`rounded-md px-1.5 py-0.5 font-mono text-[10px] font-semibold ${
+                                      active
+                                        ? "bg-sky-100 text-sky-700"
+                                        : "bg-slate-100 text-slate-500"
+                                    }`}
+                                  >
+                                    {major.major_code}
+                                  </span>
+                                  {active && (
+                                    <Check size={15} className="shrink-0 text-sky-600" />
+                                  )}
+                                </span>
+                              </button>
+                            )
+                          })
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/70 px-3 py-1.5 text-[11px] text-slate-400">
+                        <span>
+                          {majorSearch.trim()
+                            ? `Hiển thị ${filteredMajors.length} / ${MOET_435_MAJORS.length} ngành`
+                            : `${MOET_435_MAJORS.length} ngành đào tạo`}
+                        </span>
+                        <span>ESC để đóng</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </header>
 
@@ -1270,7 +1512,7 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                             }
                           }
                         }}
-                        placeholder="Nhập câu hỏi..."
+                        placeholder="Em muốn hỏi thầy/cô điều gì hôm nay?"
                         className="max-h-28 min-h-9 w-full resize-none bg-transparent px-1 py-1 text-sm leading-relaxed text-slate-800 outline-none placeholder:text-slate-400"
                       />
 
@@ -1383,31 +1625,27 @@ export function AIChatAdvisor({ open, onClose }: AIChatAdvisorProps) {
                           </div>
                         </div>
 
-                        <button
-                          type="submit"
-                          disabled={
-                            !input.trim() ||
-                            typing ||
-                            connection.state !== "online"
-                          }
-                          title={
-                            typing
-                              ? "Đang xử lý câu hỏi trước..."
-                              : "Gửi tin nhắn"
-                          }
-                          aria-label={
-                            typing
-                              ? "Đang xử lý câu hỏi trước"
-                              : "Gửi tin nhắn"
-                          }
-                          className="grid size-8 shrink-0 place-items-center rounded-xl bg-sky-600 text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-45"
-                        >
-                          {typing ? (
-                            <LoaderCircle size={16} className="animate-spin" />
-                          ) : (
+                        {typing ? (
+                          <button
+                            type="button"
+                            onClick={stopGeneration}
+                            title="Dừng câu hỏi"
+                            aria-label="Dừng câu hỏi"
+                            className="grid size-8 shrink-0 place-items-center rounded-xl bg-rose-600 text-white transition hover:bg-rose-700 cursor-pointer"
+                          >
+                            <Square size={13} className="fill-current" />
+                          </button>
+                        ) : (
+                          <button
+                            type="submit"
+                            disabled={!input.trim() || connection.state !== "online"}
+                            title="Gửi tin nhắn"
+                            aria-label="Gửi tin nhắn"
+                            className="grid size-8 shrink-0 place-items-center rounded-xl bg-sky-600 text-white transition hover:bg-sky-700 disabled:cursor-not-allowed disabled:opacity-45"
+                          >
                             <ArrowUp size={17} />
-                          )}
-                        </button>
+                          </button>
+                        )}
                       </div>
                     </form>
                   </div>

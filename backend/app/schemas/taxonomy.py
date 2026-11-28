@@ -114,6 +114,10 @@ class MajorItemResponse(BaseModel):
     trend_label: Optional[str] = None
     trend_reason: Optional[str] = None
     trend_sources: List[Dict[str, str]] = []
+    benchmark_score: Optional[float] = None
+    cutoff_score: Optional[float] = None
+    benchmark_label: Optional[str] = None
+    benchmark_source: Optional[str] = None
 
     model_config = ConfigDict(from_attributes=True, extra="allow")
 

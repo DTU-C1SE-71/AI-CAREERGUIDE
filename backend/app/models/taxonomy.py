@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime, timezone
 import enum
 from typing import List, Optional, Dict, Any
-from sqlalchemy import String, Boolean, DateTime, Enum, ForeignKey, Text, Float, JSON
+from sqlalchemy import String, Boolean, CheckConstraint, DateTime, Enum, ForeignKey, Text, Float, JSON, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -30,7 +30,7 @@ class Major(Base):
         comment="Official Level-IV MOET major code, e.g. 7480201 for Information Technology"
     )
     name: Mapped[str] = mapped_column(String(255), index=True, nullable=False)
-    category: Mapped[str] = mapped_column(String(100), default="Khác", nullable=False, index=True, comment="MOET broad field or category according to Circular 09/2022/TT-BGDĐT")
+    category: Mapped[str] = mapped_column(String(100), default="Khác", server_default="Khác", nullable=False, index=True, comment="MOET broad field or category according to Circular 09/2022/TT-BGDĐT")
     degree_level: Mapped[str] = mapped_column(String(50), default="Đại học", nullable=False)
     
     # 6-Dimensional Holland RIASEC Vector: {"R": 0.1, "I": 0.9, "A": 0.2, "S": 0.3, "E": 0.4, "C": 0.6}
@@ -50,7 +50,7 @@ class Major(Base):
         comment="Labor market demand, digital transformation trends, and future opportunities"
     )
     description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False
     )
@@ -116,6 +116,9 @@ class SubjectBlock(Base):
 class MajorSubjectBlock(Base):
     """Association linking majors to their admitted subject blocks."""
     __tablename__ = "major_subject_blocks"
+    __table_args__ = (
+        UniqueConstraint("major_id", "subject_block_id", name="uq_major_subject_blocks_pair"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -210,6 +213,10 @@ class Skill(Base):
 class SkillPrerequisite(Base):
     """Hierarchical dependency mapping prerequisite skills to target skills."""
     __tablename__ = "skill_prerequisites"
+    __table_args__ = (
+        UniqueConstraint("skill_id", "prerequisite_skill_id", name="uq_skill_prerequisites_pair"),
+        CheckConstraint("skill_id <> prerequisite_skill_id", name="ck_skill_prerequisites_no_self"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
@@ -235,6 +242,9 @@ class SkillPrerequisite(Base):
 class MajorSkill(Base):
     """Association between a major and required/recommended skills."""
     __tablename__ = "major_skills"
+    __table_args__ = (
+        UniqueConstraint("major_id", "skill_id", name="uq_major_skills_pair"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
